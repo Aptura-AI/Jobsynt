@@ -1,1 +1,14 @@
+# Ignore node modules
 node_modules
+
+# Ignore local env file with secrets
+.env.local
+
+# Ignore build output (optional but recommended)
+.next
+out
+
+# Ignore log files (optional)
+npm-debug.log
+yarn-debug.log
+yarn-error.log
