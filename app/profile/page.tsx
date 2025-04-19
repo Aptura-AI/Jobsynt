@@ -3,6 +3,25 @@
 import React, { useEffect, useState, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import usStates from '../app/../utils/usStates.json';
+import { useSession } from 'next-auth/react';
+
+function ProfilePageHeader() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  if (status === 'loading') return <div>Loading...</div>;
+  if (!session) {
+    router.push('/signin'); // Redirect to the sign-in page if not authenticated
+    return null;
+  }
+
+  return (
+    <div>
+      <h1>Welcome, {session.user?.name}!</h1>
+      {/* Render the rest of the profile content here */}
+    </div>
+  );
+}
 
 // preferred alias
 
@@ -379,4 +398,5 @@ const ProfilePage = () => {
   );
 };
 
+export { ProfilePageHeader };
 export default ProfilePage;

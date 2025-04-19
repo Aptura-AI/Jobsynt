@@ -76,11 +76,23 @@ const completePage = () => {
     setProfile((prev) => ({ ...prev, [field]: e.target.value }));
   };
   
-  const handleJobChange = (index: number, key: keyof Employment, value: string | boolean) => {
-    const updatedJobs = [...profile.jobs];
-    updatedJobs[index][key] = value;
-    setProfile((prev) => ({ ...prev, jobs: updatedJobs }));
+  type JobDetails = {
+      title: string;
+      company: string;
+      location: string;
+      remote: boolean;
+      // other fields of Employment object...
   };
+  // Removed redundant Employment type definition to avoid conflicts.
+  const handleJobChange = (index: number, key: keyof Employment, value: string | boolean) => {
+      const updatedJobs = [...profile.jobs];
+    
+      // Ensure the key exists in the Employment object and assign the correct value
+      (updatedJobs[index][key] as typeof value) = value;
+    
+      setProfile((prev) => ({ ...prev, jobs: updatedJobs }));
+    };
+  
 
   const handleSubmit = () => {
     alert('Profile finalized. Redirecting to dashboard...');
