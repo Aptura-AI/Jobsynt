@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', sans-serif;
+}
+/* Add padding and margin to ensure elements don't overlap */
+.form-container {
+  padding: 16px;
+}
+
+.flex-col {
+  margin-bottom: 10px;
+}
+
+label {
+  margin-bottom: 5px;
+}
+
+input,
+button {
+  margin-bottom: 10px;
+}
+input,
+select,
+textarea,
+button {
+  margin-bottom: 12px;
+}
+/* Global styles for Profile page layout */
+
+.profile-container {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.left-section {
+  flex: 1;
+}
+
+.right-section {
+  flex: 1;
+  background-color: #f7fafc; /* Light background */
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.btn-submit {
+  background-color: #4f46e5; /* Purple color */
+  color: white;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-submit:hover {
+  background-color: #4338ca;
+}
+
+.upload-section {
+  margin-top: 20px;
+}
