@@ -1,16 +1,20 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { supabase } from '@/lib/supabaseClient'; // Adjust the path based on your structure
+import { NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabaseClient';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'GET') {
-    // Fetch profile data from Supabase or handle request logic
-    const { data, error } = await supabase.from('profiles').select('*');
-    if (error) {
-      res.status(500).json({ error: error.message });
-    } else {
-      res.status(200).json(data);
-    }
-  } else {
-    res.status(405).json({ error: 'Method Not Allowed' });
+export async function GET() {
+  const { data, error } = await supabase.from('profiles').select('*');
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  return NextResponse.json(data);
+}
+
+export async function POST(req: Request) {
+  const body = await req.json();
+
+  const { data, error } = await supabase.from('profiles').insert([body]);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json(data);
 }
