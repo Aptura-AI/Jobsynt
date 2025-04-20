@@ -1,0 +1,186 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { parseResume, extractStructuredDataFromText, ParsedResumeData } from '@/lib/resumeParser';
+import { useRouter } from 'next/navigation';
+import { pdfjs } from 'react-pdf';
+
+export default function ProfilePage() {
+  const router = useRouter();
+
+  
+  
+  // Form state to hold user input, including resume upload
+  const [formData, setFormData] = useState({
+    name: '',
+    location: '',
+    visa: '',
+    validTill: '',
+    resume: null as File | null,
+  });
+
+  const [resumeFile, setResumeFile] = useState<File | null>(null);  // To track the uploaded file
+  const [isLoading, setIsLoading] = useState(false);  // Track loading status for form submission
+  const [error, setError] = useState<string | null>(null);  // Track errors during form submission
+  
+  // Handle name change in form
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, name: e.target.value });
+  };
+
+  // Handle location change in form
+  const handleLocationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, location: e.target.value });
+  };
+
+  // Handle visa change and visa-specific logic
+  const handleVisaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData({ ...formData, visa: e.target.value });
+  };
+
+  // Handle visa expiration date input when needed
+  const handleVisaExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, validTill: e.target.value });
+  };
+
+  // Handle resume file upload and parse it
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setResumeFile(file);
+      setIsLoading(true);
+
+      try {
+        const resumeText = await parseResume(file);
+        const parsedData: ParsedResumeData = extractStructuredDataFromText(resumeText);
+
+        setFormData({
+          ...formData,
+          name: parsedData?.name || formData.name,
+          location: parsedData.location || formData.location,
+          resume: file,
+        });
+      } catch (err) {
+        setError('Error parsing resume.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  // Handle form submission
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.location || !resumeFile) {
+      setError('Please fill all required fields and upload your resume.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Simulate API request (replace with actual logic)
+      // e.g., sending formData to backend
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // On successful submission, redirect user
+      router.push('/dashboard');
+    } catch (err) {
+      setError('An error occurred while submitting your profile.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="profile-form-container p-4">
+      <h1 className="text-2xl font-bold mb-4">Create Your Profile</h1>
+      
+      <div className="form-group mb-4">
+        <label htmlFor="name" className="block text-sm font-medium">Full Name</label>
+        <input
+          type="text"
+          id="name"
+          value={formData.name}
+          onChange={handleNameChange}
+          className="input-field mt-2 w-full"
+          placeholder="Enter your full name"
+        />
+      </div>
+
+      <div className="form-group mb-4">
+        <label htmlFor="location" className="block text-sm font-medium">Location</label>
+        <input
+          type="text"
+          id="location"
+          value={formData.location}
+          onChange={handleLocationChange}
+          className="input-field mt-2 w-full"
+          placeholder="Enter your location"
+        />
+      </div>
+
+      <div className="form-group mb-4">
+        <label htmlFor="visa" className="block text-sm font-medium">Visa Type</label>
+        <select
+          id="visa"
+          value={formData.visa}
+          onChange={handleVisaChange}
+          className="input-field mt-2 w-full"
+        >
+          <option value="">Select Visa Type</option>
+          <option value="US Citizen">US Citizen</option>
+          <option value="Green Card">Green Card</option>
+          <option value="H1B">H1B</option>
+          <option value="H4EAD">H4EAD</option>
+          <option value="L2EAD">L2EAD</option>
+          <option value="F1">F1</option>
+          <option value="STEM OPT">STEM OPT</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+      {formData.visa && formData.visa !== 'Other' && (
+        <div className="form-group mb-4">
+          <label htmlFor="validTill" className="block text-sm font-medium">Visa Valid Till</label>
+          <input
+            type="date"
+            id="validTill"
+            value={formData.validTill}
+            onChange={handleVisaExpiryChange}
+            className="input-field mt-2 w-full"
+          />
+        </div>
+      )}
+
+      <div className="form-group mb-4">
+        <label htmlFor="resume" className="block text-sm font-medium">Upload Resume (PDF)</label>
+        <input
+          type="file"
+          id="resume"
+          accept=".pdf"
+          onChange={handleResumeUpload}
+          className="input-field mt-2 w-full"
+        />
+      </div>
+
+      {resumeFile && (
+        <div className="text-sm text-gray-500 mb-4">
+          <p>Resume Uploaded: {resumeFile.name}</p>
+        </div>
+      )}
+
+      {isLoading && <div className="text-center">Processing...</div>}
+
+      {error && <div className="text-red-500 mb-4">{error}</div>}
+
+      <button
+        onClick={handleSubmit}
+        className="submit-button w-full py-2 bg-purple-500 text-white rounded mt-4 disabled:opacity-50"
+        disabled={!formData.name || !formData.location || !resumeFile || isLoading}
+      >
+        Submit Profile
+      </button>
+    </div>
+  );
+}

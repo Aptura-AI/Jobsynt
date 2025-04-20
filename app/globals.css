@@ -63,3 +63,6 @@ button {
 .upload-section {
   margin-top: 20px;
 }
+.input {
+  @apply bg-gray-800 text-white rounded-md px-4 py-2 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500;
+}

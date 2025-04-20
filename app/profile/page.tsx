@@ -2,29 +2,8 @@
 
 import React, { useEffect, useState, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import usStates from '../app/../utils/usStates.json';
+import usStates from '../utils/usStates.json';
 import { useSession } from 'next-auth/react';
-
-function ProfilePageHeader() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-
-  if (status === 'loading') return <div>Loading...</div>;
-  if (!session) {
-    router.push('/signin'); // Redirect to the sign-in page if not authenticated
-    return null;
-  }
-
-  return (
-    <div>
-      <h1>Welcome, {session.user?.name}!</h1>
-      {/* Render the rest of the profile content here */}
-    </div>
-  );
-}
-
-// preferred alias
-
 
 interface ProfileState {
   name: string;
@@ -44,6 +23,9 @@ interface ProfileState {
   relocationScope: string;
   relocationCity: string;
   relocationState: string;
+  otherVisa: string;
+  openToRelocate: string;
+  workPreference: string;
 }
 
 const visaOptions = [
@@ -65,12 +47,11 @@ const contractTypes = [
   '1099',
 ];
 
-const jobTypes = ['Onsite', 'Remote', 'Hybrid'];
-
-const relocationScopes = ['Anywhere in USA', 'To Specific Location'];
-
-const ProfilePage = () => {
+export default function ProfilePage() {
+  const { data: session, status } = useSession();
   const router = useRouter();
+  const jobTypes = ['Onsite', 'Remote', 'Hybrid'];
+  const relocationScopes = ['Anywhere in USA', 'To Specific Location'];
   const [formData, setFormData] = useState<ProfileState>({
     name: '',
     location: '',
@@ -89,7 +70,18 @@ const ProfilePage = () => {
     relocationScope: '',
     relocationCity: '',
     relocationState: '',
+    otherVisa: '',
+    openToRelocate: '',
+    workPreference: '',
   });
+
+  useEffect(() => {
+    if (status === 'loading') return;
+    if (!session) {
+      router.push('/signin');
+    }
+  }, [status, session, router]);
+
   const parseResume = (text: string) => {
     const nameMatch = text.match(/Name:\s*(.*)/i);
     const locationMatch = text.match(/Location:\s*(.*)/i);
@@ -97,7 +89,7 @@ const ProfilePage = () => {
     const educationMatch = text.match(/Education[\s\S]*?(?=Experience|$)/i);
     const experienceMatch = text.match(/Experience[\s\S]*?(?=Skills|$)/i);
     const skillsMatch = text.match(/Skills[\s\S]*?(?=Projects|$)/i);
-  
+
     const parsedProfile = {
       parsedName: nameMatch?.[1] || '',
       parsedLocation: locationMatch?.[1] || '',
@@ -106,11 +98,32 @@ const ProfilePage = () => {
       parsedExperience: experienceMatch?.[0] || '',
       parsedSkills: skillsMatch?.[0] || '',
     };
-  
+
     localStorage.setItem('parsedProfile', JSON.stringify(parsedProfile));
     router.push('/profile/parsed');
   };
-  
+
+  const handleInputChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleResumeUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFormData((prev) => ({ ...prev, resume: file }));
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result as string;
+        parseResume(text);
+      };
+      reader.readAsText(file);
+    }
+  };
+
   useEffect(() => {
     const savedData = localStorage.getItem('profileData');
     if (savedData) {
@@ -122,31 +135,19 @@ const ProfilePage = () => {
     localStorage.setItem('profileData', JSON.stringify(formData));
   }, [formData]);
 
-  const handleInputChange = (
-    e: ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleResumeUpload = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFormData((prev) => ({ ...prev, resume: file }));
-  };
-
   const handleSubmit = () => {
-    // Save formData to localStorage and go to confirmation step
     localStorage.setItem('profileData', JSON.stringify(formData));
     router.push('/profile/confirm');
   };
+
+  if (status === 'loading') return <div className="text-white p-4">Loading...</div>;
+  if (!session) return null;
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen text-white">
       <div className="w-full md:w-1/2 bg-zinc-900 p-8 space-y-6">
         <h1 className="text-3xl font-bold text-violet-600">Candidate Profile</h1>
 
-        {/* Name */}
         <div>
           <label className="block mb-1">Full Name</label>
           <input
@@ -158,7 +159,6 @@ const ProfilePage = () => {
           />
         </div>
 
-        {/* Location */}
         <div>
           <label className="block mb-1">Location (City, State)</label>
           <input
@@ -170,7 +170,6 @@ const ProfilePage = () => {
           />
         </div>
 
-        {/* Phone */}
         <div>
           <label className="block mb-1">Phone Number</label>
           <input
@@ -182,7 +181,6 @@ const ProfilePage = () => {
           />
         </div>
 
-        {/* Email */}
         <div>
           <label className="block mb-1">Email</label>
           <input
@@ -194,7 +192,6 @@ const ProfilePage = () => {
           />
         </div>
 
-        {/* LinkedIn */}
         <div>
           <label className="block mb-1">LinkedIn Profile</label>
           <input
@@ -206,7 +203,6 @@ const ProfilePage = () => {
           />
         </div>
 
-        {/* Experience */}
         <div>
           <label className="block mb-1">Years of Experience</label>
           <input
@@ -220,7 +216,6 @@ const ProfilePage = () => {
           />
         </div>
 
-        {/* Salary */}
         <div>
           <label className="block mb-1">Expected Salary (USD)</label>
           <input
@@ -232,7 +227,6 @@ const ProfilePage = () => {
           />
         </div>
 
-        {/* Contract Type */}
         <div>
           <label className="block mb-1">Preferred Contract Type</label>
           <select
@@ -243,12 +237,11 @@ const ProfilePage = () => {
           >
             <option value="">Select</option>
             {contractTypes.map((type) => (
-              <option key={type}>{type}</option>
+              <option key={type} value={type}>{type}</option>
             ))}
           </select>
         </div>
 
-        {/* Job Type */}
         <div>
           <label className="block mb-1">Preferred Job Type</label>
           <select
@@ -259,12 +252,11 @@ const ProfilePage = () => {
           >
             <option value="">Select</option>
             {jobTypes.map((type) => (
-              <option key={type}>{type}</option>
+              <option key={type} value={type}>{type}</option>
             ))}
           </select>
         </div>
 
-        {/* Visa */}
         <div>
           <label className="block mb-1">Visa Status</label>
           <select
@@ -275,7 +267,7 @@ const ProfilePage = () => {
           >
             <option value="">Select</option>
             {visaOptions.map((v) => (
-              <option key={v}>{v}</option>
+              <option key={v} value={v}>{v}</option>
             ))}
           </select>
         </div>
@@ -306,7 +298,6 @@ const ProfilePage = () => {
           </div>
         )}
 
-        {/* Relocation */}
         <div>
           <label className="block mb-1">Willing to Relocate?</label>
           <select
@@ -330,8 +321,9 @@ const ProfilePage = () => {
               value={formData.relocationScope}
               onChange={handleInputChange}
             >
+              <option value="">Select</option>
               {relocationScopes.map((opt) => (
-                <option key={opt}>{opt}</option>
+                <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
           </div>
@@ -350,11 +342,8 @@ const ProfilePage = () => {
                 onChange={handleInputChange}
               />
               <datalist id="us-states">
-                {usStates.map((state) => (
-                  <option key={state.abbreviation} value={state.name} />
-                ))}
-                {usStates.map((state) => (
-                  <option key={state.name} value={state.abbreviation} />
+                {usStates.map((state: { name: string }) => (
+                  <option key={state.name} value={state.name} />
                 ))}
               </datalist>
             </div>
@@ -371,7 +360,6 @@ const ProfilePage = () => {
           </>
         )}
 
-        {/* Submit */}
         <button
           className="mt-4 bg-violet-600 hover:bg-violet-700 text-white font-semibold px-6 py-2 rounded"
           onClick={handleSubmit}
@@ -380,7 +368,6 @@ const ProfilePage = () => {
         </button>
       </div>
 
-      {/* Right Half: Upload */}
       <div className="w-full md:w-1/2 bg-gray-800 p-8 flex flex-col justify-center items-center">
         <h2 className="text-2xl font-semibold text-violet-500 mb-4">
           Upload Resume
@@ -388,15 +375,10 @@ const ProfilePage = () => {
         <input
           type="file"
           accept=".pdf"
+          className="text-white"
           onChange={handleResumeUpload}
-          className="block w-full text-sm text-gray-300 file:bg-violet-600 file:text-white file:rounded-lg file:px-4 file:py-2 file:font-semibold hover:file:bg-violet-700"
         />
-        router.push('/profile/parsed');
-
       </div>
     </div>
   );
-};
-
-export { ProfilePageHeader };
-export default ProfilePage;
+}

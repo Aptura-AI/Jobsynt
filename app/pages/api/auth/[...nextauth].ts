@@ -1,27 +1,44 @@
 import NextAuth from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
+import LinkedInProvider from 'next-auth/providers/linkedin';
+import type { NextAuthOptions } from 'next-auth';
 
-export default NextAuth({
+// Auth configuration
+export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
+    LinkedInProvider({
+      clientId: process.env.LINKEDIN_CLIENT_ID!,
+      clientSecret: process.env.LINKEDIN_CLIENT_SECRET!,
+    }),
   ],
-  secret: process.env.NEXTAUTH_SECRET,
-  session: {
-    strategy: "jwt",
-  },
   callbacks: {
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.sub;
+        session.user.provider = token.provider as string ?? 'unknown';
+      }
+      return session;
+    },
     async jwt({ token, account }) {
-      if (account) {
-        token.accessToken = account.access_token;
+      if (account?.provider) {
+        token.provider = account.provider;
       }
       return token;
     },
-    async session({ session, token }) {
-      session.accessToken = token.accessToken;
-      return session;
+    async redirect({ url, baseUrl }) {
+      return baseUrl;
     },
   },
-});
+  pages: {
+    signIn: '/signin',
+    error: '/auth/error',
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+};
+
+export default NextAuth(authOptions);
+export type { NextAuthOptions, DefaultSession } from 'next-auth';

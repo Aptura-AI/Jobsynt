@@ -1,0 +1,57 @@
+'use client';
+
+import { useSession } from 'next-auth/react';
+
+
+
+// The Session type is already extended in the API route file; no need to redeclare it here.
+import { useRouter } from 'next/navigation';
+
+const ProfilePage = () => {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  if (status === 'loading') return <div>Loading...</div>;
+  if (status === 'unauthenticated') {
+    return null;
+  }
+  return (
+    <div>
+      <h1>Welcome, {session?.user?.name || 'User'}!</h1>
+      <p>Email: {session?.user?.email || 'Not provided'}</p>
+      <p>Provider: {session?.user?.provider || 'Unknown'}</p>
+    </div>
+  );
+};
+
+  const name = session?.user?.name || 'N/A';
+  const email = session?.user?.email || 'N/A';
+  const provider = session?.user?.provider || 'Google/LinkedIn';
+
+  return (
+    <div className="min-h-screen flex flex-col justify-center items-center bg-black text-white p-6">
+      <h1 className="text-5xl font-bold text-center text-purple-600 mb-6">
+        Welcome to Your Profile, {name}
+      </h1>
+      <div className="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-lg text-lg">
+        <div className="mb-4">
+          <strong className="text-gray-400">Name:</strong> {name}
+        </div>
+        <div className="mb-4">
+          <strong className="text-gray-400">Email:</strong> {email}
+        </div>
+        <div className="mb-4">
+          <strong className="text-gray-400">Provider:</strong> {provider}
+        </div>
+        <button
+          onClick={() => router.push('/')}
+          className="mt-6 bg-purple-600 text-white px-8 py-4 rounded-full w-full text-xl hover:bg-purple-700 transition-colors"
+        >
+          Go back to Home
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default ProfilePage;

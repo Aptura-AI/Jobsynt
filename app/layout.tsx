@@ -3,7 +3,8 @@ import React from 'react';
 import './globals.css';
 import { getServerSession } from 'next-auth';
 import SessionProviderClient from './providers/SessionProviderClient';
-import { authOptions } from './api/auth/[...nextauth]/route';
+import externalAuthOptions from './api/auth/[...nextauth]/authOptions';
+import NextAuth, { NextAuthOptions } from 'next-auth';
 
 export const metadata = {
   title: 'Jobsynth',
@@ -15,7 +16,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  const session = await getServerSession(externalAuthOptions);
 
   return (
     <html lang="en">

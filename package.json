@@ -1,5 +1,5 @@
 {
-    "name": "jobsynth",
+    "name": "jobsynt",
     "version": "1.0.0",
     "dependencies": {
         "@heroicons/react": "^2.2.0",
@@ -7,21 +7,23 @@
         "@types/next-auth": "^3.13.0",
         "autoprefixer": "^10.4.21",
         "axios": "^1.8.4",
-        "next": "^13.0.0",
+        "next": "^15.3.1",
         "next-auth": "^4.24.11",
         "node-fetch": "^3.3.2",
         "openai": "^4.95.1",
         "pdfjs-dist": "^5.1.91",
         "postcss": "^8.5.3",
         "react": "^18.2.0",
-        "react-dom": "^18.2.0"
+        "react-dom": "^18.2.0",
+        "react-pdf": "^9.2.1",
+        "swr": "^2.3.3"
     },
     "devDependencies": {
         "@tailwindcss/postcss": "^4.1.4",
         "@types/node": "^22.14.1",
         "@types/node-fetch": "^2.6.12",
         "@types/pdfjs-dist": "^2.10.377",
-        "@types/react": "^18.0.0",
+        "@types/react": "^18.3.20",
         "@types/react-dom": "^18.0.0",
         "autoprefixer": "^10.4.15",
         "postcss": "^8.4.35",
@@ -32,6 +34,7 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
-        "lint": "next lint"
+        "lint": "next lint",
+        "type": "module"
     }
 }
