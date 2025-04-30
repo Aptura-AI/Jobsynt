@@ -1,314 +1,401 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { extractResumeText, parseResumeText } from '@/lib/resume-parser';
 
-interface Employment {
-  designation: string;
+interface JobExperience {
+  title: string;
   company: string;
-  fromDate: string;
-  toDate: string;
-  isCurrent: boolean;
-  description: string;
-}
-
-interface ParsedProfile {
-  name: string;
   location: string;
-  state: string;
-  phone: string;
-  email: string;
-  visa: string;
-  visaTypeOther: string;
-  validTill: string;
-  linkedIn: string;
-  experience: string;
-  salary: string;
-  contractType: string;
-  jobType: string;
-  relocation: string;
-  relocationOption: string;
-  relocationCity: string;
-  relocationState: string;
-  jobs: Employment[];
+  start_date: string;
+  end_date: string;
+  details: string[];
 }
 
-const completePage = () => {
-  const [profile, setProfile] = useState<ParsedProfile>({
-    name: '',
-    location: '',
-    state: '',
-    phone: '',
+interface ProfileData {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  visa_status: string;
+  other_visa: string;
+  visa_valid_till: string;
+  location_city: string;
+  location_state: string;
+  relocation_status: string;
+  relocation_cities: string[];
+  relocation_states: string[];
+  linkedin_profile: string;
+  salary: string;
+  experience_years: string;
+  jobs: JobExperience[];
+}
+
+interface ParsedResumeData {
+  name?: string;
+  email?: string;
+  phone?: string;
+  skills?: string[];
+  experience?: string[];
+  education?: string[];
+  rawText?: string;
+}
+
+const visaOptions = ['US Citizen', 'Green Card', 'H1B', 'F1', 'STEM OPT', 'L1', 'Other'];
+const relocationOptions = ['No', 'Relocate anywhere in the USA', 'Relocate to selected cities'];
+
+const normalizeArrayInput = (input: string | string[]): string[] => {
+  if (Array.isArray(input)) return input.filter(item => item.trim() !== '');
+  if (typeof input === 'string') {
+    return input.split(/[,;]|\s+/).filter(item => item.trim() !== '');
+  }
+  return [];
+};
+
+export default function ProfileCompletePage() {
+  const supabase = createClientComponentClient();
+  const router = useRouter();
+
+  const [profileData, setProfileData] = useState<ProfileData>({
+    first_name: '',
+    last_name: '',
     email: '',
-    visa: '',
-    visaTypeOther: '',
-    validTill: '',
-    linkedIn: '',
-    experience: '',
+    phone: '',
+    visa_status: '',
+    other_visa: '',
+    visa_valid_till: '',
+    location_city: '',
+    location_state: '',
+    relocation_status: '',
+    relocation_cities: [],
+    relocation_states: [],
+    linkedin_profile: '',
     salary: '',
-    contractType: '',
-    jobType: '',
-    relocation: '',
-    relocationOption: '',
-    relocationCity: '',
-    relocationState: '',
+    experience_years: '',
     jobs: [
-      {
-        designation: '',
-        company: '',
-        fromDate: '',
-        toDate: '',
-        isCurrent: false,
-        description: '',
+      { 
+        title: '', 
+        company: '', 
+        location: '', 
+        start_date: '', 
+        end_date: '', 
+        details: [''] 
       },
-      { designation: '', company: '', fromDate: '', toDate: '', isCurrent: false, description: '' },
-      { designation: '', company: '', fromDate: '', toDate: '', isCurrent: false, description: '' },
     ],
   });
 
-  useEffect(() => {
-    const data = localStorage.getItem('complete');
-    if (data) {
-      setProfile(JSON.parse(data));
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setProfileData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleRelocationCityChange = (index: number, value: string) => {
+    const updatedCities = [...profileData.relocation_cities];
+    updatedCities[index] = value;
+    setProfileData(prev => ({ ...prev, relocation_cities: updatedCities }));
+  };
+
+  const addRelocationCity = () => {
+    setProfileData(prev => ({
+      ...prev,
+      relocation_cities: [...prev.relocation_cities, '']
+    }));
+  };
+
+  const handleJobChange = (index: number, field: keyof JobExperience, value: string) => {
+    const updatedJobs = [...profileData.jobs];
+    if (field === 'details') {
+      updatedJobs[index] = {
+        ...updatedJobs[index],
+        details: normalizeArrayInput(value)
+      };
+    } else {
+      updatedJobs[index] = {
+        ...updatedJobs[index],
+        [field]: value
+      };
     }
-  }, []);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>, field: keyof ParsedProfile) => {
-    setProfile((prev) => ({ ...prev, [field]: e.target.value }));
+    setProfileData(prev => ({ ...prev, jobs: updatedJobs }));
   };
-  
-  type JobDetails = {
-      title: string;
-      company: string;
-      location: string;
-      remote: boolean;
-      // other fields of Employment object...
-  };
-  // Removed redundant Employment type definition to avoid conflicts.
-  const handleJobChange = (index: number, key: keyof Employment, value: string | boolean) => {
-      const updatedJobs = [...profile.jobs];
-    
-      // Ensure the key exists in the Employment object and assign the correct value
-      (updatedJobs[index][key] as typeof value) = value;
-    
-      setProfile((prev) => ({ ...prev, jobs: updatedJobs }));
-    };
-  
 
-  const handleSubmit = () => {
-    alert('Profile finalized. Redirecting to dashboard...');
-    // Redirect to next flow step like /dashboard or job search
+  const addJob = () => {
+    setProfileData(prev => ({
+      ...prev,
+      jobs: [
+        ...prev.jobs,
+        { 
+          title: '', 
+          company: '', 
+          location: '', 
+          start_date: '', 
+          end_date: '', 
+          details: [''] 
+        },
+      ],
+    }));
+  };
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const rawText = await extractResumeText(file);
+      const parsedData: ParsedResumeData = parseResumeText(rawText);
+      
+      // Safely merge parsed data with existing profile data
+      setProfileData(prev => ({
+        ...prev,
+        first_name: parsedData.name?.split(' ')[0] || prev.first_name,
+        last_name: parsedData.name?.split(' ').slice(1).join(' ') || prev.last_name,
+        email: parsedData.email || prev.email,
+        phone: parsedData.phone || prev.phone,
+        // Handle skills if needed
+        // Handle experience if needed
+        // Handle education if needed
+      }));
+    } catch (error) {
+      console.error('Error parsing resume:', error);
+    }
+  };
+
+  const saveProfile = async () => {
+    try {
+      // Normalize all array inputs before saving
+      const formattedData = {
+        ...profileData,
+        relocation_cities: normalizeArrayInput(profileData.relocation_cities),
+        relocation_states: normalizeArrayInput(profileData.relocation_states),
+        jobs: profileData.jobs.map(job => ({
+          ...job,
+          details: normalizeArrayInput(job.details)
+        }))
+      };
+
+      const { error } = await supabase.from('profiles').upsert(formattedData);
+      
+      if (error) {
+        console.error('Error saving profile:', error);
+        return;
+      }
+      
+      router.push('/profile/confirm');
+    } catch (error) {
+      console.error('Error in saveProfile:', error);
+    }
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto text-white bg-zinc-900 min-h-screen">
-      <h1 className="text-3xl font-bold text-violet-500 mb-6">Complete Your Profile</h1>
+    <div className="max-w-4xl mx-auto py-8 px-4">
+      <h1 className="text-2xl font-semibold mb-6">Complete Your Profile</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[
-          { label: 'Full Name', field: 'name' },
-          { label: 'Location (City)', field: 'location' },
-          { label: 'State', field: 'state' },
-          { label: 'Phone Number', field: 'phone' },
-          { label: 'Email', field: 'email' },
-          { label: 'LinkedIn Profile', field: 'linkedIn' },
-          { label: 'Experience (years)', field: 'experience' },
-          { label: 'Expected Salary (USD)', field: 'salary' },
-        ].map(({ label, field }) => (
-          <div key={field}>
-            <label className="block text-sm mb-1">{label}</label>
-            <input
-              className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-              type="text"
-              value={(profile as any)[field]}
-              onChange={(e) => handleInputChange(e, field as keyof ParsedProfile)}
-            />
-          </div>
-        ))}
-
-        {/* Visa Section */}
-        <div>
-          <label className="block text-sm mb-1">Visa Status</label>
-          <select
-            className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-            value={profile.visa}
-            onChange={(e) => handleInputChange(e, 'visa')}
-          >
-            <option value="">Select</option>
-            {['US Citizen', 'Green Card', 'H1B', 'H4EAD', 'L2EAD', 'F1', 'STEM OPT', 'T1 Other'].map((visa) => (
-              <option key={visa}>{visa}</option>
-            ))}
-          </select>
-        </div>
-
-        {profile.visa === 'T1 Other' && (
-          <div>
-            <label className="block text-sm mb-1">Other Visa Type</label>
-            <input
-              className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-              type="text"
-              value={profile.visaTypeOther}
-              onChange={(e) => handleInputChange(e, 'visaTypeOther')}
-            />
-          </div>
-        )}
-
-        {!['US Citizen', 'Green Card'].includes(profile.visa) && (
-          <div>
-            <label className="block text-sm mb-1">Visa Valid Till</label>
-            <input
-              type="date"
-              value={profile.validTill}
-              onChange={(e) => handleInputChange(e, 'validTill')}
-              className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-            />
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm mb-1">Preferred Contract Type</label>
-          <select
-            value={profile.contractType}
-            onChange={(e) => handleInputChange(e, 'contractType')}
-            className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-          >
-            <option value="">Select</option>
-            <option value="W2">W2</option>
-            <option value="Contract to hire">Contract to hire</option>
-            <option value="1099">1099</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm mb-1">Job Type</label>
-          <select
-            value={profile.jobType}
-            onChange={(e) => handleInputChange(e, 'jobType')}
-            className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-          >
-            <option value="">Select</option>
-            <option value="Remote">Remote</option>
-            <option value="Onsite">Onsite</option>
-            <option value="Hybrid">Hybrid</option>
-          </select>
-        </div>
-
-        {/* Relocation */}
-        <div>
-          <label className="block text-sm mb-1">Willing to Relocate?</label>
-          <select
-            value={profile.relocation}
-            onChange={(e) => handleInputChange(e, 'relocation')}
-            className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-          >
-            <option value="">Select</option>
-            <option value="Yes">Yes</option>
-            <option value="No">No</option>
-          </select>
-        </div>
-
-        {profile.relocation === 'Yes' && (
-          <>
-            <div>
-              <label className="block text-sm mb-1">Relocate To</label>
-              <select
-                value={profile.relocationOption}
-                onChange={(e) => handleInputChange(e, 'relocationOption')}
-                className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-              >
-                <option value="">Select</option>
-                <option value="Anywhere in USA">Anywhere in USA</option>
-                <option value="To specific location">To specific location</option>
-              </select>
-            </div>
-
-            {profile.relocationOption === 'To specific location' && (
-              <>
-                <div>
-                  <label className="block text-sm mb-1">Relocation City</label>
-                  <input
-                    value={profile.relocationCity}
-                    onChange={(e) => handleInputChange(e, 'relocationCity')}
-                    className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1">Relocation State</label>
-                  <input
-                    value={profile.relocationState}
-                    onChange={(e) => handleInputChange(e, 'relocationState')}
-                    className="w-full bg-zinc-800 border border-gray-700 px-3 py-2 rounded"
-                    placeholder="e.g. TX or Texas"
-                  />
-                </div>
-              </>
-            )}
-          </>
-        )}
+      {/* Resume Upload */}
+      <div className="mb-4">
+        <label className="block font-medium mb-1">Upload Resume (PDF)</label>
+        <input 
+          type="file" 
+          accept="application/pdf" 
+          onChange={handleResumeUpload} 
+          className="w-full border px-3 py-2 rounded"
+        />
       </div>
 
-      {/* Employment History */}
-      <div className="mt-10">
-        <h2 className="text-2xl font-semibold text-violet-400 mb-4">Employment History</h2>
-        {profile.jobs.map((job, index) => (
-          <div key={index} className="bg-zinc-800 p-4 mb-4 rounded-lg border border-zinc-700 space-y-2">
-            <h3 className="text-lg font-medium text-violet-300">Job {index + 1}</h3>
-            <input
-              className="w-full bg-zinc-900 border border-gray-600 px-3 py-2 rounded"
-              placeholder="Designation"
-              value={job.designation}
-              onChange={(e) => handleJobChange(index, 'designation', e.target.value)}
-            />
-            <input
-              className="w-full bg-zinc-900 border border-gray-600 px-3 py-2 rounded"
-              placeholder="Company"
-              value={job.company}
-              onChange={(e) => handleJobChange(index, 'company', e.target.value)}
-            />
-            <div className="flex gap-2">
-              <input
-                className="w-1/2 bg-zinc-900 border border-gray-600 px-3 py-2 rounded"
-                type="date"
-                value={job.fromDate}
-                onChange={(e) => handleJobChange(index, 'fromDate', e.target.value)}
-              />
-              <input
-                className="w-1/2 bg-zinc-900 border border-gray-600 px-3 py-2 rounded"
-                type={job.isCurrent ? 'text' : 'date'}
-                value={job.isCurrent ? 'Till Date' : job.toDate}
-                onChange={(e) => handleJobChange(index, 'toDate', e.target.value)}
-                disabled={job.isCurrent}
-              />
-            </div>
-            {index === 0 && (
-              <label className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={job.isCurrent}
-                  onChange={(e) => handleJobChange(index, 'isCurrent', e.target.checked)}
-                />
-                Current Job
-              </label>
-            )}
-            <textarea
-              className="w-full bg-zinc-900 border border-gray-600 px-3 py-2 rounded"
-              placeholder="Job Description"
-              value={job.description}
-              onChange={(e) => handleJobChange(index, 'description', e.target.value)}
-            />
-          </div>
-        ))}
-      </div>
+      {/* Basic Info */}
+      {['first_name', 'last_name', 'email', 'phone'].map((field) => (
+        <div key={field} className="mb-4">
+          <label className="block font-medium mb-1 capitalize">{field.replace('_', ' ')}</label>
+          <input
+            type={field === 'email' ? 'email' : 'text'}
+            name={field}
+            value={profileData[field as keyof ProfileData] as string}
+            onChange={handleInputChange}
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+      ))}
 
-      <div className="mt-8 text-center">
-        <button
-          onClick={handleSubmit}
-          className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-3 rounded-lg font-medium"
+      {/* Visa Status */}
+      <div className="mb-4">
+        <label className="block font-medium mb-1">Visa Status</label>
+        <select
+          name="visa_status"
+          value={profileData.visa_status}
+          onChange={handleInputChange}
+          className="w-full border px-3 py-2 rounded"
         >
-          Start Job Search
-        </button>
+          <option value="">Select</option>
+          {visaOptions.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
       </div>
+
+      {profileData.visa_status === 'Other' && (
+        <div className="mb-4">
+          <label className="block font-medium mb-1">Specify Other Visa</label>
+          <input
+            type="text"
+            name="other_visa"
+            value={profileData.other_visa}
+            onChange={handleInputChange}
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+      )}
+
+      {!(profileData.visa_status === 'US Citizen' || profileData.visa_status === 'Green Card') && profileData.visa_status && (
+        <div className="mb-4">
+          <label className="block font-medium mb-1">Visa Valid Till</label>
+          <input
+            type="date"
+            name="visa_valid_till"
+            value={profileData.visa_valid_till}
+            onChange={handleInputChange}
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+      )}
+
+      {/* Location */}
+      <div className="mb-4">
+        <label className="block font-medium mb-1">City</label>
+        <input
+          type="text"
+          name="location_city"
+          value={profileData.location_city}
+          onChange={handleInputChange}
+          className="w-full border px-3 py-2 rounded"
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block font-medium mb-1">State</label>
+        <input
+          type="text"
+          name="location_state"
+          value={profileData.location_state}
+          onChange={handleInputChange}
+          className="w-full border px-3 py-2 rounded"
+        />
+      </div>
+
+      {/* Relocation */}
+      <div className="mb-4">
+        <label className="block font-medium mb-1">Relocation Preference</label>
+        <select
+          name="relocation_status"
+          value={profileData.relocation_status}
+          onChange={handleInputChange}
+          className="w-full border px-3 py-2 rounded"
+        >
+          <option value="">Select</option>
+          {relocationOptions.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+      </div>
+
+      {profileData.relocation_status === 'Relocate to selected cities' && (
+        <>
+          {profileData.relocation_cities.map((city, index) => (
+            <div key={index} className="mb-4">
+              <label className="block font-medium mb-1">Relocation City {index + 1}</label>
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => handleRelocationCityChange(index, e.target.value)}
+                className="w-full border px-3 py-2 rounded"
+              />
+            </div>
+          ))}
+          <button 
+            type="button" 
+            onClick={addRelocationCity} 
+            className="text-blue-500 underline mb-4"
+          >
+            + Add More Cities
+          </button>
+        </>
+      )}
+
+      <div className="mb-4">
+        <label className="block font-medium mb-1">
+          Relocation States (comma or space separated)
+        </label>
+        <input
+          type="text"
+          name="relocation_states"
+          value={profileData.relocation_states.join(', ')}
+          onChange={(e) => {
+            setProfileData(prev => ({
+              ...prev,
+              relocation_states: normalizeArrayInput(e.target.value)
+            }));
+          }}
+          className="w-full border px-3 py-2 rounded"
+        />
+      </div>
+
+      {/* LinkedIn, Salary, Experience */}
+      {['linkedin_profile', 'salary', 'experience_years'].map((field) => (
+        <div key={field} className="mb-4">
+          <label className="block font-medium mb-1 capitalize">
+            {field.replace('_', ' ')}
+            {field === 'salary' && ' ($)'}
+            {field === 'experience_years' && ' (years)'}
+          </label>
+          <input
+            type={field === 'salary' || field === 'experience_years' ? 'number' : 'text'}
+            name={field}
+            value={profileData[field as keyof ProfileData] as string}
+            onChange={handleInputChange}
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+      ))}
+
+      {/* Work Experience */}
+      <h2 className="text-xl font-semibold mt-6 mb-2">Work Experience</h2>
+      {profileData.jobs.map((job, index) => (
+        <div key={index} className="border p-4 mb-4 rounded-lg">
+          {['title', 'company', 'location', 'start_date', 'end_date'].map((field) => (
+            <div key={field} className="mb-3">
+              <label className="block font-medium mb-1 capitalize">{field.replace('_', ' ')}</label>
+              <input
+                type={field.includes('date') ? 'date' : 'text'}
+                value={job[field as keyof JobExperience] as string}
+                onChange={(e) => handleJobChange(index, field as keyof JobExperience, e.target.value)}
+                className="w-full border px-3 py-2 rounded"
+              />
+            </div>
+          ))}
+          <div className="mb-3">
+            <label className="block font-medium mb-1">Details (one per line)</label>
+            <textarea
+              value={job.details.join('\n')}
+              onChange={(e) => handleJobChange(index, 'details', e.target.value)}
+              className="w-full border px-3 py-2 rounded"
+              rows={4}
+            />
+          </div>
+        </div>
+      ))}
+      <button 
+        type="button" 
+        onClick={addJob} 
+        className="text-blue-500 underline mb-6"
+      >
+        + Add Another Job
+      </button>
+
+      {/* Submit */}
+      <button
+        onClick={saveProfile}
+        className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 transition-colors"
+      >
+        Save and Continue
+      </button>
     </div>
   );
-};
-
-export default completePage;
+}

@@ -1,20 +1,45 @@
-import { NextResponse } from 'next/server';
+// app/api/profiles/route.ts
 import { supabase } from '@/lib/supabaseClient';
+import { NextResponse } from 'next/server';
 
-export async function GET() {
-  const { data, error } = await supabase.from('profiles').select('*');
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+export async function POST(request: Request) {
+  try {
+    const profileData = await request.json();
+    
+    // Correct way to use Supabase client
+    const { data, error } = await supabase
+      .from('profiles') // This is the correct usage
+      .upsert(profileData);
+    
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to update profile' },
+      { status: 500 }
+    );
   }
-  return NextResponse.json(data);
 }
 
-export async function POST(req: Request) {
-  const body = await req.json();
+export async function GET() {
+  try {
+    // Correct way to query data
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*');
+    
+    if (error) {
+      throw error;
+    }
 
-  const { data, error } = await supabase.from('profiles').insert([body]);
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to fetch profiles' },
+      { status: 500 }
+    );
   }
-  return NextResponse.json(data);
 }

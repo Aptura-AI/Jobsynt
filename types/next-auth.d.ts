@@ -1,25 +1,21 @@
 // types/next-auth.d.ts
-import NextAuth, { DefaultSession } from 'next-auth';
+import NextAuth from "next-auth";
 
-declare module 'next-auth' {
+declare module "next-auth" {
   interface Session {
-    user: {
+    accessToken?: string;
+    user?: {
       id?: string;
-      provider?: string;
-    } & DefaultSession['user'];
-  }
-
-  interface User {
-    id?: string;
-    provider?: string;
-  }
-
-  interface JWT {
-    id?: string;
-    provider?: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+    };
   }
 }
 
-export {};
-export default NextAuth;
-// This file is used to extend the NextAuth types for TypeScript support.
+declare module "next-auth/jwt" {
+  interface JWT {
+    accessToken?: string;
+    id?: string;
+  }
+}

@@ -1,155 +1,53 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
-interface ParsedProfile {
-  name: string;
-  email: string;
-  phone: string;
-  location: string;
-  linkedin: string;
-  skills: string;
-  experience: string;
-  education: string;
-}
-
-const ParsedProfilePage = () => {
-  const router = useRouter();
-  const [parsedData, setParsedData] = useState<ParsedProfile>({
-    name: '',
-    email: '',
-    phone: '',
-    location: '',
-    linkedin: '',
-    skills: '',
-    experience: '',
-    education: '',
-  });
+export default function ProfileConfirm() {
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('parsedResumeData');
-    if (saved) {
-      setParsedData(JSON.parse(saved));
+    const confirmed = localStorage.getItem('confirmedProfile');
+    if (confirmed) {
+      setProfile(JSON.parse(confirmed));
     }
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setParsedData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSave = () => {
-    localStorage.setItem('parsedResumeData', JSON.stringify(parsedData));
-    router.push('/profile/complete');
-  };
+  if (!profile) return <div className="text-white p-8">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-white px-6 py-10">
-      <h1 className="text-3xl font-bold text-violet-500 mb-6">Review & Refine Resume Details</h1>
+    <div className="p-8 max-w-3xl mx-auto bg-card text-white">
+      <h1 className="text-3xl font-bold mb-4">Review & Confirm Your Resume</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* Name */}
-        <div>
-          <label className="block mb-1">Full Name</label>
-          <input
-            name="name"
-            value={parsedData.name}
-            onChange={handleChange}
-            className="w-full bg-zinc-800 border border-gray-700 px-4 py-2 rounded"
-          />
-        </div>
-
-        {/* Email */}
-        <div>
-          <label className="block mb-1">Email</label>
-          <input
-            name="email"
-            value={parsedData.email}
-            onChange={handleChange}
-            className="w-full bg-zinc-800 border border-gray-700 px-4 py-2 rounded"
-          />
-        </div>
-
-        {/* Phone */}
-        <div>
-          <label className="block mb-1">Phone</label>
-          <input
-            name="phone"
-            value={parsedData.phone}
-            onChange={handleChange}
-            className="w-full bg-zinc-800 border border-gray-700 px-4 py-2 rounded"
-          />
-        </div>
-
-        {/* Location */}
-        <div>
-          <label className="block mb-1">Location</label>
-          <input
-            name="location"
-            value={parsedData.location}
-            onChange={handleChange}
-            className="w-full bg-zinc-800 border border-gray-700 px-4 py-2 rounded"
-          />
-        </div>
-
-        {/* LinkedIn */}
-        <div className="md:col-span-2">
-          <label className="block mb-1">LinkedIn</label>
-          <input
-            name="linkedin"
-            value={parsedData.linkedin}
-            onChange={handleChange}
-            className="w-full bg-zinc-800 border border-gray-700 px-4 py-2 rounded"
-          />
-        </div>
-
-        {/* Skills */}
-        <div className="md:col-span-2">
-          <label className="block mb-1">Skills</label>
-          <textarea
-            name="skills"
-            value={parsedData.skills}
-            onChange={handleChange}
-            rows={4}
-            className="w-full bg-zinc-800 border border-gray-700 px-4 py-2 rounded"
-          />
-        </div>
-
-        {/* Experience */}
-        <div className="md:col-span-2">
-          <label className="block mb-1">Experience Summary</label>
-          <textarea
-            name="experience"
-            value={parsedData.experience}
-            onChange={handleChange}
-            rows={4}
-            className="w-full bg-zinc-800 border border-gray-700 px-4 py-2 rounded"
-          />
-        </div>
-
-        {/* Education */}
-        <div className="md:col-span-2">
-          <label className="block mb-1">Education Summary</label>
-          <textarea
-            name="education"
-            value={parsedData.education}
-            onChange={handleChange}
-            rows={4}
-            className="w-full bg-zinc-800 border border-gray-700 px-4 py-2 rounded"
-          />
-        </div>
+      <div className="mb-6">
+        <p><strong>{profile.first_name} {profile.last_name}</strong></p>
+        <p>{profile.email} | {profile.phone}</p>
+        <p>{profile.linkedin_profile}</p>
       </div>
 
-      <button
-        onClick={handleSave}
-        className="mt-8 bg-violet-600 hover:bg-violet-700 text-white font-semibold px-6 py-2 rounded"
-      >
-        Save & Continue
-      </button>
+      <div className="mb-4">
+        <h2 className="text-xl font-semibold">Location & Visa</h2>
+        <p>{profile.location} | Visa: {profile.visa_status} {profile.other_visa && `(${profile.other_visa})`} | Valid till: {profile.visa_valid_till}</p>
+        <p>Relocation: {profile.relocation_status} {profile.relocation_cities?.join(', ')} {profile.relocation_states?.join(', ')}</p>
+      </div>
+
+      <div className="mb-4">
+        <h2 className="text-xl font-semibold">Experience</h2>
+        <p>{profile.experience_years} years</p>
+        <p>Expected Salary: {profile.salary}</p>
+      </div>
+
+      <div>
+        <h2 className="text-xl font-semibold mb-2">Work History</h2>
+        {profile.jobs?.map((job: any, idx: number) => (
+          <div key={idx} className="mb-4">
+            <p className="font-semibold">{job.title} — {job.company}</p>
+            <p className="text-sm">{job.location} | {job.start_date} to {job.end_date || 'Present'}</p>
+            <p className="text-sm whitespace-pre-wrap">{job.details}</p>
+          </div>
+        ))}
+      </div>
+
+      <button className="btn-primary mt-6">Confirm & Generate Resume</button>
     </div>
   );
-};
-
-export default ParsedProfilePage;
+}

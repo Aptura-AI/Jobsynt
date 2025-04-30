@@ -1,29 +1,24 @@
-
-import React from 'react';
+// app/layout.tsx
+import { Providers } from './providers';
+import type { Metadata } from 'next';
 import './globals.css';
-import { getServerSession } from 'next-auth';
-import SessionProviderClient from './providers/SessionProviderClient';
-import externalAuthOptions from './api/auth/[...nextauth]/authOptions';
-import NextAuth, { NextAuthOptions } from 'next-auth';
 
-export const metadata = {
-  title: 'Jobsynth',
-  description: 'Your AI-powered job agent',
+export const metadata: Metadata = {
+  title: 'Jobsynt',
+  description: 'AI-Powered Job Search Platform',
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
-  const session = await getServerSession(externalAuthOptions);
-
   return (
-    <html lang="en">
-      <body>
-        <SessionProviderClient session={session}>
+    <html lang="en" suppressHydrationWarning>
+      <body className="min-h-screen bg-gradient-to-br from-[#1a063a] via-[#2e0b6e] to-[#0a0515] text-white">
+        <Providers>
           {children}
-        </SessionProviderClient>
+        </Providers>
       </body>
     </html>
   );

@@ -131,10 +131,9 @@ const JobSearchPage = () => {
         <button
           type="submit"
           className="w-full mt-4 bg-violet-500 hover:bg-violet-600 text-white font-semibold py-2 px-4 rounded"
-        >
-          Find Jobs
-        </button>
-      </form>
+        > Find Jobs
+          </button>
+          </form>
     </div>
   );
 };

@@ -2,67 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: 'Inter', sans-serif;
-}
-/* Add padding and margin to ensure elements don't overlap */
-.form-container {
-  padding: 16px;
+/* Force color scheme */
+:root {
+  color-scheme: dark;
 }
 
-.flex-col {
-  margin-bottom: 10px;
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
 }
 
-label {
-  margin-bottom: 5px;
+::-webkit-scrollbar-track {
+  background: #1a063a;
 }
 
-input,
-button {
-  margin-bottom: 10px;
-}
-input,
-select,
-textarea,
-button {
-  margin-bottom: 12px;
-}
-/* Global styles for Profile page layout */
-
-.profile-container {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
+::-webkit-scrollbar-thumb {
+  background: #6d28d9;
+  border-radius: 4px;
 }
 
-.left-section {
-  flex: 1;
-}
-
-.right-section {
-  flex: 1;
-  background-color: #f7fafc; /* Light background */
-  padding: 20px;
-  border-radius: 8px;
-}
-
-.btn-submit {
-  background-color: #4f46e5; /* Purple color */
-  color: white;
-  padding: 10px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-submit:hover {
-  background-color: #4338ca;
-}
-
-.upload-section {
-  margin-top: 20px;
-}
-.input {
-  @apply bg-gray-800 text-white rounded-md px-4 py-2 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500;
+::-webkit-scrollbar-thumb:hover {
+  background: #7c3aed;
 }

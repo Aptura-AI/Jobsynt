@@ -1,49 +1,30 @@
 {
   "compilerOptions": {
-    "target": "ES6",
-    "lib": [
-      "DOM",
-      "DOM.Iterable",
-      "ESNext"
-    ],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-    "module": "ESNext",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "types": [
-      "next-auth"
-    ],
-    "jsx": "preserve",
-    "incremental": true,
+    "target": "es2020",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
     },
-    "typeRoots": [
-      "./types",
-      "./node_modules/@types"
-    ],
+    "typeRoots": ["./types", "./node_modules/@types", "./src/types"],
+    "types": ["next", "next-auth", "node"],
+        "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
     "esModuleInterop": true,
-    "moduleResolution": "node",
+    "jsx": "preserve",
+    "incremental": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
     "plugins": [
       {
         "name": "next"
       }
     ]
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    "types",
-    "next-auth.d.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["**/*.ts", "**/*.tsx", "next-env.d.ts", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next"]
 }
