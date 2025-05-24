@@ -1,0 +1,17 @@
+[build]
+  command = "npm run build"
+  publish = "."
+  functions = "netlify/functions"
+
+[dev]
+  framework = "#static"
+  targetPort = 8888
+  functionsPort = 3999
+  publish = "."
+
+[functions]
+  node_bundler = "esbuild"  # Faster builds
+  external_node_modules = ["axios", "cheerio", "redis"]
+
+[context.production.environment]
+  NODE_VERSION = "14"  # Match your local version
