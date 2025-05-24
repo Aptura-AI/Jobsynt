@@ -1,7 +1,8 @@
-[build]
-  command = "npm run build"
+﻿[build]
+  command = "npm install && npm run build"
   publish = "."
   functions = "netlify/functions"
+  ignore_python = true
 
 [dev]
   framework = "#static"
@@ -10,8 +11,8 @@
   publish = "."
 
 [functions]
-  node_bundler = "esbuild"  # Faster builds
+  node_bundler = "esbuild"
   external_node_modules = ["axios", "cheerio", "redis"]
 
 [context.production.environment]
-  NODE_VERSION = "14"  # Match your local version
+  NODE_VERSION = "18"

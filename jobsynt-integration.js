@@ -80,6 +80,7 @@ class JobsyntAPI {
     if (!result.success) {
       throw new Error(result.error || 'Job scraping failed');
     }
+    
 
     // Cache the results
     this.cache.set(cacheKey, {
