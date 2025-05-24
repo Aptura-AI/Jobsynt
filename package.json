@@ -1,6 +1,26 @@
 {
+  "name": "jobsynt-backend",
+  "version": "1.0.0",
+  "description": "AI-powered job search platform backend",
+  "main": "index.js",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "npm install",
+    "deploy": "netlify deploy --prod"
+  },
   "dependencies": {
-    "node-fetch": "^3.3.2",
-    "xml2js": "^0.6.2"
-  }
+    "axios": "^1.9.0",
+    "cheerio": "^1.0.0-rc.12"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.10.1"
+  },
+  "keywords": [
+    "job-search",
+    "ai",
+    "netlify-functions",
+    "web-scraping"
+  ],
+  "author": "Jobsynt",
+  "license": "MIT"
 }

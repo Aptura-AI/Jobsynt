@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+    <script src="jobsynt-integration.js"></script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -601,7 +602,6 @@
             </div>
         </div>
     </section>
-
     <!-- Special Features -->
     <section class="special-features">
         <div class="container">
@@ -654,7 +654,40 @@
             </div>
         </div>
     </section>
+<!-- Job Search Form -->
+<form id="job-search-form" class="mb-8">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+    <input type="text" name="keywords" placeholder="Job title or keywords" class="px-4 py-2 border rounded-lg">
+    <input type="text" name="location" placeholder="Location (optional for remote)" class="px-4 py-2 border rounded-lg">
+    <select name="category" class="px-4 py-2 border rounded-lg">
+      <option value="tech">Technology</option>
+      <option value="marketing">Marketing</option>
+      <option value="sales">Sales</option>
+      <option value="design">Design</option>
+    </select>
+  </div>
+  <div class="flex gap-4 mb-4">
+    <label class="flex items-center">
+      <input type="checkbox" name="remote" value="true" class="mr-2">
+      Remote jobs only
+    </label>
+    <label class="flex items-center">
+      <input type="checkbox" name="include-ghost" value="true" class="mr-2">
+      Include potential ghost jobs
+    </label>
+  </div>
+  <button type="submit" id="search-jobs-btn" class="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700">
+    🚀 Find Hidden Jobs
+  </button>
+</form>
 
+<!-- Job Results Container -->
+<div id="job-results" class="mt-8"></div>
+
+<!-- User Profile Setup Button -->
+<button onclick="setupUserProfile()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">
+  ⚙️ Setup AI Matching
+</button>
     <!-- Pricing Section -->
     <section class="pricing" id="pricing">
         <div class="container">
@@ -673,7 +706,7 @@
                         <li><span class="cross">✗</span> <span class="locked-feature">Auto-Application</span></li>
                         <li><span class="cross">✗</span> <span class="locked-feature">Premium Support</span></li>
                     </ul>
-                    <a href="#" class="cta-button" onclick="selectPlan('explorer')" style="width: 100%; text-align: center; display: block;">Get Started</a>
+                    <a href="#" class="cta-button" onclick="alert('Explorer plan selected! Feature coming soon.')" style="width: 100%; text-align: center; display: block;">Get Started</a>
                 </div>
 
                 <div class="pricing-card featured">
@@ -688,7 +721,7 @@
                         <li><span class="check">✓</span> Weekly Career Newsletter</li>
                         <li><span class="check">✓</span> Priority Support</li>
                     </ul>
-                    <a href="#" class="cta-button" onclick="selectPlan('professional')" style="width: 100%; text-align: center; display: block;">Start Free Trial</a>
+                    <a href="#" class="cta-button" onclick="alert('Professional plan selected! Feature coming soon.')" style="width: 100%; text-align: center; display: block;">Start Free Trial</a>
                 </div>
 
                 <div class="pricing-card">
