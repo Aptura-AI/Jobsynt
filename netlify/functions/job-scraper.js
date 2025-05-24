@@ -1,51 +1,44 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const rateLimit = require('axios-rate-limit');
-const { v4: uuidv4 } = require('uuid');
 
-// 1. Configuration - Simplified for initial deployment
-const CONFIG = {
+// 1. Configure axios with proper headers
+const axiosInstance = axios.create({
   timeout: 8000,
-  maxResults: 50,
-  rateLimit: {
-    maxRequests: 20,
-    perMilliseconds: 60000
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
   }
-};
+});
 
-// 2. Rate Limited Axios Instance
-const axiosInstance = rateLimit(
-  axios.create({
-    timeout: CONFIG.timeout,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0'
-    }
-  }),
-  { maxRequests: CONFIG.rateLimit.maxRequests, perMilliseconds: CONFIG.rateLimit.perMilliseconds }
-);
-
-// 3. Simplified logging
-const logger = {
-  log: (message) => console.log(`[${new Date().toISOString()}] ${message}`)
-};
-
-exports.handler = async (event, context) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Content-Type': 'application/json'
-  };
-
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
-  }
-
+// 2. Define your scrapers FIRST
+async function scrapeRemoteCo() {
   try {
-    // Start with just one scraper for testing
+    const { data } = await axiosInstance.get('https://remote.co/remote-jobs/developer/');
+    const $ = cheerio.load(data);
+    
+    const jobs = $('.job_listings .job_listing').map((i, elem) => ({
+      title: $(elem).find('.job_listing-title a').text().trim(),
+      company: $(elem).find('.job_listing-company').text().trim(),
+      location: 'Remote',
+      link: `https://remote.co${$(elem).find('.job_listing-title a').attr('href')}`
+    })).get();
+    
+    return jobs.filter(job => job.title);
+  } catch (err) {
+    console.error('Remote.co scrape failed:', err.message);
+    return [];
+  }
+}
+
+// 3. Main handler function
+exports.handler = async (event) => {
+  console.log('Function execution started');
+  
+  try {
     const jobs = await scrapeRemoteCo();
+    console.log(`Found ${jobs.length} jobs`);
     
     return {
       statusCode: 200,
-      headers,
       body: JSON.stringify({
         success: true,
         count: jobs.length,
@@ -54,42 +47,14 @@ exports.handler = async (event, context) => {
       })
     };
   } catch (error) {
-    logger.log(`Error: ${error.message}`);
+    console.error('Handler error:', error);
     return {
       statusCode: 500,
-      headers,
       body: JSON.stringify({
         success: false,
-        error: 'Job scraping service unavailable'
+        error: 'Job scraping failed',
+        details: process.env.NETLIFY_DEV ? error.message : 'Enable dev mode for details'
       })
     };
   }
 };
-
-// Simplified Remote.co scraper
-async function scrapeRemoteCo() {
-  try {
-    const { data } = await axiosInstance.get('https://remote.co/remote-jobs/developer/');
-    const $ = cheerio.load(data);
-    
-    return $('.job_listings .job_listing').map((i, elem) => ({
-      title: $(elem).find('.job_listing-title a').text().trim(),
-      company: $(elem).find('.job_listing-company').text().trim(),
-      location: 'Remote',
-      link: `https://remote.co${$(elem).find('.job_listing-title a').attr('href')}`,
-      source: 'Remote.co',
-      posted: 'Recently'
-    })).get().filter(j => j.title);
-  } catch (err) {
-    throw new Error(`Remote.co failed: ${err.message}`);
-  }
-}
-
-// Utility functions
-function removeDuplicates(jobs) {
-  const seen = new Set();
-  return jobs.filter(job => {
-    const key = `${job.title}-${job.company}`.toLowerCase();
-    return !seen.has(key) && seen.add(key);
-  });
-}
