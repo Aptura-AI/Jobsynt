@@ -3406,17 +3406,18 @@
                 // Show immediate loading with progress
                 resultsContainer.innerHTML = `
                     <div class="optimized-loading">
-                        <h3>🚀 Smart Job Search (Fixed UI Blocking Issues)</h3>
+                        <h3>🚀 Smart Hybrid Job Search</h3>
                         <div class="loading-progress">
                             <div class="progress-bar">
                                 <div class="progress-fill" id="searchProgress" style="width: 10%;"></div>
                             </div>
-                            <p class="loading-message" id="loadingMessage">Starting optimized search...</p>
+                            <p class="loading-message" id="loadingMessage">Starting smart hybrid search...</p>
                         </div>
                         <div class="search-features">
-                            <div class="feature">✅ Fast 15-second timeout</div>
+                            <div class="feature">✅ Background database first</div>
+                            <div class="feature">✅ Live search fallback</div>
+                            <div class="feature">✅ Always finds jobs</div>
                             <div class="feature">✅ No UI blocking</div>
-                            <div class="feature">✅ Smart fallbacks</div>
                         </div>
                     </div>
                 `;
@@ -3460,64 +3461,61 @@
 
                 console.log('🔍 Starting optimized job search:', searchParams);
 
-                // Execute search with background system first, then real-time if needed
+                // Execute smart hybrid search (background first, live fallback)
                 let searchResult;
                 try {
-                    updateSearchProgress(60, 'Checking pre-analyzed jobs...');
+                    updateSearchProgress(60, 'Smart search: background + live fallback...');
                     
-                    // First, try to get background-scraped jobs for this user
+                    // Get current user session
                     const { data: { session } } = await window.supabase.auth.getSession();
+                    const userId = session?.user?.id || 'anonymous';
                     
-                    if (session) {
-                        const backgroundResponse = await Promise.race([
-                            fetch(`/.netlify/functions/get-background-jobs?user_id=${session.user.id}`),
-                            new Promise((_, reject) => 
-                                setTimeout(() => reject(new Error('Background jobs timeout')), 5000)
-                            )
-                        ]);
+                    // Build search URL with parameters
+                    const searchUrl = new URL('/.netlify/functions/smart-job-search', window.location.origin);
+                    searchUrl.searchParams.set('user_id', userId);
+                    searchUrl.searchParams.set('query', jobTitle);
+                    searchUrl.searchParams.set('location', userLocation);
+                    
+                    // Call the smart hybrid search function
+                    const smartResponse = await Promise.race([
+                        fetch(searchUrl.toString()),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Smart search timeout')), 15000)
+                        )
+                    ]);
 
-                        if (backgroundResponse.ok) {
-                            const backgroundResult = await backgroundResponse.json();
-                            
-                            if (backgroundResult.success && backgroundResult.jobs.length > 0) {
-                                console.log(`✅ Found ${backgroundResult.jobs.length} background jobs`);
-                                searchResult = {
-                                    success: true,
-                                    jobs: backgroundResult.jobs,
-                                    count: backgroundResult.count,
-                                    source: 'background_system',
-                                    message: backgroundResult.message,
-                                    scraping_info: backgroundResult.scraping_info
-                                };
-                                updateSearchProgress(100, 'Found pre-analyzed matches!');
-                            } else {
-                                console.log('No background jobs found, will show no results message');
-                                searchResult = {
-                                    success: true,
-                                    no_results: true,
-                                    message: "We could not find any jobs matching your profile right now. Our AI system is continuously searching 30+ job sites. We'll notify you via email when perfect matches are found. Check back later - we refresh jobs daily!",
-                                    jobs: [],
-                                    count: 0
-                                };
-                                updateSearchProgress(100, 'Background search active!');
-                            }
+                    if (smartResponse.ok) {
+                        const smartResult = await smartResponse.json();
+                        
+                        if (smartResult.success && smartResult.jobs.length > 0) {
+                            console.log(`✅ Smart search found ${smartResult.jobs.length} jobs from ${smartResult.source}`);
+                            searchResult = {
+                                success: true,
+                                jobs: smartResult.jobs,
+                                count: smartResult.count,
+                                source: smartResult.source,
+                                message: smartResult.message,
+                                summary: smartResult.summary,
+                                next_steps: smartResult.next_steps
+                            };
+                            updateSearchProgress(100, `Found ${smartResult.jobs.length} jobs!`);
                         } else {
-                            throw new Error('Background jobs API failed');
+                            console.log('Smart search returned no jobs');
+                            searchResult = {
+                                success: true,
+                                no_results: true,
+                                message: "We could not find any jobs matching your profile right now. Our AI system is continuously searching 30+ job sites. We'll notify you via email when perfect matches are found. Check back later - we refresh jobs daily!",
+                                jobs: [],
+                                count: 0
+                            };
+                            updateSearchProgress(100, 'Background search active!');
                         }
                     } else {
-                        // User not logged in - show no results
-                        searchResult = {
-                            success: true,
-                            no_results: true,
-                            message: "Please log in to see personalized job matches. Our AI system continuously finds and analyzes jobs for registered users.",
-                            jobs: [],
-                            count: 0
-                        };
-                        updateSearchProgress(100, 'Login required');
+                        throw new Error('Smart search API failed');
                     }
                     
-                } catch (backgroundError) {
-                    console.log('Background system failed, showing no results:', backgroundError.message);
+                } catch (searchError) {
+                    console.log('Smart search failed, showing no results:', searchError.message);
                     updateSearchProgress(90, 'Background search active...');
                     searchResult = {
                         success: true,
