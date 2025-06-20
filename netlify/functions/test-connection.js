@@ -2,7 +2,7 @@ exports.handler = async (event, context) => {
   try {
     // Test environment variables
     const supabaseUrl = process.env.SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
     const siteUrl = process.env.URL;
     
     return {
@@ -20,7 +20,7 @@ exports.handler = async (event, context) => {
         environment: {
           supabaseUrl: supabaseUrl ? 'Set ✓' : 'Missing ✗',
           serviceKey: serviceKey ? 'Set ✓' : 'Missing ✗',
-          siteUrl: siteUrl ? 'Set ✓' : 'Missing ✗'
+          siteUrl: siteUrl ? 'Set ✓' : 'Optional - Not Required'
         }
       })
     };
