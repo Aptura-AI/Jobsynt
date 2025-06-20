@@ -3543,15 +3543,16 @@
                             };
                             updateSearchProgress(100, `Found ${smartResult.jobs.length} jobs!`);
                         } else {
-                            console.log('Smart search returned no jobs');
+                            console.log('Smart search returned no jobs - continuous search activated');
                             searchResult = {
                                 success: true,
                                 no_results: true,
-                                message: "We could not find any jobs matching your profile right now. Our AI system is continuously searching 30+ job sites. We'll notify you via email when perfect matches are found. Check back later - we refresh jobs daily!",
+                                message: smartResult.message || "No genuine jobs found right now. Our continuous AI search system is now actively scanning 30+ job boards for real opportunities that match your profile. No fake jobs will ever be shown - only real opportunities!",
                                 jobs: [],
-                                count: 0
+                                count: 0,
+                                continuous_search_active: true
                             };
-                            updateSearchProgress(100, 'Background search active!');
+                            updateSearchProgress(100, 'Continuous search activated!');
                         }
                     } else {
                         throw new Error('Smart search API failed');
@@ -3583,13 +3584,15 @@
                                 <h3>🔍 No Jobs Found Right Now</h3>
                                 <p>${searchResult.message}</p>
                                 <div class="background-search-info">
-                                    <h4>🤖 What's Happening Next:</h4>
+                                    <h4>🚀 Continuous Search System Activated:</h4>
                                     <ul>
-                                        <li>✅ Our AI system will keep searching 30+ job sites continuously</li>
-                                        <li>✅ New jobs will be filtered through ghost job detection</li>
-                                        <li>✅ GPT will analyze and match jobs to your profile</li>
-                                        <li>✅ You'll be notified when perfect matches are found</li>
-                                        <li>✅ Check back later - we refresh jobs daily</li>
+                                        <li>✅ <strong>Non-stop scanning</strong> of 30+ job boards in real-time</li>
+                                        <li>✅ <strong>Zero fake jobs</strong> - only genuine opportunities shown</li>
+                                        <li>✅ <strong>AI ghost detection</strong> filters out suspicious postings</li>
+                                        <li>✅ <strong>GPT analysis</strong> ensures 70+ match score minimum</li>
+                                        <li>✅ <strong>Target: 20 perfect jobs</strong> for your profile</li>
+                                        <li>✅ <strong>Email notifications</strong> when matches are found</li>
+                                        <li>🔄 <strong>Search frequency:</strong> Every 5 minutes until target reached</li>
                                     </ul>
                                 </div>
                                 <div class="search-tips">

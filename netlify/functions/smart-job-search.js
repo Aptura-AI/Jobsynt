@@ -95,67 +95,18 @@ async function performLiveSearch(searchParams) {
             }
         }
 
-        // If still no jobs, provide some default examples
+        // NO FAKE JOBS - If no real jobs found, return empty with proper message
         if (jobs.length === 0) {
-            jobs.push(
-                {
-                    id: `default_${Date.now()}_1`,
-                    title: 'Software Developer',
-                    company: 'Tech Company',
-                    location: location || 'Remote',
-                    salary: '$70k - $120k',
-                    job_type: 'Full-time',
-                    work_mode: 'Remote',
-                    description: 'We are looking for a talented software developer to join our growing team. You will work on exciting projects using modern technologies.',
-                    url: '#',
-                    source: 'Live Search (Sample)',
-                    posted_date: new Date().toISOString(),
-                    is_live_search: true,
-                    is_sample: true,
-                    match_score: 65
-                },
-                {
-                    id: `default_${Date.now()}_2`,
-                    title: 'Frontend Developer',
-                    company: 'Startup Inc',
-                    location: location || 'Remote',
-                    salary: '$60k - $100k',
-                    job_type: 'Full-time',
-                    work_mode: 'Hybrid',
-                    description: 'Join our dynamic team as a frontend developer. Work with React, TypeScript, and modern web technologies.',
-                    url: '#',
-                    source: 'Live Search (Sample)',
-                    posted_date: new Date().toISOString(),
-                    is_live_search: true,
-                    is_sample: true,
-                    match_score: 70
-                }
-            );
+            console.log('❌ No genuine jobs found - continuous search will find real opportunities');
         }
 
         return jobs;
 
     } catch (error) {
         console.error('Live search error:', error);
-        // Return sample jobs on error
-        return [
-            {
-                id: `fallback_${Date.now()}`,
-                title: 'Software Developer',
-                company: 'Growing Company',
-                location: location || 'Remote',
-                salary: 'Competitive',
-                job_type: 'Full-time',
-                work_mode: 'Remote',
-                description: 'Exciting opportunity for a software developer. Our background system is continuously finding more opportunities for you.',
-                url: '#',
-                source: 'Fallback Search',
-                posted_date: new Date().toISOString(),
-                is_live_search: true,
-                is_fallback: true,
-                match_score: 60
-            }
-        ];
+        // NO FAKE JOBS - Return empty array on error
+        console.log('❌ Live search failed - only genuine jobs will be shown');
+        return [];
     }
 }
 
@@ -231,9 +182,22 @@ exports.handler = async (event, context) => {
             }
         }
 
-        // STEP 2: If no background jobs found, perform specialized or live search
+        // STEP 2: If no background jobs found, trigger continuous search and show proper message
         if (jobs.length === 0 || forceRefresh) {
-            console.log('🔴 No background jobs found, checking for specialized search...');
+            console.log('🔴 No background jobs found, triggering continuous search...');
+            
+            // Trigger continuous job finder for this user (non-blocking)
+            if (userId !== 'anonymous') {
+                try {
+                    axios.post(`${process.env.URL}/.netlify/functions/continuous-job-finder`, {
+                        user_id: userId
+                    }, { timeout: 5000 }).catch(err => 
+                        console.log('Continuous search trigger failed:', err.message)
+                    );
+                } catch (error) {
+                    console.log('Failed to trigger continuous search:', error.message);
+                }
+            }
             
             // Check if this is an IT C2C search
             if (shouldUseC2CScraper(query, event.queryStringParameters?.job_type)) {
@@ -296,13 +260,15 @@ exports.handler = async (event, context) => {
                 ghost_filtered: jobs.filter(j => j.is_genuine === true).length,
                 total_scraped: jobs.length + (jobs.filter(j => j.is_sample).length * 5) // Estimate
             },
-            message: source === 'background_database' 
+            message: jobs.length === 0
+                ? `No genuine jobs found right now. Our continuous AI search system is now actively scanning 30+ job boards for real opportunities that match your profile. Check back soon!`
+                : source === 'background_database' 
                 ? `Found ${jobs.length} pre-analyzed genuine jobs from your personalized database`
                 : source === 'it_c2c_specialist'
                 ? `Found ${jobs.length} IT C2C contract opportunities from specialized platforms (Dice, TechFetch, Corp-to-Corp.org, Benchfolks). LinkedIn given lower priority as requested.`
                 : source === 'live_search'
-                ? `Performed live search and found ${jobs.length} jobs. Our background system is continuously building your personalized job database.`
-                : `Found ${jobs.length} jobs using hybrid search (background + live). Your personalized database is growing!`,
+                ? `Found ${jobs.length} genuine jobs from live search. Our continuous background system is building your personalized job database.`
+                : `Found ${jobs.length} genuine jobs using hybrid search. Your personalized database is growing!`,
             next_steps: source === 'live_search' 
                 ? 'Visit again later for personalized, pre-analyzed job recommendations from our background system.'
                 : 'Jobs are continuously updated in the background for better matches.'
@@ -317,58 +283,27 @@ exports.handler = async (event, context) => {
     } catch (error) {
         console.error('❌ Error in smart job search:', error);
         
-        // Always return success with fallback jobs instead of 500 error
-        const fallbackJobs = [
-            {
-                id: `error_fallback_${Date.now()}_1`,
-                title: 'Software Developer',
-                company: 'Tech Company',
-                location: 'Remote',
-                salary: '$70k - $120k',
-                job_type: 'Full-time',
-                work_mode: 'Remote',
-                description: 'We are looking for a talented software developer to join our growing team. You will work on exciting projects using modern technologies.',
-                url: '#',
-                source: 'System Recovery',
-                posted_date: new Date().toISOString(),
-                is_fallback: true,
-                match_score: 60
-            },
-            {
-                id: `error_fallback_${Date.now()}_2`,
-                title: 'Frontend Developer',
-                company: 'Startup Inc',
-                location: 'Remote',
-                salary: '$60k - $100k',
-                job_type: 'Full-time',
-                work_mode: 'Hybrid',
-                description: 'Join our dynamic team as a frontend developer. Work with React, TypeScript, and modern web technologies.',
-                url: '#',
-                source: 'System Recovery',
-                posted_date: new Date().toISOString(),
-                is_fallback: true,
-                match_score: 65
-            }
-        ];
-        
+        // NO FAKE JOBS - Return proper no results message
         return {
             statusCode: 200,
             headers,
             body: JSON.stringify({
                 success: true,
-                jobs: fallbackJobs,
-                count: fallbackJobs.length,
+                jobs: [],
+                count: 0,
                 source: 'error_recovery',
-                message: 'Found jobs using our backup system. Our main search engine is being enhanced and will be back online soon.',
+                no_results: true,
+                message: 'We could not find any genuine jobs right now. Our AI system is continuously searching for real opportunities and will notify you when perfect matches are found.',
                 summary: {
                     background_jobs: 0,
                     live_jobs: 0,
                     c2c_jobs: 0,
-                    sample_jobs: fallbackJobs.length,
-                    average_match_score: 62,
-                    specialization: 'Error Recovery'
+                    sample_jobs: 0,
+                    fallback_jobs: 0,
+                    average_match_score: 0,
+                    specialization: 'Continuous Search Active'
                 },
-                next_steps: 'Please try again in a few minutes for full search functionality.'
+                next_steps: 'Our continuous search system is now active. Check back later for genuine job opportunities.'
             })
         };
     }
