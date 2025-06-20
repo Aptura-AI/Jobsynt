@@ -1,11 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
-    <script src="jobsynt-integration.js"></script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self' https:;
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
+    font-src 'self' data: https://cdnjs.cloudflare.com;
+    img-src 'self' data: https:;
+    connect-src 'self' 
+        https://yhrwamhdiiggsapmfwas.supabase.co 
+        https://yhrwamhdiiggsapmfwas.supabase.in 
+        https://accounts.google.com 
+        https://api.linkedin.com;
+">
     <title>Jobsynt - Your AI-Powered Job Agent</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" href="data:,"> <!-- Empty favicon to prevent 404 -->
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Custom Scripts -->
+    <script>
+        // Initialize Supabase client
+        const supabaseUrl = 'https://yhrwamhdiiggsapmfwas.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlocndhbWhkaWlnZ3NhcG1md2FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwMDI1ODIsImV4cCI6MjA2MDU3ODU4Mn0.K8nMLX_MTR2IlfIaviyfex8fWuZ1qL07Gg_xIG3TYsE';
+        window.supabase = supabase.createClient(supabaseUrl, supabaseKey);
+        console.log('Supabase initialized');
+    </script>
+    <script src="/public/js/config.js"></script>
+    <script src="/public/js/auth.js"></script>
+
     <style>
         * {
             margin: 0;
@@ -18,6 +44,9 @@
             line-height: 1.6;
             color: #333;
             overflow-x: hidden;
+            background: #f8fafc;
+            margin: 0;
+            padding: 0;
         }
 
         /* Header */
@@ -67,7 +96,28 @@
             color: #667eea;
         }
 
-        .cta-button {
+        .auth-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .Button-signin {
+            background: transparent;
+            color: #333;
+            padding: 0.75rem 1.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 50px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .Button-signin:hover {
+            background: #f8fafc;
+        }
+
+        .Button-signup {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 0.75rem 1.5rem;
@@ -79,9 +129,16 @@
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .cta-button:hover {
+        .Button-signup:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .signin-button {
+            background: transparent;
+            border: 2px solid #667eea;
+            color: #667eea;
+            margin-right: 0.5rem;
         }
 
         /* Hero Section */
@@ -137,7 +194,7 @@
             animation: fadeInUp 1s ease 0.4s both;
         }
 
-        .btn-primary {
+        .Button-primary {
             background: white;
             color: #667eea;
             padding: 1rem 2rem;
@@ -151,12 +208,12 @@
             display: inline-block;
         }
 
-        .btn-primary:hover {
+        .Button-primary:hover {
             transform: translateY(-3px);
             box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
         }
 
-        .btn-secondary {
+        .Button-secondary {
             background: transparent;
             color: white;
             padding: 1rem 2rem;
@@ -170,7 +227,7 @@
             display: inline-block;
         }
 
-        .btn-secondary:hover {
+        .Button-secondary:hover {
             background: white;
             color: #667eea;
         }
@@ -501,45 +558,620 @@
             }
         }
 
-        /* Loading Animation */
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
+        /* Auth Modals */
+        .auth-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .auth-modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            max-width: 400px;
+            width: 90%;
+            position: relative;
         }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        .auth-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
         }
+
+        .auth-modal-title {
+            font-size: 1.5rem;
+            color: #1e293b;
+        }
+        
+        .auth-modal-close,
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #64748b;
+            transition: color 0.3s ease;
+        }
+        
+        .auth-modal-close:hover,
+        .close-modal:hover {
+            color: #333;
+        }
+
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .auth-tab {
+            flex: 1;
+            padding: 0.75rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .auth-tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+        }
+        
+        /* Auth tab content visibility */
+        .auth-tab-content {
+            display: none;
+        }
+        
+        .auth-tab-content.active {
+            display: block;
+        }
+        
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        /* Enhanced Auth Form Styles */
+        .auth-tab-content .form-group {
+            margin-bottom: 20px;
+        }
+
+        .auth-tab-content input {
+            width: 100%;
+            padding: 15px 18px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: #f8fafc;
+            box-sizing: border-box;
+        }
+
+        .auth-tab-content input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .form-header h3 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .form-header p {
+            color: #666;
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .auth-button {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .signin-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .signin-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .signup-btn {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+        }
+
+        .signup-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(40, 167, 69, 0.3);
+        }
+        
+        .form-submit {
+            width: 100%;
+            padding: 0.75rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .form-submit:hover {
+            opacity: 0.9;
+        }
+
+        .auth-divider {
+            text-align: center;
+            margin-bottom: 1rem;
+            position: relative;
+        }
+
+        .auth-divider::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #e2e8f0;
+            z-index: 1;
+        }
+
+        .auth-divider span {
+            background: white;
+            padding: 0 1rem;
+            position: relative;
+            z-index: 2;
+            color: #64748b;
+        }
+        
+        .oauth-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .oauth-button {
+            flex: 1;
+            padding: 0.75rem;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .oauth-button:hover {
+            background: #f8fafc;
+        }
+
+        .auth-footer {
+            text-align: center;
+            font-size: 0.875rem;
+        }
+        
+        .auth-link {
+            color: #667eea;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        .auth-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Auth Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        
+        .modal-content h2 {
+            margin-bottom: 1.5rem;
+            color: #1e293b;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s ease;
+            background: white;
+            color: #1e293b;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-input::placeholder {
+            color: #94a3b8;
+        }
+
+        .Button-primary {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .Button-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        
+        .social-auth {
+            margin-top: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .Button-google, .Button-linkedin {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .Button-google {
+            background: white;
+            color: #1e293b;
+        }
+
+        .Button-linkedin {
+            background: #0077B5;
+            color: white;
+            border-color: #0077B5;
+        }
+
+        .Button-google:hover, .Button-linkedin:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .auth-link {
+            margin-top: 1.5rem;
+            text-align: center;
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        .auth-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .auth-link a:hover {
+            text-decoration: underline;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #64748b;
+            transition: color 0.3s ease;
+        }
+
+        .close-modal:hover {
+            color: #1e293b;
+        }
+
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 0.75rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: #64748b;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .auth-tab:hover {
+            color: #1e293b;
+        }
+
+        .auth-tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+        }
+
+        .auth-form {
+            display: none;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .auth-form.active {
+            display: flex;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #1e293b;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .auth-divider {
+            text-align: center;
+            margin: 1.5rem 0;
+            position: relative;
+            color: #64748b;
+        }
+
+        .auth-divider::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #e2e8f0;
+            z-index: 1;
+        }
+
+        .auth-divider span {
+            background: white;
+            padding: 0 1rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .social-auth {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .Button-google, .Button-linkedin {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .Button-google {
+            background: white;
+            color: #1e293b;
+            border: 1px solid #e2e8f0;
+        }
+
+        .Button-google:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .Button-linkedin {
+            background: #0077B5;
+            color: white;
+            border: 1px solid #0077B5;
+        }
+
+        .Button-linkedin:hover {
+            background: #006399;
+            border-color: #006399;
+        }
+
+        .submit-button {
+            width: 100%;
+            padding: 0.75rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .submit-button:hover {
+            background: #5a67d8;
+        }
+
+        /* Rest of your existing styles */
     </style>
+
 </head>
 <body>
+    
     <!-- Header -->
     <header class="header">
         <nav class="nav">
             <div class="logo">Jobsynt</div>
             <ul class="nav-links">
                 <li><a href="#features">Features</a></li>
+                <li><a href="#how-it-works">How it Works</a></li>
                 <li><a href="#pricing">Pricing</a></li>
                 <li><a href="#about">About</a></li>
                 <li><a href="#contact">Contact</a></li>
+
             </ul>
-            <a href="#" class="cta-button" onclick="openSignup()">Get Started</a>
+            <div class="auth-buttons">
+                <button id="signinButton" class="Button-signin">Sign In</button>
+                <button id="signupButton" class="Button-signup">Sign Up</button>
+            </div>
         </nav>
     </header>
-
     <!-- Hero Section -->
     <section class="hero">
         <div class="hero-content">
-            <h1>Your AI-Powered Job Agent</h1>
-            <p>Stop searching. Start succeeding. Let AI find, apply, and secure your next opportunity while you focus on what matters.</p>
+            <h1>Your AI-Powered Job Search Assistant</h1>
+            <p>Let AI help you find and apply to the perfect job opportunities</p>
             <div class="hero-buttons">
-                <a href="#" class="btn-primary" onclick="openSignup()">Start Your Job Hunt</a>
-                <a href="#features" class="btn-secondary">See How It Works</a>
+                <button id="heroSignupButton" class="Button-primary" data-auth="signup">Get Started Free</button>
+                <a href="#features" class="Button-secondary">Learn More</a>
             </div>
         </div>
     </section>
@@ -602,6 +1234,7 @@
             </div>
         </div>
     </section>
+    
     <!-- Special Features -->
     <section class="special-features">
         <div class="container">
@@ -654,40 +1287,7 @@
             </div>
         </div>
     </section>
-<!-- Job Search Form -->
-<form id="job-search-form" class="mb-8">
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-    <input type="text" name="keywords" placeholder="Job title or keywords" class="px-4 py-2 border rounded-lg">
-    <input type="text" name="location" placeholder="Location (optional for remote)" class="px-4 py-2 border rounded-lg">
-    <select name="category" class="px-4 py-2 border rounded-lg">
-      <option value="tech">Technology</option>
-      <option value="marketing">Marketing</option>
-      <option value="sales">Sales</option>
-      <option value="design">Design</option>
-    </select>
-  </div>
-  <div class="flex gap-4 mb-4">
-    <label class="flex items-center">
-      <input type="checkbox" name="remote" value="true" class="mr-2">
-      Remote jobs only
-    </label>
-    <label class="flex items-center">
-      <input type="checkbox" name="include-ghost" value="true" class="mr-2">
-      Include potential ghost jobs
-    </label>
-  </div>
-  <button type="submit" id="search-jobs-btn" class="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700">
-    🚀 Find Hidden Jobs
-  </button>
-</form>
 
-<!-- Job Results Container -->
-<div id="job-results" class="mt-8"></div>
-
-<!-- User Profile Setup Button -->
-<button onclick="setupUserProfile()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">
-  ⚙️ Setup AI Matching
-</button>
     <!-- Pricing Section -->
     <section class="pricing" id="pricing">
         <div class="container">
@@ -706,7 +1306,7 @@
                         <li><span class="cross">✗</span> <span class="locked-feature">Auto-Application</span></li>
                         <li><span class="cross">✗</span> <span class="locked-feature">Premium Support</span></li>
                     </ul>
-                    <a href="#" class="cta-button" onclick="alert('Explorer plan selected! Feature coming soon.')" style="width: 100%; text-align: center; display: block;">Get Started</a>
+                    <button class="form-submit" data-auth="signup">Get Started Free</button>
                 </div>
 
                 <div class="pricing-card featured">
@@ -721,7 +1321,7 @@
                         <li><span class="check">✓</span> Weekly Career Newsletter</li>
                         <li><span class="check">✓</span> Priority Support</li>
                     </ul>
-                    <a href="#" class="cta-button" onclick="alert('Professional plan selected! Feature coming soon.')" style="width: 100%; text-align: center; display: block;">Start Free Trial</a>
+                    <button class="form-submit" data-auth="signup">Start Free Trial</button>
                 </div>
 
                 <div class="pricing-card">
@@ -736,7 +1336,7 @@
                         <li><span class="check">✓</span> Salary Negotiation Support</li>
                         <li><span class="check">✓</span> Dedicated Success Manager</li>
                     </ul>
-                    <a href="#" class="cta-button" onclick="selectPlan('executive')" style="width: 100%; text-align: center; display: block;">Start Free Trial</a>
+                    <button class="form-submit" data-auth="signup">Start Free Trial</button>
                 </div>
             </div>
         </div>
@@ -778,320 +1378,162 @@
         </div>
     </footer>
 
-    <!-- Modal for Sign Up -->
-    <div id="signupModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center;">
-        <div style="background: white; padding: 2rem; border-radius: 20px; max-width: 400px; width: 90%; text-align: center;">
-            <h3 style="margin-bottom: 1rem; color: #1e293b;">Start Your AI Job Hunt</h3>
-            <form id="signupForm">
-                <input type="email" placeholder="Enter your email" required style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 1rem;">
-                <input type="text" placeholder="Full Name" required style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 1rem;">
-                <select required style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 1rem;">
-                    <option value="">Select Plan</option>
-                    <option value="explorer">Explorer (Free)</option>
-                    <option value="professional">Professional ($29/month)</option>
-                    <option value="executive">Executive ($79/month)</option>
-                </select>
-                <button type="submit" class="cta-button" style="width: 100%; margin-bottom: 1rem;">
-                    <span id="submitText">Get Started</span>
-                    <span id="submitLoading" class="loading" style="display: none;"></span>
-                </button>
-                <button type="button" onclick="closeSignup()" style="background: transparent; border: none; color: #64748b; cursor: pointer;">Cancel</button>
+    <!-- Auth Modal -->
+    <div id="authModal" class="auth-modal">
+        <div class="auth-modal-content">
+            <span class="close-modal">&times;</span>
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-target="signinTab">Sign In</button>
+                <button class="auth-tab" data-target="signupTab">Sign Up</button>
+            </div>
+            <form id="signinForm" class="auth-tab-content active">
+                <div class="form-header">
+                    <h3>Welcome Back</h3>
+                    <p>Sign in to your account</p>
+                </div>
+                <div class="form-group">
+                    <input type="email" id="signinEmail" placeholder="Email Address" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" id="signinPassword" placeholder="Password" required>
+                </div>
+                <button type="submit" class="auth-button signin-btn">Sign In</button>
+            </form>
+            <form id="signupForm" class="auth-tab-content">
+                <div class="form-header">
+                    <h3>Create Account</h3>
+                    <p>Join thousands of job seekers</p>
+                </div>
+                <div class="form-group">
+                    <input type="email" id="signupEmail" placeholder="Email Address" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" id="signupPassword" placeholder="Create Password" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" id="confirmPassword" placeholder="Confirm Password" required>
+                </div>
+                <button type="submit" class="auth-button signup-btn">Create Account</button>
             </form>
         </div>
     </div>
 
-    <script>
-        // Smooth scrolling for navigation links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
-                    });
-                }
-            });
-        });
-
-        // Header scroll effect
-        window.addEventListener('scroll', function() {
-            const header = document.querySelector('.header');
-            if (window.scrollY > 100) {
-                header.style.background = 'rgba(255, 255, 255, 0.98)';
-                header.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.1)';
-            } else {
-                header.style.background = 'rgba(255, 255, 255, 0.95)';
-                header.style.boxShadow = 'none';
-            }
-        });
-
-        // Modal functions
-        function openSignup() {
-            document.getElementById('signupModal').style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeSignup() {
-            document.getElementById('signupModal').style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-
-        function selectPlan(planName) {
-            const select = document.querySelector('#signupForm select');
-            select.value = planName;
-            openSignup();
-        }
-
-        // Form submission
-        document.getElementById('signupForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const submitBtn = document.getElementById('submitText');
-            const loadingSpinner = document.getElementById('submitLoading');
-            
-            // Show loading state
-            submitBtn.style.display = 'none';
-            loadingSpinner.style.display = 'inline-block';
-            
-            // Simulate API call
+   <!-- Scripts -->
+<script>
+    // Initialize loading animation
+    document.addEventListener('DOMContentLoaded', () => {
+        const loader = document.getElementById('loader');
+        if (loader) {
             setTimeout(() => {
-                alert('Welcome to Jobsynt! We\'ll send you an email with next steps.');
-                closeSignup();
+                loader.style.display = 'none';
+            }, 1000);
+        }
+    });
+</script>
+
+<!-- Add this before closing body tag -->
+<script>
+    // Auth Modal Handling
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get modal elements
+        const authModal = document.getElementById('authModal');
+        const signinButton = document.getElementById('signinButton');
+        const signupButton = document.getElementById('signupButton');
+        const heroSignupButton = document.getElementById('heroSignupButton');
+        const closeModal = document.querySelector('.close-modal');
+        const authTabs = document.querySelectorAll('.auth-tab');
+        const authForms = document.querySelectorAll('.auth-tab-content');
+
+        // Show modal function
+        function showModal(tabToShow = 'signinTab') {
+            authModal.style.display = 'flex';
+            // Show the requested tab
+            authForms.forEach(form => form.classList.remove('active'));
+            authTabs.forEach(tab => tab.classList.remove('active'));
+            
+            document.getElementById(tabToShow === 'signinTab' ? 'signinForm' : 'signupForm').classList.add('active');
+            document.querySelector(`.auth-tab[data-target="${tabToShow}"]`).classList.add('active');
+        }
+
+        // Hide modal function
+        function hideModal() {
+            authModal.style.display = 'none';
+        }
+
+        // Event listeners
+        signinButton.addEventListener('click', () => showModal('signinTab'));
+        signupButton.addEventListener('click', () => showModal('signupTab'));
+        heroSignupButton.addEventListener('click', () => showModal('signupTab'));
+        closeModal.addEventListener('click', hideModal);
+
+        // Tab switching
+        authTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const target = tab.dataset.target;
+                authForms.forEach(form => form.classList.remove('active'));
+                authTabs.forEach(t => t.classList.remove('active'));
                 
-                // Reset form
-                document.getElementById('signupForm').reset();
-                submitBtn.style.display = 'inline';
-                loadingSpinner.style.display = 'none';
-            }, 2000);
+                document.getElementById(target === 'signinTab' ? 'signinForm' : 'signupForm').classList.add('active');
+                tab.classList.add('active');
+            });
         });
 
         // Close modal when clicking outside
-        document.getElementById('signupModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeSignup();
+        window.addEventListener('click', (e) => {
+            if (e.target === authModal) {
+                hideModal();
             }
         });
 
-        // Animate feature cards on scroll
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-
-        const observer = new IntersectionObserver(function(entries) {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
-                }
-            });
-        }, observerOptions);
-
-        // Observe all feature cards
-        document.addEventListener('DOMContentLoaded', function() {
-            const cards = document.querySelectorAll('.feature-card, .pricing-card');
-            cards.forEach(card => {
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(30px)';
-                card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-                observer.observe(card);
-            });
+        // Form submissions
+        document.getElementById('signinForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('signinEmail').value;
+            const password = document.getElementById('signinPassword').value;
+            
+            // Add your Supabase signin logic here
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password
+                });
+                
+                if (error) throw error;
+                
+                // Redirect to dashboard on success
+                window.location.href = 'dashboard.html';
+            } catch (error) {
+                alert(error.message);
+            }
         });
 
-        // Add hover effects for interactive elements
-        document.querySelectorAll('.feature-card').forEach(card => {
-            card.addEventListener('mouseenter', function() {
-                this.style.transform = 'translateY(-10px) scale(1.02)';
-            });
+        document.getElementById('signupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('signupEmail').value;
+            const password = document.getElementById('signupPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
             
-            card.addEventListener('mouseleave', function() {
-                this.style.transform = 'translateY(0) scale(1)';
-            });
-        });
-
-        // Pricing card interactions
-        document.querySelectorAll('.pricing-card').forEach(card => {
-            card.addEventListener('mouseenter', function() {
-                if (!this.classList.contains('featured')) {
-                    this.style.transform = 'translateY(-10px)';
-                    this.style.borderColor = '#667eea';
-                }
-            });
-            
-            card.addEventListener('mouseleave', function() {
-                if (!this.classList.contains('featured')) {
-                    this.style.transform = 'translateY(0)';
-                    this.style.borderColor = 'transparent';
-                }
-            });
-        });
-
-        // Add typing effect to hero title
-        function typeWriter(element, text, speed = 100) {
-            let i = 0;
-            element.innerHTML = '';
-            
-            function type() {
-                if (i < text.length) {
-                    element.innerHTML += text.charAt(i);
-                    i++;
-                    setTimeout(type, speed);
-                }
+            if (password !== confirmPassword) {
+                alert("Passwords don't match!");
+                return;
             }
             
-            type();
-        }
-
-        // Initialize typing effect after page load
-        window.addEventListener('load', function() {
-            const heroTitle = document.querySelector('.hero h1');
-            const originalText = heroTitle.textContent;
-            setTimeout(() => {
-                typeWriter(heroTitle, originalText, 50);
-            }, 500);
-        });
-
-        // Add floating animation to hero buttons
-        setInterval(() => {
-            const buttons = document.querySelectorAll('.hero-buttons .btn-primary, .hero-buttons .btn-secondary');
-            buttons.forEach((btn, index) => {
-                setTimeout(() => {
-                    btn.style.transform = 'translateY(-5px)';
-                    setTimeout(() => {
-                        btn.style.transform = 'translateY(0)';
-                    }, 500);
-                }, index * 200);
-            });
-        }, 3000);
-
-        // Dynamic counter for ghost job statistics
-        function animateCounter(element, start, end, duration) {
-            let startTimestamp = null;
-            const step = (timestamp) => {
-                if (!startTimestamp) startTimestamp = timestamp;
-                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                element.textContent = Math.floor(progress * (end - start) + start) + '%';
-                if (progress < 1) {
-                    window.requestAnimationFrame(step);
-                }
-            };
-            window.requestAnimationFrame(step);
-        }
-
-        // Trigger counter animation when ghost job section is visible
-        const ghostJobObserver = new IntersectionObserver(function(entries) {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const counter = entry.target.querySelector('.ghost-counter');
-                    if (counter) {
-                        animateCounter(counter, 0, 60, 2000);
-                        ghostJobObserver.unobserve(entry.target);
-                    }
-                }
-            });
-        });
-
-        // Add pulsing effect to CTA buttons
-        setInterval(() => {
-            document.querySelectorAll('.cta-button').forEach(btn => {
-                btn.style.boxShadow = '0 0 20px rgba(102, 126, 234, 0.5)';
-                setTimeout(() => {
-                    btn.style.boxShadow = '0 10px 25px rgba(102, 126, 234, 0.3)';
-                }, 1000);
-            });
-        }, 4000);
-
-        // Mobile menu toggle (if needed)
-        function toggleMobileMenu() {
-            const navLinks = document.querySelector('.nav-links');
-            navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
-        }
-
-        // Add mobile menu button for small screens
-        if (window.innerWidth <= 768) {
-            const nav = document.querySelector('.nav');
-            const menuButton = document.createElement('button');
-            menuButton.innerHTML = '<i class="fas fa-bars"></i>';
-            menuButton.style.cssText = `
-                background: none;
-                border: none;
-                font-size: 1.5rem;
-                color: #333;
-                cursor: pointer;
-                display: block;
-            `;
-            menuButton.addEventListener('click', toggleMobileMenu);
-            nav.appendChild(menuButton);
-        }
-
-        // Add scroll progress indicator
-        const progressBar = document.createElement('div');
-        progressBar.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 0%;
-            height: 3px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            z-index: 9999;
-            transition: width 0.1s ease;
-        `;
-        document.body.appendChild(progressBar);
-
-        window.addEventListener('scroll', () => {
-            const scrolled = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
-            progressBar.style.width = scrolled + '%';
-        });
-
-        // Add particle effect to hero section
-        function createParticle() {
-            const particle = document.createElement('div');
-            particle.style.cssText = `
-                position: absolute;
-                width: 4px;
-                height: 4px;
-                background: rgba(255, 255, 255, 0.6);
-                border-radius: 50%;
-                pointer-events: none;
-                animation: float 6s linear infinite;
-            `;
-            
-            particle.style.left = Math.random() * 100 + '%';
-            particle.style.animationDelay = Math.random() * 6 + 's';
-            
-            document.querySelector('.hero').appendChild(particle);
-            
-            setTimeout(() => {
-                particle.remove();
-            }, 6000);
-        }
-
-        // Create particles periodically
-        setInterval(createParticle, 500);
-
-        // Add CSS for particle animation
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes float {
-                0% {
-                    transform: translateY(100vh) rotate(0deg);
-                    opacity: 0;
-                }
-                10% {
-                    opacity: 1;
-                }
-                90% {
-                    opacity: 1;
-                }
-                100% {
-                    transform: translateY(-100px) rotate(360deg);
-                    opacity: 0;
-                }
+            // Add your Supabase signup logic here
+            try {
+                const { data, error } = await supabase.auth.signUp({
+                    email,
+                    password
+                });
+                
+                if (error) throw error;
+                
+                alert('Signup successful! Please check your email for confirmation.');
+                hideModal();
+            } catch (error) {
+                alert(error.message);
             }
-        `;
-        document.head.appendChild(style);
-    </script>
+        });
+    });
+</script>
 </body>
 </html>

@@ -241,7 +241,7 @@ class JobsyntAPI {
 
   // UI Helper Methods
   showLoadingState() {
-    const searchButton = document.getElementById('search-jobs-btn');
+    const searchButton = document.getElementById('search-jobs-button');
     const jobResults = document.getElementById('job-results');
     
     if (searchButton) {
@@ -261,7 +261,7 @@ class JobsyntAPI {
   }
 
   hideLoadingState() {
-    const searchButton = document.getElementById('search-jobs-btn');
+    const searchButton = document.getElementById('search-jobs-button');
     
     if (searchButton) {
       searchButton.disabled = false;

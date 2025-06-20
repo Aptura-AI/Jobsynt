@@ -1,11 +1,9 @@
-const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
 // Configuration
 const CONFIG = {
-  timeout: 10000,
   maxResults: 10,
-  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 };
 
 // Main Handler
@@ -280,4 +278,4 @@ function checkVisaFriendly(visa_status, company) {
   // Large tech companies are generally more visa-friendly
   const visaFriendlyCompanies = ['Microsoft', 'Google', 'Amazon', 'Meta', 'Apple', 'Netflix'];
   return visaFriendlyCompanies.includes(company) || Math.random() > 0.3;
-}
+} 

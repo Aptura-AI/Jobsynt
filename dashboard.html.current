@@ -1,0 +1,2777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' data: https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self' https://yhrwamhdiiggsapmfwas.supabase.co https://accounts.google.com https://api.linkedin.com;">
+    <title>Jobsynt AI Dashboard - DEPRECATED (Use root dashboard.html)</title>
+    
+    <!-- External Dependencies -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
+    
+    <!-- Environment Variables -->
+    <script>
+        window.env = {
+            NEXT_PUBLIC_SUPABASE_URL: 'https://yhrwamhdiiggsapmfwas.supabase.co',
+            NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlocndhbWhkaWlnZ3NhcG1md2FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwMDI1ODIsImV4cCI6MjA2MDU3ODU4Mn0.K8nMLX_MTR2IlfIaviyfex8fWuZ1qL07Gg_xIG3TYsE'
+        };
+    </script>
+
+    <!-- Load Config and Auth -->
+    <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
+
+    <!-- Add dashboard specific JavaScript -->
+    <script defer src="js/dashboard.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+            width: 100%; /* Add this */
+            overflow: hidden; /* Add this */
+        }
+        
+        /* Sidebar Styles */
+        .sidebar {
+            width: 280px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            border-right: 1px solid rgba(255, 255, 255, 0.18);
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .logo h1 {
+            color: #667eea;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .nav-menu {
+            list-style: none;
+        }
+        
+        .nav-item {
+            margin-bottom: 8px;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            color: #555;
+            text-decoration: none;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            transform: translateX(5px);
+        }
+        
+        .nav-link i {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        /* Main Content Styles */
+        .main-content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            width: calc(100% - 280px); /* Add this to account for sidebar width */
+        }
+        
+        .content-section {
+            display: none;
+            width: 100%; /* Fix the width calculation */
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        
+        .content-section.active {
+            display: block;
+        }
+        
+        .section-header {
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .section-header h2 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .section-header p {
+            color: #666;
+            font-size: 16px;
+        }
+.extension-download {
+    text-align: center;
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    padding: 40px;
+    border-radius: 15px;
+    margin-bottom: 30px;
+}
+
+.extension-download h3 {
+    font-size: 1.8rem;
+    margin-bottom: 15px;
+}
+
+.extension-download p {
+    font-size: 1.1rem;
+    margin-bottom: 25px;
+    opacity: 0.9;
+}
+
+.button-success {
+    background: linear-gradient(135deg, #28a745, #20c997) !important;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 25px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.button-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+}
+
+.score-display {
+    font-size: 2rem;
+    font-weight: bold;
+            text-align: center;
+    margin: 20px 0;
+    padding: 20px;
+    border-radius: 10px;
+}
+
+.score-high { background: #d4edda; color: #155724; }
+.score-medium { background: #fff3cd; color: #856404; }
+.score-low { background: #f8d7da; color: #721c24; }
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        .radio-group {
+            display: flex;
+            gap: 20px;
+            margin-top: 8px;
+        }
+        
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .radio-label input[type="radio"] {
+            margin: 0;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .form-col {
+            flex: 1;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        select.form-control {
+            cursor: pointer;
+        }
+        
+        textarea.form-control {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        /* Button Styles */
+        .button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .Button-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .Button-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .Button-secondary {
+            background: #f8f9fa;
+            color: #555;
+            border: 2px solid #e0e0e0;
+        }
+        
+        .Button-secondary:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+        
+        .Button-success {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+        }
+        
+        .Button-warning {
+            background: linear-gradient(135deg, #ffc107, #fd7e14);
+            color: white;
+        }
+        
+        .Button-danger {
+            background: linear-gradient(135deg, #dc3545, #e83e8c);
+            color: white;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        /* Card Styles */
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e0e0e0;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .card-title {
+            color: #333;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        /* Job Card Styles */
+        .job-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+        }
+        
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        
+        .job-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .job-company {
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        .job-meta {
+            display: flex;
+            gap: 15px;
+            margin: 10px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .job-status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-applied { background: #e3f2fd; color: #1976d2; }
+        .status-interviewed { background: #f3e5f5; color: #7b1fa2; }
+        .status-rejected { background: #ffebee; color: #d32f2f; }
+        .status-offer { background: #e8f5e8; color: #388e3c; }
+        
+        /* Alert Styles */
+        .alert {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid;
+        }
+        
+        .alert-info {
+            background: #e3f2fd;
+            border-color: #2196f3;
+            color: #1976d2;
+        }
+        
+        .alert-success {
+            background: #e8f5e8;
+            border-color: #4caf50;
+            color: #388e3c;
+        }
+        
+        .alert-warning {
+            background: #fff3e0;
+            border-color: #ff9800;
+            color: #f57c00;
+        }
+        
+        /* Profile Section */
+        .profile-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            color: white;
+            font-size: 48px;
+        }
+        
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .upload-area i {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .upload-info {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .resume-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .resume-info i {
+            font-size: 24px;
+            color: #667eea;
+        }
+
+        .resume-details {
+            flex: 1;
+        }
+
+        .resume-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .resume-upload-time {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .resume-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .resume-actions button {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .resume-actions button i {
+            font-size: 14px;
+        }
+        
+        /* Networking Cards */
+        .networking-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .network-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .network-info {
+            flex: 1;
+        }
+        
+        .network-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .network-role {
+            color: #667eea;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .network-company {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        /* Tab Styles */
+        .tab-nav {
+            display: flex;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .tab-button {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .dashboard-container {
+                flex-direction: column;
+            }
+            
+  .sidebar {
+                width: 100%;
+                order: 2;
+  }
+  
+  .main-content {
+                order: 1;
+                padding: 20px;
+            }
+            
+            .form-row {
+                flex-direction: column;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+                .hidden {
+            display: none;
+        }
+
+        /* Favorite Companies Styles */
+        .company-card {
+            background: white;
+            border-radius: 15px;
+                padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .company-info {
+            flex: 1;
+        }
+
+        .company-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .company-industry {
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .company-reason {
+            color: #666;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+
+        .company-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Modal Styles */
+            .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            width: 500px;
+            max-width: 90%;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+                font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        .modal-overlay,
+        .modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+/* When modal is shown */
+.modal-overlay.modal-show,
+.modal.modal-show {
+    display: flex !important;
+}
+
+/* Make sure your CSS has this rule */
+.hidden {
+    display: none !important;
+}
+
+/* Fix main content width calculation */
+.main-content {
+    flex: 1;
+    padding: 30px;
+    overflow-y: auto;
+    min-width: 0; /* This prevents flex items from overflowing */
+}
+
+/* Fix dashboard container overflow */
+.dashboard-container {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+    overflow: hidden;
+}
+
+/* Make sure content sections take full width */
+.content-section {
+    display: none;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Fix loading animation reference */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+    /* Add profile completion modal styles */
+    .profile-modal {
+            display: none;
+            position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+    }
+
+    .profile-modal.active {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+    .profile-modal-content {
+        background: white;
+        padding: 2rem;
+        border-radius: 15px;
+        width: 90%;
+        max-width: 800px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .profile-steps {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+        position: relative;
+    }
+
+    .profile-step {
+        flex: 1;
+        text-align: center;
+        position: relative;
+        z-index: 1;
+    }
+
+    .profile-step.active {
+        color: #667eea;
+    }
+
+    .profile-step.completed {
+        color: #28a745;
+    }
+
+    .profile-step-content {
+        display: none;
+    }
+
+    .profile-step-content.active {
+        display: block;
+    }
+
+    /* Progress bar */
+    .progress-bar {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: #e0e0e0;
+        transform: translateY(-50%);
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background: #667eea;
+        width: 0;
+        transition: width 0.3s ease;
+    }
+
+    /* Floating Chat Button */
+    .floating-chat-button {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 60px;
+        height: 60px;
+        background-color: #0d6efd;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        z-index: 1000;
+        transition: transform 0.3s ease;
+    }
+
+    .floating-chat-button:hover {
+        transform: scale(1.1);
+    }
+
+    .floating-chat-button i {
+        color: white;
+        font-size: 24px;
+    }
+
+    /* Floating Chat Window */
+    .floating-chat-window {
+        position: fixed;
+        bottom: 90px;
+        right: 20px;
+        width: 350px;
+        height: 500px;
+        background: white;
+            border-radius: 12px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            display: flex;
+        flex-direction: column;
+        z-index: 1000;
+        transition: all 0.3s ease;
+    }
+
+    .floating-chat-window.hidden {
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(20px);
+    }
+
+    .chat-header {
+        padding: 15px;
+        background: #0d6efd;
+        color: white;
+        border-radius: 12px 12px 0 0;
+        display: flex;
+        justify-content: space-between;
+            align-items: center;
+    }
+
+    .chat-header h3 {
+        margin: 0;
+        font-size: 16px;
+    }
+
+    .close-chat {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 15px;
+    }
+
+    .chat-input-container {
+        padding: 15px;
+        border-top: 1px solid #eee;
+  display: flex;
+        gap: 10px;
+}
+
+    #chatInput {
+  flex: 1;
+        border: 1px solid #ddd;
+        border-radius: 20px;
+        padding: 8px 15px;
+        resize: none;
+        height: 40px;
+        font-family: inherit;
+    }
+
+    #sendMessage {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: #0d6efd;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #sendMessage:hover {
+        background: #0b5ed7;
+    }
+
+    .chat-message {
+        margin-bottom: 15px;
+        display: flex;
+    flex-direction: column;
+    }
+
+    .message-content {
+        display: flex;
+    gap: 10px;
+        max-width: 80%;
+    }
+
+    .user-message {
+        align-items: flex-end;
+    }
+
+    .user-message .message-content {
+        flex-direction: row-reverse;
+    }
+
+    .ai-message {
+        align-items: flex-start;
+    }
+
+    .message-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: #e9ecef;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .user-message .message-avatar {
+        background: #0d6efd;
+        color: white;
+    }
+
+    .message-text {
+        background: #f8f9fa;
+        padding: 10px 15px;
+        border-radius: 15px;
+        border-top-left-radius: 5px;
+    }
+
+    .user-message .message-text {
+        background: #0d6efd;
+        color: white;
+        border-radius: 15px;
+        border-top-right-radius: 5px;
+    }
+
+    .message-time {
+        font-size: 12px;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+
+    .chat-loading {
+    text-align: center;
+        padding: 10px;
+        color: #6c757d;
+    }
+
+    .chat-loading.hidden {
+        display: none;
+    }
+
+    /* Full page chat styles */
+    .content-section#chat-section {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    .content-section#chat-section .chat-messages {
+        flex: 1;
+        height: calc(100vh - 200px);
+    }
+
+    .content-section#chat-section .chat-input-container {
+        padding: 20px;
+    }
+
+    .content-section#chat-section #chatInput {
+        height: 50px;
+    }
+
+    /* Hide floating chat when in full page mode */
+    .content-section#chat-section.active ~ #floatingChatButton,
+    .content-section#chat-section.active ~ #floatingChatWindow {
+        display: none;
+    }
+
+    .checkbox-group {
+    display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-top: 10px;
+    }
+
+    .checkbox-inline {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+    }
+
+    .checkbox-inline input[type="checkbox"] {
+        margin: 0;
+    }
+
+    .input-group {
+        display: flex;
+    align-items: center;
+}
+
+    .input-group-text {
+        padding: 8px 12px;
+        background: #f8f9fa;
+        border: 2px solid #e0e0e0;
+        border-right: none;
+        border-radius: 10px 0 0 10px;
+        color: #495057;
+    }
+
+    .input-group .form-control {
+        border-radius: 0 10px 10px 0;
+    }
+    /* Ghost Job Results */
+.ghost-score {
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 20px;
+    display: inline-block;
+}
+
+.ghost-score.high {
+    background-color: #ff4444;
+    color: white;
+}
+
+.ghost-score.medium {
+    background-color: #ffbb33;
+    color: #333;
+}
+
+.ghost-score.low {
+    background-color: #00C851;
+    color: white;
+}
+
+.red-flags {
+    background-color: #fff3f3;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 15px 0;
+}
+
+.card.high-risk {
+    border-left: 4px solid #ff4444;
+}
+
+.card.medium-risk {
+    border-left: 4px solid #ffbb33;
+}
+
+.card.low-risk {
+    border-left: 4px solid #00C851;
+}
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <h1 class="logo">Jobsynt</h1>
+        </div>
+        <div class="header-right">
+            <span id="user-info">Loading...</span>
+            <button id="signOutButton" class="Button Button-secondary">
+                <i class="fas fa-sign-out-alt"></i> Sign Out
+            </button>
+        </div>
+    </header>
+
+    <!-- Dashboard Container -->
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="#dashboard" class="nav-link active" data-section="dashboard">
+                            <i class="fas fa-home"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#profile" class="nav-link" data-section="profile">
+                            <i class="fas fa-user"></i> Profile
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#application-tracker" class="nav-link" data-section="application-tracker">
+                            <i class="fas fa-tasks"></i> Application Tracker
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#ai-job-search" class="nav-link" data-section="ai-job-search">
+                            <i class="fas fa-search"></i> AI Job Search
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#ghost-detector" class="nav-link" data-section="ghost-detector">
+                            <i class="fas fa-ghost"></i> Ghost Job Detector
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#network-recommendations" class="nav-link" data-section="network-recommendations">
+                            <i class="fas fa-network-wired"></i> Network Recommendations
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#ai-resume" class="nav-link" data-section="ai-resume">
+                            <i class="fas fa-file-alt"></i> AI Resume Assistant
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#career-chatbot" class="nav-link" data-section="career-chatbot">
+                            <i class="fas fa-robot"></i> Career Chatbot
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#job-alerts" class="nav-link" data-section="job-alerts">
+                            <i class="fas fa-bell"></i> Job Alerts
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#favorite-companies" class="nav-link" data-section="favorite-companies">
+                            <i class="fas fa-star"></i> Favorite Companies
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#email-integration" class="nav-link" data-section="email-integration">
+                            <i class="fas fa-envelope"></i> Email Integration
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#settings" class="nav-link" data-section="settings">
+                            <i class="fas fa-cog"></i> Settings
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" id="signOutButton">
+                            <i class="fas fa-sign-out-alt"></i> Sign Out
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="content-section active">
+                <div class="section-header">
+                    <h2>Welcome to Jobsynt</h2>
+                    <p>Your AI-powered job search assistant</p>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Active Applications</h3>
+                        <div class="value" id="activeApplicationsCount">0</div>
+                        <div class="label">Current applications in progress</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Interviews</h3>
+                        <div class="value" id="interviewsCount">0</div>
+                        <div class="label">Upcoming interviews</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Offers</h3>
+                        <div class="value" id="offersCount">0</div>
+                        <div class="label">Job offers received</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Ghost Jobs</h3>
+                        <div class="value" id="ghostJobsCount">0</div>
+                        <div class="label">Potential ghost jobs detected</div>
+                    </div>
+                </div>
+
+                <div class="section-header">
+                    <h2>Recent Job Matches</h2>
+                    <p>Jobs that match your profile and preferences</p>
+                </div>
+                
+                <div class="job-list" id="recentJobsList">
+                    <!-- Job cards will be dynamically added here -->
+                </div>
+            </section>
+
+            <!-- Profile Section -->
+            <section id="profile" class="content-section">
+                <div class="section-header">
+                    <h2>Your Profile</h2>
+                    <p>Manage your professional information</p>
+                </div>
+                
+                <form id="profileForm" class="profile-form">
+                    <div class="form-group">
+                        <label for="fullName">Full Name</label>
+                        <input type="text" id="fullName" name="fullName" class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <input type="tel" id="phone" name="phone" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="location">Location</label>
+                        <input type="text" id="location" name="location" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="skills">Skills</label>
+                        <input type="text" id="skills" name="skills" class="form-control" placeholder="e.g., JavaScript, Python, React">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="experience">Years of Experience</label>
+                        <input type="number" id="experience" name="experience" class="form-control" min="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="preferredRoles">Preferred Roles</label>
+                        <input type="text" id="preferredRoles" name="preferredRoles" class="form-control" placeholder="e.g., Software Engineer, Product Manager">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="positionInput">Position</label>
+                        <input type="text" id="positionInput" class="form-control" required>
+                    </div>
+                    
+                    <button type="submit" class="Button Button-primary">
+                        <i class="fas fa-save"></i> Save Profile
+                    </button>
+                </form>
+            </section>
+
+            <!-- Application Tracker Section -->
+            <section id="application-tracker" class="content-section">
+                <div class="section-header">
+                    <h2>Application Tracker</h2>
+                    <p>Track and manage your job applications</p>
+                </div>
+                
+                <div class="tracker-actions">
+                    <button class="Button Button-primary" id="addManualApplicationBtn">
+                        <i class="fas fa-plus"></i> Add External Application
+                    </button>
+                    <p style="margin-top: 10px; color: #666; font-size: 14px;">
+                        Add jobs you applied to elsewhere for comprehensive tracking
+                    </p>
+                </div>
+                
+                <div class="application-stats">
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <h4>Last 30 Days</h4>
+                            <div class="stat-number" data-stat="monthly-applications">0</div>
+                            <div class="stat-label">Applications</div>
+                        </div>
+                        <div class="stat-item">
+                            <h4>Response Rate</h4>
+                            <div class="stat-number" data-stat="response-rate">0%</div>
+                            <div class="stat-label">Responses</div>
+                        </div>
+                        <div class="stat-item">
+                            <h4>Interview Rate</h4>
+                            <div class="stat-number" data-stat="interview-rate">0%</div>
+                            <div class="stat-label">Interviews</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="application-history">
+                    <h3>Recent Applications</h3>
+                    <div class="application-list" id="applicationsList">
+                        <!-- Applications will be populated dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI Job Search Section -->
+            <section id="ai-job-search" class="content-section">
+                <div class="section-header">
+                    <h2>AI Job Search</h2>
+                    <p>Find perfect matches based on your profile, resume, and preferences</p>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    Our AI analyzes your resume, LinkedIn profile, and preferences to find jobs with 100% skill match
+                </div>
+                
+                <div class="search-container">
+                    <div class="form-container">
+                        <form id="jobSearchForm">
+                            <div class="form-group">
+                                <label>Are you currently employed?</label>
+                                <div class="form-row">
+                                    <label class="radio-inline">
+                                        <input type="radio" name="employmentStatus" value="employed"> Yes, I'm employed
+                                    </label>
+                                    <label class="radio-inline">
+                                        <input type="radio" name="employmentStatus" value="unemployed"> No, I'm unemployed
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="unemployed-section" id="unemployedSection" style="display: none;">
+                                <div class="form-group">
+                                    <label for="unemployedSince">Unemployed since</label>
+                                    <input type="date" id="unemployedSince" class="form-control">
+                                </div>
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    Priority will be given to finding you a job ASAP. Jobs may be 10-20% below your salary expectations but will match 100% of required skills.
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="jobType">Job Type</label>
+                                <select id="jobType" class="form-control">
+                                    <option value="all">All Types</option>
+                                    <option value="full-time">Full Time</option>
+                                    <option value="part-time">Part Time</option>
+                                    <option value="contract">Contract</option>
+                                    <option value="internship">Internship</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Search Type</label>
+                                <div class="form-row">
+                                    <label class="radio-inline">
+                                        <input type="radio" name="searchType" value="jobs" checked> Regular Jobs
+                                    </label>
+                                    <label class="radio-inline">
+                                        <input type="radio" name="searchType" value="apprenticeships"> Apprenticeships
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="applicationPosition">Job Title / Trade*</label>
+                                <input type="text" id="applicationPosition" class="form-control" placeholder="Software Engineer / Electrician / Plumber" required>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="workMode">Work Mode</label>
+                                    <select id="workMode" class="form-control">
+                                        <option value="all">All</option>
+                                        <option value="remote">Remote</option>
+                                        <option value="hybrid">Hybrid</option>
+                                        <option value="onsite">On-site</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Expected Salary Range</label>
+                                <div class="form-row">
+                                    <div class="form-col">
+                                        <div class="input-group">
+                                            <span class="input-group-text">$</span>
+                                            <input type="number" id="salaryMin" class="form-control" placeholder="Minimum" min="0" step="1000" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-col">
+                                        <div class="input-group">
+                                            <span class="input-group-text">$</span>
+                                            <input type="number" id="salaryMax" class="form-control" placeholder="Maximum (optional)" min="0" step="1000">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="visa">Visa Status*</label>
+                                <select id="visa" class="form-control" required>
+                                    <option value="">Select Visa Status</option>
+                                    <option value="citizen">Citizen</option>
+                                    <option value="green_card">Green Card</option>
+                                    <option value="h1b">H1B</option>
+                                    <option value="f1_opt">F1 OPT</option>
+                                    <option value="f1_stem">F1 STEM OPT</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            
+                            <button type="submit" class="Button Button-primary Button-large" id="findJobsButton">
+                                <i class="fas fa-search"></i> Find My Perfect Jobs
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="results-container">
+                        <div class="results-header">
+                            <h3>Recommended Jobs</h3>
+                            <div class="tier-badge">10 Jobs/Day (Free Tier)</div>
+                        </div>
+                        
+                        <div class="search-results" id="searchResults">
+                            <!-- Search results will be dynamically added here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI Resume Assistant Section -->
+            <section id="ai-resume" class="content-section">
+                <div class="section-header">
+                    <h2>AI Resume Assistant</h2>
+                    <p>Upload and analyze your resume with AI-powered insights</p>
+                </div>
+                
+                <div class="resume-upload-section">
+                    <div class="upload-area" id="resumeUploadArea">
+                        <div class="upload-content">
+                            <i class="fas fa-cloud-upload-alt fa-3x"></i>
+                            <h3>Upload Your Resume</h3>
+                            <p>Drop your resume here or click to browse</p>
+                            <p class="file-types">Supports PDF, DOC, DOCX (Max 5MB)</p>
+                            <input type="file" id="resumeFileInput" accept=".pdf,.doc,.docx" hidden>
+                            <button class="Button Button-primary" onclick="document.getElementById('resumeFileInput').click()">
+                                <i class="fas fa-upload"></i> Choose File
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="uploaded-resume" id="uploadedResume" style="display: none;">
+                        <div class="resume-preview">
+                            <i class="fas fa-file-pdf fa-2x"></i>
+                            <div class="file-info">
+                                <div class="file-name" id="uploadedFileName">resume.pdf</div>
+                                <div class="file-size" id="uploadedFileSize">2.4 MB</div>
+                                <div class="upload-date" id="uploadedDate">Uploaded today</div>
+                            </div>
+                            <div class="resume-actions">
+                                <button class="Button Button-secondary" id="changeResumeBtn">
+                                    <i class="fas fa-edit"></i> Change
+                                </button>
+                                <button class="Button Button-primary" id="analyzeResumeBtn">
+                                    <i class="fas fa-chart-line"></i> Analyze Resume
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="resume-analysis" id="resumeAnalysis" style="display: none;">
+                    <h3>Resume Analysis Results</h3>
+                    <div class="analysis-content">
+                        <!-- Analysis results will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="job-analysis-section">
+                    <h3>Job Match Analysis</h3>
+                    <p>Paste a job description to see how well your resume matches</p>
+                    
+                    <div class="form-group">
+                        <label for="jobUrl">Job URL (Optional)</label>
+                        <input type="url" id="jobUrl" class="form-control" placeholder="Paste job posting URL">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="jobDescription">Job Description</label>
+                        <textarea id="jobDescription" class="form-control" rows="6" placeholder="Paste the job description here..."></textarea>
+                    </div>
+                    
+                    <button class="Button Button-primary" id="analyzeMatchBtn">
+                        <i class="fas fa-search"></i> Analyze Match
+                    </button>
+                    
+                    <div class="match-results" id="matchResults" style="display: none;">
+                        <!-- Match analysis results will be shown here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Ghost Job Detector Section -->
+            <section id="ghost-detector" class="content-section">
+                <div class="section-header">
+                    <h2>Ghost Job Detector</h2>
+                    <p>Analyze job postings for potential red flags</p>
+                </div>
+                
+                <form id="ghostJobForm" class="detector-form">
+                    <div class="form-group">
+                        <label for="jobUrl">Job Posting URL</label>
+                        <input type="url" id="jobUrl" name="jobUrl" class="form-control" placeholder="Paste the job posting URL here">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="jobDescriptionInput">Job Description</label>
+                        <textarea id="jobDescriptionInput" class="form-control" rows="4" placeholder="Paste job description here..."></textarea>
+                    </div>
+                    
+                    <div class="form-group" id="unemployedSinceGroup" style="display: none;">
+                        <label for="unemployedSinceInput">Unemployed Since</label>
+                        <input type="date" id="unemployedSinceInput" class="form-control">
+                    </div>
+                    
+                    <button type="submit" class="button button-primary">
+                        <i class="fas fa-ghost"></i> Analyze Job
+                    </button>
+                </form>
+                
+                <div id="analysisResults" class="analysis-results">
+                    <!-- Analysis results will be dynamically added here -->
+                </div>
+            </section>
+
+            <!-- Network Recommendations Section -->
+            <section id="network-recommendations" class="content-section">
+                <div class="section-header">
+                    <h2>Network Recommendations</h2>
+                    <p>Connect with professionals in your field</p>
+                </div>
+                
+                <div class="network-stats">
+                    <div class="stat-card">
+                        <h3>Your Network</h3>
+                        <div class="value" id="networkSize">0</div>
+                        <div class="label">Total connections</div>
+                    </div>
+                </div>
+                
+                <div class="recommendations-list" id="networkRecommendations">
+                    <!-- Network recommendations will be dynamically added here -->
+                </div>
+            </section>
+
+            <!-- Career Chatbot Section -->
+            <section id="career-chatbot" class="content-section">
+                <div class="section-header">
+                    <h2>Career Chatbot</h2>
+                    <p>Get personalized career guidance and advice</p>
+                </div>
+                
+                <div class="chatbot-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="chat-message ai-message">
+                            <div class="message-content">
+                                <div class="message-avatar">
+                                    <i class="fas fa-robot"></i>
+                                </div>
+                                <div class="message-text">
+                                    Hello! I'm your AI career advisor. I can help you with job search strategies, interview preparation, salary negotiation, and career development. What would you like to discuss?
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-container">
+                        <textarea id="careerChatInput" class="form-control" placeholder="Ask me anything about your career..." rows="2"></textarea>
+                        <button class="Button Button-primary" id="sendCareerMessage">
+                            <i class="fas fa-paper-plane"></i> Send
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="career-topics">
+                    <h3>Popular Topics</h3>
+                    <div class="topic-buttons">
+                        <button class="topic-btn" data-topic="interview">Interview Tips</button>
+                        <button class="topic-btn" data-topic="salary">Salary Negotiation</button>
+                        <button class="topic-btn" data-topic="networking">Networking Advice</button>
+                        <button class="topic-btn" data-topic="skills">Skill Development</button>
+                        <button class="topic-btn" data-topic="career-change">Career Change</button>
+                        <button class="topic-btn" data-topic="visa">Visa & Immigration</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Job Alerts Section -->
+            <section id="job-alerts" class="content-section">
+                <div class="section-header">
+                    <h2>Job Alerts</h2>
+                    <p>Set up automated job alerts based on your preferences</p>
+                </div>
+                
+                <div class="alert-setup">
+                    <form id="jobAlertForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="alertKeywords">Keywords</label>
+                                <input type="text" id="alertKeywords" class="form-control" placeholder="e.g., Software Engineer, Python">
+                            </div>
+                            <div class="form-group">
+                                <label for="alertLocation">Location</label>
+                                <input type="text" id="alertLocation" class="form-control" placeholder="e.g., San Francisco, CA">
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="alertFrequency">Alert Frequency</label>
+                                <select id="alertFrequency" class="form-control">
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="instant">Instant</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="alertSalaryMin">Min Salary</label>
+                                <input type="number" id="alertSalaryMin" class="form-control" placeholder="50000">
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="Button Button-primary">
+                            <i class="fas fa-bell"></i> Create Alert
+                        </button>
+                    </form>
+                </div>
+                
+                <div class="active-alerts">
+                    <h3>Active Alerts</h3>
+                    <div class="alerts-list" id="alertsList">
+                        <!-- Active alerts will be populated here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Favorite Companies Section -->
+            <section id="favorite-companies" class="content-section">
+                <div class="section-header">
+                    <h2>Favorite Companies</h2>
+                    <p>Track companies you're interested in working for</p>
+                </div>
+                
+                <div class="company-search">
+                    <div class="form-group">
+                        <label for="companySearch">Add Company</label>
+                        <div class="input-group">
+                            <input type="text" id="companySearch" class="form-control" placeholder="Search for companies...">
+                            <button class="Button Button-primary" id="addCompanyBtn">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="companies-grid" id="companiesGrid">
+                    <!-- Favorite companies will be populated here -->
+                </div>
+            </section>
+
+            <!-- Email Integration Section -->
+            <section id="email-integration" class="content-section">
+                <div class="section-header">
+                    <h2>Email Integration</h2>
+                    <p>Connect your email to track job application responses</p>
+                </div>
+                
+                <div class="email-providers">
+                    <div class="provider-card">
+                        <i class="fab fa-google fa-2x"></i>
+                        <h3>Gmail</h3>
+                        <p>Connect your Gmail account to automatically track application responses</p>
+                        <button class="Button Button-primary" id="connectGmail">
+                            <i class="fas fa-link"></i> Connect Gmail
+                        </button>
+                    </div>
+                    
+                    <div class="provider-card">
+                        <i class="fab fa-microsoft fa-2x"></i>
+                        <h3>Outlook</h3>
+                        <p>Connect your Outlook account for comprehensive email tracking</p>
+                        <button class="Button Button-primary" id="connectOutlook">
+                            <i class="fas fa-link"></i> Connect Outlook
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="email-insights" id="emailInsights" style="display: none;">
+                    <h3>Email Insights</h3>
+                    <div class="insights-content">
+                        <!-- Email insights will be populated here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="settings" class="content-section">
+                <div class="section-header">
+                    <h2>Settings</h2>
+                    <p>Manage your account and preferences</p>
+                </div>
+                
+                <div class="settings-tabs">
+                    <div class="tab-nav">
+                        <button class="tab-btn active" data-tab="account">Account</button>
+                        <button class="tab-btn" data-tab="notifications">Notifications</button>
+                        <button class="tab-btn" data-tab="privacy">Privacy</button>
+                        <button class="tab-btn" data-tab="billing">Billing</button>
+                    </div>
+                    
+                    <div class="tab-content">
+                        <div class="tab-pane active" id="account-settings">
+                            <h3>Account Settings</h3>
+                            <form id="accountSettingsForm">
+                                <div class="form-group">
+                                    <label for="displayName">Display Name</label>
+                                    <input type="text" id="displayName" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label for="timezone">Timezone</label>
+                                    <select id="timezone" class="form-control">
+                                        <option value="UTC">UTC</option>
+                                        <option value="America/New_York">Eastern Time</option>
+                                        <option value="America/Chicago">Central Time</option>
+                                        <option value="America/Denver">Mountain Time</option>
+                                        <option value="America/Los_Angeles">Pacific Time</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="Button Button-primary">Save Changes</button>
+                            </form>
+                        </div>
+                        
+                        <div class="tab-pane" id="notifications-settings">
+                            <h3>Notification Preferences</h3>
+                            <div class="notification-options">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="emailNotifications" checked>
+                                    Email notifications for new job matches
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="pushNotifications" checked>
+                                    Push notifications for urgent updates
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="weeklyDigest" checked>
+                                    Weekly job market digest
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="tab-pane" id="privacy-settings">
+                            <h3>Privacy Settings</h3>
+                            <div class="privacy-options">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="profilePublic">
+                                    Make profile visible to recruiters
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="dataSharing">
+                                    Allow anonymized data sharing for research
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="tab-pane" id="billing-settings">
+                            <h3>Billing & Subscription</h3>
+                            <div class="current-plan">
+                                <h4>Current Plan: Free Tier</h4>
+                                <p>10 jobs per day, basic features</p>
+                                <button class="Button Button-primary">Upgrade to Pro</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2024 Jobsynt. All rights reserved.</p>
+    </footer>
+
+    <!-- Apprenticeship and Enhanced Job Search JavaScript -->
+    <script>
+        // Function to display apprenticeship results
+        function displayApprenticeshipResults(result) {
+            const resultsContainer = document.getElementById('searchResults');
+            if (!resultsContainer) return;
+            
+            resultsContainer.innerHTML = '';
+            
+            if (!result.success || !result.apprenticeships || result.apprenticeships.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="no-results">
+                        <i class="fas fa-search"></i>
+                        <h3>No apprenticeships found</h3>
+                        <p>Try adjusting your search criteria or location.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Display apprenticeship results
+            result.apprenticeships.forEach(apprenticeship => {
+                const apprenticeshipCard = document.createElement('div');
+                apprenticeshipCard.className = 'job-card apprenticeship-card';
+                apprenticeshipCard.innerHTML = `
+                    <div class="job-header">
+                        <h3>${apprenticeship.title || 'Apprenticeship Opportunity'}</h3>
+                        <div class="company-info">
+                            <span class="company">${apprenticeship.company || 'Various Employers'}</span>
+                            <span class="location">${apprenticeship.location || 'Multiple Locations'}</span>
+                        </div>
+                    </div>
+                    <div class="job-details">
+                        <div class="job-meta">
+                            <span class="industry"><i class="fas fa-industry"></i> ${apprenticeship.industry || 'Various Industries'}</span>
+                            <span class="duration"><i class="fas fa-clock"></i> ${apprenticeship.duration || '1-4 years'}</span>
+                            <span class="level"><i class="fas fa-graduation-cap"></i> ${apprenticeship.level || 'Entry Level'}</span>
+                        </div>
+                        <p class="description">${apprenticeship.description || 'Hands-on training and education opportunity'}</p>
+                        ${apprenticeship.requirements ? `<div class="requirements"><strong>Requirements:</strong> ${apprenticeship.requirements}</div>` : ''}
+                        ${apprenticeship.benefits ? `<div class="benefits"><strong>Benefits:</strong> ${apprenticeship.benefits}</div>` : ''}
+                    </div>
+                    <div class="job-actions">
+                        <button class="Button Button-primary" onclick="window.open('${apprenticeship.url || '#'}', '_blank')">
+                            <i class="fas fa-external-link-alt"></i> Learn More
+                        </button>
+                        <button class="Button Button-secondary" onclick="saveApprenticeshipForLater('${apprenticeship.id || Date.now()}')">
+                            <i class="fas fa-bookmark"></i> Save
+                        </button>
+                    </div>
+                `;
+                resultsContainer.appendChild(apprenticeshipCard);
+            });
+            
+            // Add tips for apprenticeships
+            const tipsCard = document.createElement('div');
+            tipsCard.className = 'tips-card';
+            tipsCard.innerHTML = `
+                <h4><i class="fas fa-lightbulb"></i> Apprenticeship Tips</h4>
+                <ul>
+                    <li>Apprenticeships combine work experience with education</li>
+                    <li>Many programs offer full-time employment after completion</li>
+                    <li>Look for programs that align with your career goals</li>
+                    <li>Consider both paid and unpaid opportunities</li>
+                    <li>Check if programs offer certifications or degrees</li>
+                </ul>
+            `;
+            resultsContainer.appendChild(tipsCard);
+        }
+        
+        // Function to save apprenticeship for later
+        function saveApprenticeshipForLater(apprenticeshipId) {
+            // Implementation for saving apprenticeships
+            console.log('Saving apprenticeship:', apprenticeshipId);
+            alert('Apprenticeship saved for later review!');
+        }
+        
+        // Enhanced job search form handling
+        document.addEventListener('DOMContentLoaded', function() {
+            const jobSearchForm = document.getElementById('jobSearchForm');
+            if (jobSearchForm) {
+                jobSearchForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    
+                    const formData = new FormData(this);
+                    const searchType = document.querySelector('input[name="searchType"]:checked')?.value || 'jobs';
+                    const jobTitle = formData.get('jobTitle');
+                    const location = formData.get('location');
+                    const experience = formData.get('experience');
+                    
+                    // Show loading state
+                    const submitButton = this.querySelector('button[type="submit"]');
+                    const originalText = submitButton.innerHTML;
+                    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+                    submitButton.disabled = true;
+                    
+                    try {
+                        let endpoint, searchData;
+                        
+                        if (searchType === 'apprenticeships') {
+                            endpoint = '/.netlify/functions/apprenticeship-scraper';
+                            searchData = {
+                                query: jobTitle,
+                                location: location,
+                                industry: experience // Map experience to industry for apprenticeships
+                            };
+                        } else {
+                            endpoint = '/.netlify/functions/job-scraper';
+                            searchData = {
+                                position: jobTitle,
+                                location: location,
+                                experience: experience
+                            };
+                        }
+                        
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(searchData)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            if (searchType === 'apprenticeships') {
+                                displayApprenticeshipResults(result);
+                            } else {
+                                // Handle regular job results (existing functionality)
+                                displayJobResults(result);
+                            }
+                        } else {
+                            throw new Error(result.error || 'Search failed');
+                        }
+                        
+                    } catch (error) {
+                        console.error('Search error:', error);
+                        const resultsContainer = document.getElementById('searchResults');
+                        if (resultsContainer) {
+                            resultsContainer.innerHTML = `
+                                <div class="error-message">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    <h3>Search Error</h3>
+                                    <p>Unable to complete search. Please try again.</p>
+                                </div>
+                            `;
+                        }
+                    } finally {
+                        // Restore button state
+                        submitButton.innerHTML = originalText;
+                        submitButton.disabled = false;
+                    }
+                });
+            }
+        });
+        
+        // Function to display regular job results (fallback)
+        function displayJobResults(result) {
+            const resultsContainer = document.getElementById('searchResults');
+            if (!resultsContainer) return;
+            
+            resultsContainer.innerHTML = '';
+            
+            if (!result.success || !result.jobs || result.jobs.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="no-results">
+                        <i class="fas fa-search"></i>
+                        <h3>No jobs found</h3>
+                        <p>Try adjusting your search criteria.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Display job results
+            result.jobs.forEach(job => {
+                const jobCard = document.createElement('div');
+                jobCard.className = 'job-card';
+                jobCard.innerHTML = `
+                    <div class="job-header">
+                        <h3>${job.title || 'Job Opportunity'}</h3>
+                        <div class="company-info">
+                            <span class="company">${job.company || 'Company'}</span>
+                            <span class="location">${job.location || 'Location'}</span>
+                        </div>
+                    </div>
+                    <div class="job-details">
+                        <p class="description">${job.description || 'Job description not available'}</p>
+                        ${job.salary ? `<div class="salary"><strong>Salary:</strong> ${job.salary}</div>` : ''}
+                    </div>
+                    <div class="job-actions">
+                        <button class="Button Button-primary" onclick="window.open('${job.url || '#'}', '_blank')">
+                            <i class="fas fa-external-link-alt"></i> Apply
+                        </button>
+                        <button class="Button Button-secondary" onclick="saveJobForLater('${job.id || Date.now()}')">
+                            <i class="fas fa-bookmark"></i> Save
+                        </button>
+                    </div>
+                `;
+                resultsContainer.appendChild(jobCard);
+            });
+        }
+        
+        // Function to save job for later
+        function saveJobForLater(jobId) {
+            console.log('Saving job:', jobId);
+            alert('Job saved for later review!');
+        }
+    </script>
+
+    <!-- Additional CSS for apprenticeship cards -->
+    <style>
+        .apprenticeship-card {
+            border-left: 4px solid #28a745;
+        }
+        
+        .apprenticeship-card .job-header h3::after {
+            content: " 🎓";
+            font-size: 0.8em;
+        }
+        
+        .job-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .job-meta span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .requirements, .benefits {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        
+        .tips-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+        
+        .tips-card h4 {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .tips-card ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .tips-card li {
+            padding: 5px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        
+        .tips-card li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .no-results, .error-message {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .no-results i, .error-message i {
+            font-size: 3em;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        
+        .error-message i {
+            color: #dc3545;
+        }
+        
+        .job-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e0e0e0;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .job-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+        
+        .job-header h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .company-info {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            color: #666;
+        }
+        
+        .job-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .Button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .Button-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .Button-primary:hover {
+            background: #5a6fd8;
+        }
+        
+        .Button-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .Button-secondary:hover {
+            background: #5a6268;
+        }
+        
+        /* Application Tracker Styles */
+        .tracker-actions {
+            margin-bottom: 30px;
+        }
+        
+        .application-stats .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-item {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stat-item h4 {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            color: #999;
+            font-size: 12px;
+        }
+        
+        /* Resume Upload Styles */
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+        }
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+        
+        .upload-content i {
+            color: #ddd;
+            margin-bottom: 15px;
+        }
+        
+        .file-types {
+            color: #999;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        
+        .resume-preview {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .file-size, .upload-date {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .resume-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        /* Chatbot Styles */
+        .chatbot-container {
+            background: white;
+            border-radius: 10px;
+            height: 500px;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 30px;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .chat-message {
+            margin-bottom: 20px;
+        }
+        
+        .message-content {
+            display: flex;
+            gap: 10px;
+            max-width: 80%;
+        }
+        
+        .ai-message .message-content {
+            align-self: flex-start;
+        }
+        
+        .user-message .message-content {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+        
+        .message-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .user-message .message-avatar {
+            background: #28a745;
+        }
+        
+        .message-text {
+            background: #f8f9fa;
+            padding: 12px 16px;
+            border-radius: 15px;
+            line-height: 1.4;
+        }
+        
+        .user-message .message-text {
+            background: #667eea;
+            color: white;
+        }
+        
+        .chat-input-container {
+            padding: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chat-input-container textarea {
+            flex: 1;
+            resize: none;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            padding: 10px 15px;
+        }
+        
+        .topic-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .topic-btn {
+            padding: 8px 16px;
+            border: 1px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .topic-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        /* Email Integration Styles */
+        .email-providers {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .provider-card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .provider-card i {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .provider-card h3 {
+            margin-bottom: 10px;
+        }
+        
+        .provider-card p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        /* Settings Styles */
+        .settings-tabs {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .tab-nav {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .tab-btn {
+            flex: 1;
+            padding: 15px 20px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .tab-btn.active {
+            background: white;
+            color: #667eea;
+        }
+        
+        .tab-content {
+            padding: 30px;
+        }
+        
+        .tab-pane {
+            display: none;
+        }
+        
+        .tab-pane.active {
+            display: block;
+        }
+        
+        .notification-options,
+        .privacy-options {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        
+        .current-plan {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        /* Form Enhancements */
+        .form-col {
+            flex: 1;
+        }
+        
+        .input-group {
+            display: flex;
+        }
+        
+        .input-group-text {
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-right: none;
+            border-radius: 5px 0 0 5px;
+        }
+        
+        .input-group .form-control {
+            border-radius: 0 5px 5px 0;
+        }
+        
+        .radio-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-right: 20px;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        
+        .Button-large {
+            padding: 12px 30px;
+            font-size: 16px;
+        }
+        
+        .unemployed-section {
+            background: #fff3cd;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+        
+        .search-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 20px;
+        }
+        
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .tier-badge {
+            background: #28a745;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+        
+        @media (max-width: 768px) {
+            .search-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-row {
+                flex-direction: column;
+            }
+            
+            .radio-inline {
+                margin-right: 0;
+                margin-bottom: 10px;
+            }
+            
+            .email-providers {
+                grid-template-columns: 1fr;
+            }
+            
+            .tab-nav {
+                flex-wrap: wrap;
+            }
+            
+            .tab-btn {
+                flex: none;
+                min-width: 120px;
+            }
+        }
+    </style>
+    
+    <!-- Enhanced JavaScript with complete functionality -->
+    <script>
+        // Function to get user's resume data for GPT integration
+        async function getUserResumeForGPT() {
+            try {
+                const { data: { session } } = await window.supabase.auth.getSession();
+                if (!session) return null;
+
+                const { data: resume } = await window.supabase
+                    .from('resumes')
+                    .select('*')
+                    .eq('user_id', session.user.id)
+                    .order('uploaded_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (resume) {
+                    return {
+                        fileName: resume.file_name,
+                        fileType: resume.file_type,
+                        fileUrl: resume.file_url,
+                        uploadDate: resume.uploaded_at || resume.created_at
+                    };
+                }
+                return null;
+            } catch (error) {
+                console.error('[Dashboard] Error getting resume for GPT:', error);
+                return null;
+            }
+        }
+
+        // Function to get user's complete profile for GPT integration
+        async function getUserProfileForGPT() {
+            try {
+                const { data: { session } } = await window.supabase.auth.getSession();
+                if (!session) return null;
+
+                const { data: profile } = await window.supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('user_id', session.user.id)
+                    .maybeSingle();
+
+                const resumeData = await getUserResumeForGPT();
+
+                return {
+                    profile: profile,
+                    resume: resumeData,
+                    userId: session.user.id,
+                    email: session.user.email
+                };
+            } catch (error) {
+                console.error('[Dashboard] Error getting profile for GPT:', error);
+                return null;
+            }
+        }
+
+        // Function to remove favorite company
+        async function removeFavoriteCompany(userCompanyId) {
+            try {
+                if (!confirm('Are you sure you want to remove this company from your favorites?')) {
+                    return;
+                }
+
+                const { error } = await window.supabase
+                    .from('user_companies')
+                    .delete()
+                    .eq('id', userCompanyId);
+
+                if (error) throw error;
+
+                alert('Company removed from favorites successfully!');
+                loadFavoriteCompanies(); // Refresh the list
+            } catch (error) {
+                console.error('[Dashboard] Error removing favorite company:', error);
+                alert('Error removing company. Please try again.');
+            }
+        }
+
+        // Function to toggle job search tips
+        function toggleTips() {
+            const tipsContent = document.getElementById('tipsContent');
+            const tipsToggle = document.getElementById('tipsToggle');
+            
+            if (!tipsContent || !tipsToggle) return;
+            
+            if (tipsContent.style.display === 'none' || tipsContent.style.display === '') {
+                tipsContent.style.display = 'block';
+                tipsToggle.style.transform = 'rotate(180deg)';
+                
+                // Save preference to localStorage
+                localStorage.setItem('jobSearchTipsExpanded', 'true');
+            } else {
+                tipsContent.style.display = 'none';
+                tipsToggle.style.transform = 'rotate(0deg)';
+                
+                // Save preference to localStorage
+                localStorage.setItem('jobSearchTipsExpanded', 'false');
+            }
+        }
+
+        // Auto-expand tips based on user preference or first time visit
+        function initializeTips() {
+            const tipsExpanded = localStorage.getItem('jobSearchTipsExpanded');
+            const tipsContent = document.getElementById('tipsContent');
+            const tipsToggle = document.getElementById('tipsToggle');
+            
+            if (tipsContent && tipsToggle) {
+                // Show tips by default for first-time users or if previously expanded
+                if (tipsExpanded === null || tipsExpanded === 'true') {
+                    tipsContent.style.display = 'block';
+                    tipsToggle.style.transform = 'rotate(180deg)';
+                } else {
+                    tipsContent.style.display = 'none';
+                    tipsToggle.style.transform = 'rotate(0deg)';
+                }
+            }
+        }
+
+        // Make functions globally available
+        window.getUserResumeForGPT = getUserResumeForGPT;
+        window.getUserProfileForGPT = getUserProfileForGPT;
+        window.removeFavoriteCompany = removeFavoriteCompany;
+        window.toggleTips = toggleTips;
+        
+        // Initialize tips when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeTips);
+        } else {
+            initializeTips();
+        }
+        
+        // Enhanced employment status handling
+        document.addEventListener('DOMContentLoaded', function() {
+            const employmentRadios = document.querySelectorAll('input[name="employmentStatus"]');
+            const unemployedSection = document.getElementById('unemployedSection');
+            
+            if (employmentRadios.length > 0 && unemployedSection) {
+                employmentRadios.forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        if (this.value === 'unemployed') {
+                            unemployedSection.style.display = 'block';
+                        } else {
+                            unemployedSection.style.display = 'none';
+                        }
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -106,14 +106,20 @@ function calculateMatchScore(userProfile, job) {
     let score = 0;
     let maxScore = 0;
 
-    // Skills matching (40% weight)
-    const skillsWeight = 40;
+    // Skills matching (30% weight) - reduced to give more weight to growth potential
+    const skillsWeight = 30;
     const skillsMatch = calculateSkillsMatch(userProfile.skills || [], job);
     score += skillsMatch * skillsWeight;
     maxScore += skillsWeight;
 
-    // Experience level matching (25% weight)
-    const experienceWeight = 25;
+    // Career Growth Potential (20% weight) - NEW
+    const growthWeight = 20;
+    const growthMatch = calculateGrowthPotential(userProfile, job);
+    score += growthMatch * growthWeight;
+    maxScore += growthWeight;
+
+    // Experience level matching (15% weight)
+    const experienceWeight = 15;
     const experienceMatch = calculateExperienceMatch(userProfile.experience || 0, job);
     score += experienceMatch * experienceWeight;
     maxScore += experienceWeight;
@@ -130,22 +136,16 @@ function calculateMatchScore(userProfile, job) {
     score += salaryMatch * salaryWeight;
     maxScore += salaryWeight;
 
-    // Company size preference (5% weight)
-    const companySizeWeight = 5;
-    const companySizeMatch = calculateCompanySizeMatch(userProfile.preferredCompanySize, job);
-    score += companySizeMatch * companySizeWeight;
-    maxScore += companySizeWeight;
-
-    // Industry preference (5% weight)
-    const industryWeight = 5;
-    const industryMatch = calculateIndustryMatch(userProfile.preferredIndustries || [], job);
-    score += industryMatch * industryWeight;
-    maxScore += industryWeight;
+    // Company culture fit (10% weight) - NEW
+    const cultureWeight = 10;
+    const cultureMatch = calculateCultureFit(userProfile, job);
+    score += cultureMatch * cultureWeight;
+    maxScore += cultureWeight;
 
     return Math.round((score / maxScore) * 100);
   } catch (error) {
     console.error('Error calculating match score:', error);
-    return 50; // Default neutral score if error occurs
+    return 50;
   }
 }
 
