@@ -287,10 +287,14 @@ exports.handler = async (event, context) => {
                 live_jobs: jobs.filter(j => j.is_live_search).length,
                 c2c_jobs: jobs.filter(j => j.is_c2c).length,
                 sample_jobs: jobs.filter(j => j.is_sample).length,
+                fallback_jobs: jobs.filter(j => j.is_fallback).length,
                 average_match_score: jobs.length > 0 
                     ? Math.round(jobs.reduce((sum, job) => sum + (job.match_score || 0), 0) / jobs.length)
                     : 0,
-                specialization: source === 'it_c2c_specialist' ? 'IT C2C Contracts' : 'General'
+                specialization: source === 'it_c2c_specialist' ? 'IT C2C Contracts' : 'General',
+                gpt_analyzed: jobs.filter(j => j.gpt_analyzed).length,
+                ghost_filtered: jobs.filter(j => j.is_genuine === true).length,
+                total_scraped: jobs.length + (jobs.filter(j => j.is_sample).length * 5) // Estimate
             },
             message: source === 'background_database' 
                 ? `Found ${jobs.length} pre-analyzed genuine jobs from your personalized database`

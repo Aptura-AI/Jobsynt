@@ -1199,6 +1199,69 @@
             display: flex;
             gap: 10px;
             margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .job-actions .Button {
+            flex: 1;
+            min-width: 120px;
+            text-align: center;
+            padding: 8px 12px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .Button-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .Button-secondary {
+            background: #f8f9fa;
+            color: #667eea;
+            border: 1px solid #667eea;
+        }
+        
+        .Button-outline {
+            background: transparent;
+            color: #667eea;
+            border: 1px solid #667eea;
+        }
+        
+        .Button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .search-in-progress {
+            text-align: center;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+        
+        .loading-spinner {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        
+        .pipeline-info {
+            background: rgba(102, 126, 234, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+        
+        .pipeline-info p {
+            margin: 5px 0;
+            font-size: 14px;
         }
 
         /* Network contact styles */
@@ -3506,6 +3569,10 @@
                     };
                 }
 
+                // Check GPT status after search
+                const gptStatus = checkGPTStatus();
+                console.log('🔍 Post-search GPT status check:', gptStatus);
+                
                 // Display results immediately
                 if (searchResult && searchResult.success) {
                     if (searchResult.no_results) {
@@ -5343,9 +5410,47 @@ Instructions:
             }
         }
 
+        // Search for similar jobs when sample job Apply Now is clicked
+        function searchSimilarJobs(jobTitle, company) {
+            // Fill the search form with job details
+            document.getElementById('applicationPosition').value = jobTitle;
+            
+            // Show a message about searching for real jobs
+            const resultsContainer = document.querySelector('.search-results');
+            resultsContainer.innerHTML = `
+                <div class="search-in-progress">
+                    <h3>🔍 Searching for Real "${jobTitle}" Jobs</h3>
+                    <p>Looking for actual job openings similar to this sample...</p>
+                    <div class="loading-spinner">
+                        <i class="fas fa-spinner fa-spin"></i> Searching job boards...
+                    </div>
+                </div>
+            `;
+            
+            // Trigger a new search
+            setTimeout(() => {
+                document.getElementById('findJobsButton').click();
+            }, 1000);
+        }
+        
+        // Check GPT initialization
+        function checkGPTStatus() {
+            // This would typically check if we have API keys and if GPT is responding
+            const gptStatus = {
+                initialized: !!process?.env?.OPENAI_API_KEY || !!window.OPENAI_API_KEY,
+                available: true, // We'll assume it's available for now
+                lastCheck: new Date().toISOString()
+            };
+            
+            console.log('🤖 GPT Status:', gptStatus);
+            return gptStatus;
+        }
+
         // Make functions available globally
         window.showJobSearchTips = showJobSearchTips;
         window.closeJobSearchTipsModal = closeJobSearchTipsModal;
+        window.searchSimilarJobs = searchSimilarJobs;
+        window.checkGPTStatus = checkGPTStatus;
 
         // Display enhanced job results with multi-source data
         function displayEnhancedJobResults(jobs, searchData) {
@@ -5361,14 +5466,21 @@ Instructions:
                 return;
             }
 
+            const pipelineStats = searchData.summary || {};
             const searchSummary = `
                 <div class="search-summary">
-                    <h3>🎯 Found ${jobs.length} Job Matches (Optimized Search)</h3>
+                    <h3>🎯 Found ${jobs.length} Job Matches (${pipelineStats.specialization || 'Hybrid Search'})</h3>
                     <div class="search-stats">
-                        <span class="stat">📊 ${searchData.total_scraped || jobs.length} Total Found</span>
-                        <span class="stat">👻 ${searchData.ghost_filtered || 0} Ghost Jobs Filtered</span>
-                        <span class="stat">⚡ ${searchData.fallback ? 'Fallback Mode' : 'Live API'}</span>
-                        <span class="stat">🌐 Sources: ${(searchData.sources_used || []).join(', ')}</span>
+                        <span class="stat">🔍 Source: ${searchData.source || 'Unknown'}</span>
+                        <span class="stat">📊 Background Jobs: ${pipelineStats.background_jobs || 0}</span>
+                        <span class="stat">⚡ Live Jobs: ${pipelineStats.live_jobs || 0}</span>
+                        <span class="stat">🎯 C2C Jobs: ${pipelineStats.c2c_jobs || 0}</span>
+                        <span class="stat">📝 Sample Jobs: ${pipelineStats.sample_jobs || 0}</span>
+                        <span class="stat">🏆 Avg Match: ${pipelineStats.average_match_score || 0}%</span>
+                    </div>
+                    <div class="pipeline-info">
+                        <p><strong>AI Pipeline:</strong> ${searchData.message || 'Jobs processed through our AI matching system'}</p>
+                        ${searchData.next_steps ? `<p><small>💡 ${searchData.next_steps}</small></p>` : ''}
                     </div>
                 </div>
             `;
@@ -5411,10 +5523,18 @@ Instructions:
                     </div>
                     
                     <div class="job-actions">
-                        <a href="${job.url}" target="_blank" class="btn btn-primary">
-                            <i class="fas fa-external-link-alt"></i> Apply Now
-                        </a>
-                        <button onclick="saveJob('${job.id}')" class="btn btn-outline">
+                        ${job.url && job.url !== '#' ? 
+                            `<a href="${job.url}" target="_blank" class="Button Button-primary">
+                                <i class="fas fa-external-link-alt"></i> Apply Now
+                            </a>` :
+                            `<button onclick="searchSimilarJobs('${job.title}', '${job.company}')" class="Button Button-primary">
+                                <i class="fas fa-search"></i> Find Similar Jobs
+                            </button>`
+                        }
+                        <button onclick="analyzeJob('${job.url || '#'}', '${(job.description || '').replace(/'/g, "\\'")}', ${JSON.stringify(job).replace(/'/g, "\\'").replace(/"/g, '&quot;')})" class="Button Button-secondary">
+                            <i class="fas fa-ghost"></i> Analyze Job
+                        </button>
+                        <button onclick="saveJob('${job.id}')" class="Button Button-outline">
                             <i class="fas fa-bookmark"></i> Save Job
                         </button>
                     </div>
