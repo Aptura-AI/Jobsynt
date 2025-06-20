@@ -2319,18 +2319,28 @@
                             </div>
                             
                             <div class="form-group">
-                                <label>Expected Salary Range</label>
+                                <label>Expected Salary Range (Optional)</label>
                                 <div class="form-row">
                                     <div class="form-col">
+                                        <label for="salaryType">Salary Type</label>
+                                        <select id="salaryType" class="form-control">
+                                            <option value="yearly">Yearly</option>
+                                            <option value="monthly">Monthly</option>
+                                            <option value="hourly">Hourly</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row" style="margin-top: 10px;">
+                                    <div class="form-col">
                                         <div class="input-group">
-                                            <span class="input-group-text">$</span>
-                                            <input type="number" id="salaryMin" class="form-control" placeholder="Minimum" min="0" step="1000" required>
+                                            <span class="input-group-text" id="salarySymbol">$</span>
+                                            <input type="number" id="salaryMin" class="form-control" placeholder="Minimum (0 for no minimum)" min="0" step="1">
                                         </div>
                                     </div>
                                     <div class="form-col">
                                         <div class="input-group">
-                                            <span class="input-group-text">$</span>
-                                            <input type="number" id="salaryMax" class="form-control" placeholder="Maximum (optional)" min="0" step="1000">
+                                            <span class="input-group-text" id="salarySymbolMax">$</span>
+                                            <input type="number" id="salaryMax" class="form-control" placeholder="Maximum (optional)" min="0" step="1">
                                         </div>
                                     </div>
                                 </div>
@@ -2378,54 +2388,11 @@
                     <div class="results-container">
                         <div class="results-header">
                             <h3>Recommended Jobs</h3>
-                            <div class="tier-badge">10 Jobs/Day (Free Tier)</div>
                         </div>
                         
                         <div class="search-results"></div>
                         
-                        <div class="membership-tiers">
-                            <div class="tier-card free">
-                                <div class="tier-name">Free Tier</div>
-                                <div class="job-limit">10 Jobs/Day</div>
-                                <ul class="tier-features">
-                                    <li><i class="fas fa-check"></i> Basic job matching</li>
-                                    <li><i class="fas fa-check"></i> Resume analysis</li>
-                                    <li><i class="fas fa-check"></i> Ghost job detection</li>
-                                    <li><i class="fas fa-times"></i> Priority applications</li>
-                                    <li><i class="fas fa-times"></i> AI cover letters</li>
-                                </ul>
-                                <div class="tier-price">$0/month</div>
-                                <button class="Button">Current Plan</button>
-                            </div>
-                            
-                            <div class="tier-card pro">
-                                <div class="tier-name">Professional</div>
-                                <div class="job-limit">20 Jobs/Day</div>
-                                <ul class="tier-features">
-                                    <li><i class="fas fa-check"></i> Advanced job matching</li>
-                                    <li><i class="fas fa-check"></i> Full resume optimization</li>
-                                    <li><i class="fas fa-check"></i> Ghost job detection</li>
-                                    <li><i class="fas fa-check"></i> Priority applications</li>
-                                    <li><i class="fas fa-check"></i> AI cover letters</li>
-                                </ul>
-                                <div class="tier-price">$29/month</div>
-                                <button class="Button Button-primary">Upgrade Now</button>
-                            </div>
-                            
-                            <div class="tier-card executive">
-                                <div class="tier-name">Executive</div>
-                                <div class="job-limit">50 Jobs/Day</div>
-                                <ul class="tier-features">
-                                    <li><i class="fas fa-check"></i> Premium job matching</li>
-                                    <li><i class="fas fa-check"></i> Full resume optimization</li>
-                                    <li><i class="fas fa-check"></i> Ghost job detection</li>
-                                    <li><i class="fas fa-check"></i> Priority applications</li>
-                                    <li><i class="fas fa-check"></i> Dedicated career coach</li>
-                                </ul>
-                                <div class="tier-price">$79/month</div>
-                                <button class="Button Button-primary">Upgrade Now</button>
-                            </div>
-                        </div>
+
                     </div>
                 </div>
             </section>
@@ -3375,6 +3342,7 @@
                 const workMode = document.getElementById('workMode')?.value || 'all';
                 const jobType = document.getElementById('jobType')?.value || 'all';
                 const visaStatus = document.getElementById('visa')?.value || '';
+                const salaryType = document.getElementById('salaryType')?.value || 'yearly';
                 const salaryMin = parseInt(document.getElementById('salaryMin')?.value || '0');
                 const salaryMax = parseInt(document.getElementById('salaryMax')?.value || '0');
 
@@ -3389,10 +3357,7 @@
                     return;
                 }
 
-                if (salaryMin <= 0) {
-                    alert('Please enter a minimum salary');
-                    return;
-                }
+                // Salary validation removed - zero is acceptable
 
                 // Show non-blocking loading state
                 const resultsContainer = document.querySelector('.search-results');
@@ -3471,10 +3436,13 @@
                     const userId = session?.user?.id || 'anonymous';
                     
                     // Build search URL with parameters
-                    const searchUrl = new URL('/.netlify/functions/smart-job-search', window.location.origin);
+                    const searchUrl = new URL('/.netlify/functions/smart-job-search', 'https://jobsyntai.netlify.app');
                     searchUrl.searchParams.set('user_id', userId);
                     searchUrl.searchParams.set('query', jobTitle);
                     searchUrl.searchParams.set('location', userLocation);
+                    if (salaryMin > 0) searchUrl.searchParams.set('salary_min', salaryMin);
+                    if (salaryMax > 0) searchUrl.searchParams.set('salary_max', salaryMax);
+                    searchUrl.searchParams.set('salary_type', salaryType);
                     
                     // Call the smart hybrid search function
                     const smartResponse = await Promise.race([
@@ -5261,6 +5229,37 @@ Instructions:
             const dateField = document.getElementById('manualApplicationDate');
             if (dateField) {
                 dateField.value = today;
+            }
+            
+            // Handle salary type changes
+            const salaryTypeSelect = document.getElementById('salaryType');
+            if (salaryTypeSelect) {
+                salaryTypeSelect.addEventListener('change', function() {
+                    const salaryType = this.value;
+                    const salaryMinInput = document.getElementById('salaryMin');
+                    const salaryMaxInput = document.getElementById('salaryMax');
+                    
+                    // Update step values and placeholders based on salary type
+                    if (salaryType === 'hourly') {
+                        salaryMinInput.step = '1';
+                        salaryMaxInput.step = '1';
+                        salaryMinInput.placeholder = 'Minimum hourly rate (0 for no minimum)';
+                        salaryMaxInput.placeholder = 'Maximum hourly rate (optional)';
+                    } else if (salaryType === 'monthly') {
+                        salaryMinInput.step = '100';
+                        salaryMaxInput.step = '100';
+                        salaryMinInput.placeholder = 'Minimum monthly salary (0 for no minimum)';
+                        salaryMaxInput.placeholder = 'Maximum monthly salary (optional)';
+                    } else { // yearly
+                        salaryMinInput.step = '1000';
+                        salaryMaxInput.step = '1000';
+                        salaryMinInput.placeholder = 'Minimum yearly salary (0 for no minimum)';
+                        salaryMaxInput.placeholder = 'Maximum yearly salary (optional)';
+                    }
+                });
+                
+                // Trigger initial setup
+                salaryTypeSelect.dispatchEvent(new Event('change'));
             }
         });
 
