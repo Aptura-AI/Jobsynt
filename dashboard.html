@@ -3447,8 +3447,8 @@
                     const { data: { session } } = await window.supabase.auth.getSession();
                     const userId = session?.user?.id || 'anonymous';
                     
-                    // Build search URL with parameters - use relative path to avoid CSP issues
-                    const searchUrl = new URL('/.netlify/functions/smart-job-search', window.location.origin);
+                    // Build search URL with parameters - use correct Netlify domain
+                    const searchUrl = new URL('/.netlify/functions/smart-job-search', 'https://jobsyntai.netlify.app');
                     searchUrl.searchParams.set('user_id', userId);
                     searchUrl.searchParams.set('query', jobTitle);
                     searchUrl.searchParams.set('location', userLocation);
@@ -3650,7 +3650,7 @@
         async function analyzeJobPosting(jobUrl, jobDescription) {
             try {
                 // Call the actual ghost detector API
-                const response = await fetch('/.netlify/functions/ghost-detector', {
+                const response = await fetch('https://jobsyntai.netlify.app/.netlify/functions/ghost-detector', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
