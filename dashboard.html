@@ -13,7 +13,8 @@
         https://yhrwamhdiiggsapmfwas.supabase.co 
         https://yhrwamhdiiggsapmfwas.supabase.in 
         https://accounts.google.com 
-        https://api.linkedin.com;
+        https://api.linkedin.com
+        https://jobsyntai.netlify.app;
 ">
     <title>Jobsynt - Your AI-Powered Job Agent</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -370,40 +371,49 @@
         .status-rejected { background: #ffebee; color: #d32f2f; }
         .status-offer { background: #e8f5e8; color: #388e3c; }
 
-        /* No results message styling */
+        /* No results message styling - Enhanced readability */
         .no-results-message {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            color: #333;
             padding: 40px;
             border-radius: 20px;
             margin: 20px 0;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
         }
 
         .no-results-message h3 {
             margin-bottom: 20px;
             font-size: 1.8rem;
             text-align: center;
+            color: #667eea;
+            font-weight: bold;
         }
 
         .no-results-message p {
             font-size: 1.1rem;
             margin-bottom: 30px;
             text-align: center;
+            color: #555;
+            line-height: 1.6;
         }
 
         .background-search-info,
         .search-tips {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(102, 126, 234, 0.1);
             padding: 25px;
             border-radius: 15px;
             margin: 20px 0;
+            border: 1px solid rgba(102, 126, 234, 0.2);
         }
 
         .background-search-info h4,
         .search-tips h4 {
             margin-bottom: 15px;
             font-size: 1.3rem;
-            color: #fff;
+            color: #667eea;
+            font-weight: bold;
         }
 
         .background-search-info ul,
@@ -417,6 +427,8 @@
             margin: 10px 0;
             padding-left: 25px;
             position: relative;
+            color: #444;
+            line-height: 1.5;
         }
 
         .background-search-info li:before {
@@ -3435,8 +3447,8 @@
                     const { data: { session } } = await window.supabase.auth.getSession();
                     const userId = session?.user?.id || 'anonymous';
                     
-                    // Build search URL with parameters
-                    const searchUrl = new URL('/.netlify/functions/smart-job-search', 'https://jobsyntai.netlify.app');
+                    // Build search URL with parameters - use relative path to avoid CSP issues
+                    const searchUrl = new URL('/.netlify/functions/smart-job-search', window.location.origin);
                     searchUrl.searchParams.set('user_id', userId);
                     searchUrl.searchParams.set('query', jobTitle);
                     searchUrl.searchParams.set('location', userLocation);
