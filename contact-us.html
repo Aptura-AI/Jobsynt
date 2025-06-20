@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Us - JobSynt</title>
+    <link rel="stylesheet" href="public/css/styles.css">
+    <style>
+        .contact-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .contact-header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+        }
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        .contact-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+        }
+        .contact-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        .contact-form {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .form-group textarea {
+            height: 120px;
+            resize: vertical;
+        }
+        .submit-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .submit-btn:hover {
+            transform: translateY(-2px);
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .back-link:hover {
+            background: #5a67d8;
+        }
+        .support-hours {
+            background: #f8f9ff;
+            border: 1px solid #667eea;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        @media (max-width: 768px) {
+            .contact-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="contact-container">
+        <a href="dashboard.html" class="back-link">← Back to Dashboard</a>
+        
+        <div class="contact-header">
+            <h1>Contact Us</h1>
+            <p>We're here to help you succeed in your job search journey</p>
+            <p>Get in touch with our team for support, feedback, or general inquiries</p>
+        </div>
+
+        <div class="contact-grid">
+            <div class="contact-card">
+                <h3>📧 Email Support</h3>
+                <p><strong>General Support:</strong><br>
+                <a href="mailto:support@jobsynt.com">support@jobsynt.com</a></p>
+                
+                <p><strong>Technical Issues:</strong><br>
+                <a href="mailto:tech@jobsynt.com">tech@jobsynt.com</a></p>
+                
+                <p><strong>Billing & Payments:</strong><br>
+                <a href="mailto:billing@jobsynt.com">billing@jobsynt.com</a></p>
+                
+                <div class="support-hours">
+                    <strong>Response Time:</strong> Within 24 hours<br>
+                    <strong>Priority Support:</strong> Available for paid subscribers
+                </div>
+            </div>
+
+            <div class="contact-card">
+                <h3>📞 Phone Support</h3>
+                <p><strong>US Support Hotline:</strong><br>
+                <a href="tel:+13467700780">+1 346 7700 780</a></p>
+                
+                <p><strong>India Support Hotline:</strong><br>
+                <a href="tel:+918434004033">+91 8434 0040 33</a></p>
+                
+                <p><strong>WhatsApp Support:</strong><br>
+                <a href="https://wa.me/918434004033">+91 8434 0040 33</a></p>
+                
+                <div class="support-hours">
+                    <strong>Business Hours:</strong><br>
+                    Monday - Friday: 9:00 AM - 6:00 PM IST<br>
+                    Saturday: 10:00 AM - 4:00 PM IST<br>
+                    Sunday: Closed
+                </div>
+            </div>
+
+            <div class="contact-card">
+                <h3>🏢 Business Address</h3>
+                <p><strong>JobSynt Technologies</strong><br>
+                [Your Business Address Line 1]<br>
+                [Your Business Address Line 2]<br>
+                [City, State - PIN Code]<br>
+                India</p>
+                
+                <p><strong>GST Number:</strong> [Your GST Number]<br>
+                <strong>CIN:</strong> [Your Company Identification Number]</p>
+            </div>
+
+            <div class="contact-card">
+                <h3>💬 Connect With Us</h3>
+                <p><strong>Social Media:</strong></p>
+                <p>LinkedIn | Twitter | Facebook | Instagram</p>
+                
+                <p><strong>Community:</strong></p>
+                <p>Discord | Telegram | Blog</p>
+                
+                <p><em>Follow us for job market insights, career tips, and platform updates</em></p>
+            </div>
+        </div>
+
+        <div class="contact-form">
+            <h2>Send Us a Message</h2>
+            <p>Have a specific question or need personalized assistance? Fill out the form below and we'll get back to you.</p>
+            
+            <form id="contactForm">
+                <div class="form-group">
+                    <label for="name">Full Name *</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email Address *</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <input type="tel" id="phone" name="phone">
+                </div>
+                
+                <div class="form-group">
+                    <label for="subject">Subject *</label>
+                    <select id="subject" name="subject" required>
+                        <option value="">Select a topic</option>
+                        <option value="technical">Technical Support</option>
+                        <option value="billing">Billing & Payments</option>
+                        <option value="account">Account Issues</option>
+                        <option value="feature">Feature Request</option>
+                        <option value="feedback">Feedback & Suggestions</option>
+                        <option value="partnership">Business Partnership</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="message">Message *</label>
+                    <textarea id="message" name="message" placeholder="Please describe your inquiry in detail..." required></textarea>
+                </div>
+                
+                <button type="submit" class="submit-btn">Send Message</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('contactForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+            
+            if (!data.name || !data.email || !data.subject || !data.message) {
+                alert('Please fill in all required fields.');
+                return;
+            }
+            
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(data.email)) {
+                alert('Please enter a valid email address.');
+                return;
+            }
+            
+            const submitBtn = document.querySelector('.submit-btn');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = 'Sending...';
+            submitBtn.disabled = true;
+            
+            setTimeout(() => {
+                alert('Thank you for your message! We\'ll get back to you within 24 hours.');
+                this.reset();
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
