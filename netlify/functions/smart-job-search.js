@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
+const { scrapeITC2CJobs, shouldUseC2CScraper } = require('./it-c2c-scraper');
 
 // Initialize Supabase
 const supabase = createClient(
@@ -230,13 +231,36 @@ exports.handler = async (event, context) => {
             }
         }
 
-        // STEP 2: If no background jobs found, perform live search
+        // STEP 2: If no background jobs found, perform specialized or live search
         if (jobs.length === 0 || forceRefresh) {
-            console.log('🔴 No background jobs found, performing live search...');
-            const liveJobs = await performLiveSearch({ query, location, limit: 15 });
-            jobs = liveJobs;
-            source = 'live_search';
-            console.log(`✅ Found ${jobs.length} jobs from live search`);
+            console.log('🔴 No background jobs found, checking for specialized search...');
+            
+            // Check if this is an IT C2C search
+            if (shouldUseC2CScraper(query, event.queryStringParameters?.job_type)) {
+                console.log('🎯 IT C2C criteria detected, using specialized C2C scraper...');
+                try {
+                    const c2cResult = await scrapeITC2CJobs(query, location);
+                    if (c2cResult.success && c2cResult.jobs.length > 0) {
+                        jobs = c2cResult.jobs;
+                        source = 'it_c2c_specialist';
+                        console.log(`✅ Found ${jobs.length} IT C2C jobs from specialized platforms`);
+                    } else {
+                        throw new Error('C2C scraper returned no results');
+                    }
+                } catch (c2cError) {
+                    console.log('C2C scraper failed, falling back to general live search:', c2cError.message);
+                    const liveJobs = await performLiveSearch({ query, location, limit: 15 });
+                    jobs = liveJobs;
+                    source = 'live_search_fallback';
+                }
+            } else {
+                console.log('🔍 Performing general live search...');
+                const liveJobs = await performLiveSearch({ query, location, limit: 15 });
+                jobs = liveJobs;
+                source = 'live_search';
+            }
+            
+            console.log(`✅ Found ${jobs.length} jobs from ${source}`);
         }
 
         // STEP 3: If we have both, mix them intelligently
@@ -261,13 +285,17 @@ exports.handler = async (event, context) => {
             summary: {
                 background_jobs: jobs.filter(j => j.is_background).length,
                 live_jobs: jobs.filter(j => j.is_live_search).length,
+                c2c_jobs: jobs.filter(j => j.is_c2c).length,
                 sample_jobs: jobs.filter(j => j.is_sample).length,
                 average_match_score: jobs.length > 0 
                     ? Math.round(jobs.reduce((sum, job) => sum + (job.match_score || 0), 0) / jobs.length)
-                    : 0
+                    : 0,
+                specialization: source === 'it_c2c_specialist' ? 'IT C2C Contracts' : 'General'
             },
             message: source === 'background_database' 
                 ? `Found ${jobs.length} pre-analyzed genuine jobs from your personalized database`
+                : source === 'it_c2c_specialist'
+                ? `Found ${jobs.length} IT C2C contract opportunities from specialized platforms (Dice, TechFetch, Corp-to-Corp.org, Benchfolks). LinkedIn given lower priority as requested.`
                 : source === 'live_search'
                 ? `Performed live search and found ${jobs.length} jobs. Our background system is continuously building your personalized job database.`
                 : `Found ${jobs.length} jobs using hybrid search (background + live). Your personalized database is growing!`,
