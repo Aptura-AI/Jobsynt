@@ -82,6 +82,13 @@ exports.handler = async (event, context) => {
             .eq('user_id', userId)
             .single();
 
+        // Get latest search preferences from user_job_preferences table (form-over-profile priority)
+        const { data: searchPrefs } = await supabase
+            .from('user_job_preferences')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
         if (!profile) {
             return {
                 statusCode: 404,
@@ -92,6 +99,31 @@ exports.handler = async (event, context) => {
                 })
             };
         }
+
+        console.log('📝 Using search preferences (Form Priority):', {
+            has_search_prefs: !!searchPrefs,
+            keywords: searchPrefs?.keywords || profile.current_title || 'from profile',
+            location: searchPrefs?.location || 'from profile',
+            form_overrides: searchPrefs ? Object.keys(searchPrefs).filter(k => searchPrefs[k]).length : 0
+        });
+
+        // Merge preferences with form-over-profile priority
+        const searchParams = {
+            // Form data takes priority over profile data
+            keywords: searchPrefs?.keywords || profile.current_title || 'software developer',
+            location: searchPrefs?.location || (profile.city && profile.state ? `${profile.city}, ${profile.state}` : profile.city || profile.state) || 'United States',
+            visa_status: searchPrefs?.visa_status || profile.visa_status || 'all',
+            salary_type: searchPrefs?.salary_type || 'yearly',
+            salary_min: searchPrefs?.salary_min || 0,
+            salary_max: searchPrefs?.salary_max || 200000,
+            experience_level: searchPrefs?.experience_level || profile.experience_level || 'all',
+            job_types: searchPrefs?.job_types || (profile.job_types ? profile.job_types.join(',') : 'all'),
+            work_modes: searchPrefs?.work_modes || (profile.work_modes ? profile.work_modes.join(',') : 'all'),
+            skills: profile.skills || '',
+            search_priority: 'form_over_profile'
+        };
+
+        console.log('📝 Using search parameters (Form Priority):', searchParams);
 
         // Set continuous search status
         await supabase
@@ -108,7 +140,7 @@ exports.handler = async (event, context) => {
             });
 
         // Start immediate background search
-        const searchResult = await triggerImmediateSearch(userId, profile);
+        const searchResult = await triggerImmediateSearch(userId, profile, searchPrefs);
 
         return {
             statusCode: 200,
@@ -139,7 +171,7 @@ exports.handler = async (event, context) => {
 };
 
 // Trigger immediate search for genuine jobs
-async function triggerImmediateSearch(userId, profile) {
+async function triggerImmediateSearch(userId, profile, searchPrefs) {
     console.log(`🚀 Starting immediate job search for user: ${userId}`);
     
     try {
@@ -148,6 +180,7 @@ async function triggerImmediateSearch(userId, profile) {
         const response = await axios.post(scraperUrl, {
             user_id: userId,
             profile: profile,
+            search_prefs: searchPrefs,
             continuous_mode: true,
             target_count: 20,
             quality_threshold: 70, // Only jobs with 70+ GPT score

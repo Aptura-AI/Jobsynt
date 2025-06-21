@@ -28,6 +28,7 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-linkedin-oauth2": "^2.0.0",
     "puppeteer-core": "^10.4.0",
+    "razorpay": "^2.9.2",
     "redis": "^4.6.11",
     "uuid": "^9.0.1"
   },

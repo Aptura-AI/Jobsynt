@@ -122,18 +122,51 @@ exports.handler = async (event, context) => {
     }
 
     try {
-        const userId = event.queryStringParameters?.user_id || 'anonymous';
-        const query = event.queryStringParameters?.query || 'software developer';
-        const location = event.queryStringParameters?.location || 'remote';
-        const forceRefresh = event.queryStringParameters?.force_refresh === 'true';
+        // Parse request body for POST requests
+        let requestData = {};
+        if (event.httpMethod === 'POST' && event.body) {
+            try {
+                requestData = JSON.parse(event.body);
+            } catch (parseError) {
+                console.error('Failed to parse request body:', parseError);
+                throw new Error('Invalid request format');
+            }
+        }
+        
+        // Extract all search parameters with form-over-profile priority
+        const userId = requestData.user_id || event.queryStringParameters?.user_id || 'anonymous';
+        const keywords = requestData.position || requestData.keywords || requestData.query || 
+                         event.queryStringParameters?.keywords || event.queryStringParameters?.query || 'software developer';
+        const location = requestData.location || event.queryStringParameters?.location || 'remote';
+        const visaStatus = requestData.visa_status || event.queryStringParameters?.visa_status || 'all';
+        const salaryType = requestData.salary_type || event.queryStringParameters?.salary_type || 'yearly';
+        const salaryMin = parseInt(requestData.salary_min || event.queryStringParameters?.salary_min || '0');
+        const salaryMax = parseInt(requestData.salary_max || event.queryStringParameters?.salary_max || '200000');
+        const experienceLevel = requestData.experience_level || event.queryStringParameters?.experience_level || 'all';
+        const jobTypes = requestData.job_type || requestData.job_types || event.queryStringParameters?.job_types || 'all';
+        const workModes = requestData.work_mode || requestData.work_modes || event.queryStringParameters?.work_modes || 'all';
+        const skills = requestData.skills || event.queryStringParameters?.skills || '';
+        const searchPriority = requestData.search_priority || event.queryStringParameters?.search_priority || 'form_over_profile';
+        const forceRefresh = (requestData.force_refresh || event.queryStringParameters?.force_refresh) === 'true';
 
-        console.log(`🔍 Smart job search for user: ${userId}, query: "${query}", location: "${location}"`);
+        console.log(`🔍 Smart job search with FORM PRIORITY for user: ${userId}`);
+        console.log(`📝 Search Parameters:`, {
+            keywords,
+            location,
+            visa_status: visaStatus,
+            salary_range: `${salaryMin}-${salaryMax} (${salaryType})`,
+            experience_level: experienceLevel,
+            job_types: jobTypes,
+            work_modes: workModes,
+            skills: skills ? skills.substring(0, 50) + '...' : 'none',
+            search_priority: searchPriority
+        });
 
         let jobs = [];
         let source = 'unknown';
 
         // STEP 1: Try background database first (if not forcing refresh)
-        if (!forceRefresh) {
+        if (!forceRefresh && process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY)) {
             try {
                 const { data: backgroundJobs, error } = await supabase
                     .from('daily_job_recommendations')
@@ -176,18 +209,22 @@ exports.handler = async (event, context) => {
                     }
                     source = 'background_database';
                     console.log(`✅ Found ${jobs.length} jobs from background database`);
+                } else if (error) {
+                    console.log('Database query error:', error.message);
                 }
             } catch (dbError) {
                 console.log('Background database not available, falling back to live search:', dbError.message);
             }
+        } else {
+            console.log('Supabase credentials not available or refresh forced, skipping database search');
         }
 
-        // STEP 2: If no background jobs found, trigger continuous search and show proper message
-        if (jobs.length === 0 || forceRefresh) {
-            console.log('🔴 No background jobs found, triggering continuous search...');
+        // STEP 2: If no background jobs found, get first 10 real jobs ASAP
+        if (jobs.length < 10 || forceRefresh) {
+            console.log('🔴 Need more jobs (have ' + jobs.length + '), getting first 10 real jobs ASAP...');
             
             // Trigger continuous job finder for this user (non-blocking)
-            if (userId !== 'anonymous') {
+            if (userId !== 'anonymous' && process.env.URL) {
                 try {
                     axios.post(`${process.env.URL}/.netlify/functions/continuous-job-finder`, {
                         user_id: userId
@@ -197,13 +234,15 @@ exports.handler = async (event, context) => {
                 } catch (error) {
                     console.log('Failed to trigger continuous search:', error.message);
                 }
+            } else {
+                console.log('Skipping continuous search trigger - anonymous user or URL not set');
             }
             
             // Check if this is an IT C2C search
-            if (shouldUseC2CScraper(query, event.queryStringParameters?.job_type)) {
+            if (shouldUseC2CScraper(keywords, jobTypes)) {
                 console.log('🎯 IT C2C criteria detected, using specialized C2C scraper...');
                 try {
-                    const c2cResult = await scrapeITC2CJobs(query, location);
+                    const c2cResult = await scrapeITC2CJobs(keywords, location);
                     if (c2cResult.success && c2cResult.jobs.length > 0) {
                         jobs = c2cResult.jobs;
                         source = 'it_c2c_specialist';
@@ -213,13 +252,33 @@ exports.handler = async (event, context) => {
                     }
                 } catch (c2cError) {
                     console.log('C2C scraper failed, falling back to general live search:', c2cError.message);
-                    const liveJobs = await performLiveSearch({ query, location, limit: 15 });
+                    const liveJobs = await performLiveSearch({ 
+                        query: keywords, 
+                        location, 
+                        limit: 10,
+                        visa_status: visaStatus,
+                        salary_min: salaryMin,
+                        salary_max: salaryMax,
+                        experience_level: experienceLevel,
+                        job_types: jobTypes,
+                        work_modes: workModes
+                    });
                     jobs = liveJobs;
                     source = 'live_search_fallback';
                 }
             } else {
-                console.log('🔍 Performing general live search...');
-                const liveJobs = await performLiveSearch({ query, location, limit: 15 });
+                console.log('🔍 Performing general live search for first 10 real jobs...');
+                const liveJobs = await performLiveSearch({ 
+                    query: keywords, 
+                    location, 
+                    limit: 10,
+                    visa_status: visaStatus,
+                    salary_min: salaryMin,
+                    salary_max: salaryMax,
+                    experience_level: experienceLevel,
+                    job_types: jobTypes,
+                    work_modes: workModes
+                });
                 jobs = liveJobs;
                 source = 'live_search';
             }
@@ -230,22 +289,42 @@ exports.handler = async (event, context) => {
         // STEP 3: If we have both, mix them intelligently
         if (source === 'background_database' && jobs.length < 10) {
             console.log('🔄 Supplementing background jobs with live search...');
-            const supplementaryJobs = await performLiveSearch({ query, location, limit: 5 });
+            const supplementaryJobs = await performLiveSearch({ 
+                query: keywords, 
+                location, 
+                limit: 10 - jobs.length,
+                visa_status: visaStatus,
+                salary_min: salaryMin,
+                salary_max: salaryMax,
+                experience_level: experienceLevel,
+                job_types: jobTypes,
+                work_modes: workModes
+            });
             jobs = [...jobs, ...supplementaryJobs.slice(0, 10 - jobs.length)];
             source = 'hybrid';
         }
 
-        // Sort by match score and limit results
+        // Sort by match score and limit to first 10 real jobs
         jobs = jobs
             .sort((a, b) => (b.match_score || 0) - (a.match_score || 0))
-            .slice(0, 20);
+            .slice(0, 10);
 
         const response = {
             success: true,
             jobs: jobs,
             count: jobs.length,
             source: source,
-            search_params: { query, location, user_id: userId },
+            search_params: { 
+                keywords, 
+                location, 
+                user_id: userId,
+                visa_status: visaStatus,
+                salary_range: `${salaryMin}-${salaryMax} (${salaryType})`,
+                experience_level: experienceLevel,
+                job_types: jobTypes,
+                work_modes: workModes,
+                search_priority: searchPriority
+            },
             summary: {
                 background_jobs: jobs.filter(j => j.is_background).length,
                 live_jobs: jobs.filter(j => j.is_live_search).length,
