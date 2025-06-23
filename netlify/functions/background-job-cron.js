@@ -1,49 +1,73 @@
-const axios = require('axios');
+const { runContinuousC2CScraping } = require('./it-c2c-scraper');
 
-// This function is triggered by Netlify's scheduled functions
-// To enable, add this to netlify.toml:
-// [[functions]]
-// schedule = "0 */2 * * *"  # Every 2 hours
-// name = "background-job-cron"
+// ACTIVE SCRAPER: Contract Jobs for ALL Profiles
+const ACTIVE_SCRAPER = {
+    name: 'Universal Contract Job Scraper',
+    function: runContinuousC2CScraping,
+    enabled: true,
+    description: 'Scrapes real contract jobs (C2C) for ALL user profiles - no IT keyword restriction',
+    interval: '30 minutes'
+};
+
+// ALL OTHER SCRAPERS DELETED TO AVOID COSTS
+// Only IT C2C scraper remains active
 
 exports.handler = async (event, context) => {
-    console.log('🕐 Scheduled background job scraper triggered');
-    
+    const headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+    };
+
+    if (event.httpMethod === 'OPTIONS') {
+        return { statusCode: 200, headers, body: '' };
+    }
+
     try {
-        // Call the main background scraper
-        const scraperUrl = process.env.URL || 'https://your-site.netlify.app';
-        const response = await axios.post(`${scraperUrl}/.netlify/functions/background-job-scraper`, {
-            source: 'cron',
-            timestamp: new Date().toISOString()
-        }, {
-            timeout: 300000 // 5 minutes timeout
-        });
-
-        console.log('✅ Background scraper completed successfully');
-        console.log('Results:', response.data);
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                success: true,
-                message: 'Background job scraper executed successfully',
-                results: response.data,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('❌ Cron job error:', error.message);
+        console.log('🔄 Starting scheduled IT C2C job scraping...');
         
-        // Send notification about the failure (optional)
-        // You could integrate with email service here
+        // Only run the active IT C2C scraper
+        if (ACTIVE_SCRAPER.enabled) {
+            const result = await ACTIVE_SCRAPER.function();
+            
+            console.log(`✅ ${ACTIVE_SCRAPER.name} completed:`, result);
+            
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    success: true,
+                    active_scraper: ACTIVE_SCRAPER.name,
+                    result: result,
+                    dormant_scrapers: 0,
+                    message: 'IT C2C scraping completed successfully',
+                    next_run: 'In 30 minutes'
+                })
+            };
+        } else {
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    success: false,
+                    message: 'No active scrapers enabled',
+                    active_scraper: null,
+                    dormant_scrapers: 0
+                })
+            };
+        }
+        
+    } catch (error) {
+        console.error('Background cron error:', error);
         
         return {
             statusCode: 500,
+            headers,
             body: JSON.stringify({
                 success: false,
                 error: error.message,
-                timestamp: new Date().toISOString()
+                active_scraper: ACTIVE_SCRAPER.name,
+                message: 'Background scraping failed'
             })
         };
     }

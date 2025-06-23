@@ -36,7 +36,27 @@ exports.handler = async (event, context) => {
       };
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Clean environment variables (remove quotes and semicolons)
+    const cleanSupabaseUrl = (supabaseUrl || '').replace(/[';]/g, '');
+    const cleanSupabaseKey = (supabaseKey || '').replace(/[';]/g, '');
+    
+    const supabase = cleanSupabaseUrl && cleanSupabaseKey ? createClient(cleanSupabaseUrl, cleanSupabaseKey) : null;
+    
+    if (!supabase) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          recommendations: {
+            hr: [],
+            department: [],
+            skills: []
+          },
+          message: 'Network recommendations are being prepared. Check back later for personalized networking suggestions.'
+        })
+      };
+    }
     
     // Get user ID from request
     const { user_id } = event.queryStringParameters || {};

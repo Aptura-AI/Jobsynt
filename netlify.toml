@@ -20,3 +20,10 @@
   from = "/index"
   to = "/index.html"
   status = 200
+
+# Scheduled Functions
+[functions.background-job-cron]
+  schedule = "0 */30 * * *"  # Every 30 minutes - IT C2C Scraper
+
+[functions.general-job-scraper]
+  schedule = "0 */45 * * *"  # Every 45 minutes - General Jobs (BDM, Sales, etc.)

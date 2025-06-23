@@ -2,11 +2,12 @@ const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 const { scrapeITC2CJobs, shouldUseC2CScraper } = require('./it-c2c-scraper');
 
+// Clean environment variables (remove quotes and semicolons)
+const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/[';]/g, '');
+const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').replace(/[';]/g, '');
+
 // Initialize Supabase
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
-);
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // Live search function (simplified version of your existing scrapers)
 async function performLiveSearch(searchParams) {
@@ -166,7 +167,7 @@ exports.handler = async (event, context) => {
         let source = 'unknown';
 
         // STEP 1: Try background database first (if not forcing refresh)
-        if (!forceRefresh && process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY)) {
+        if (!forceRefresh && supabase) {
             try {
                 const { data: backgroundJobs, error } = await supabase
                     .from('daily_job_recommendations')

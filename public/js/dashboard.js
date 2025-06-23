@@ -606,17 +606,80 @@ async function handleJobSearch(e) {
         const formData = new FormData(e.target);
         const searchParams = Object.fromEntries(formData.entries());
 
-        const { data: jobs, error } = await window.supabase
-            .from('job_listings')
-            .select('*')
-            .ilike('title', `%${searchParams.keywords}%`)
-            .ilike('location', `%${searchParams.location}%`);
+        // Show loading indicator
+        const resultsContainer = document.getElementById('jobResults');
+        if (resultsContainer) {
+            resultsContainer.innerHTML = '<div class="loading">🔍 Searching for jobs...</div>';
+        }
 
-        if (error) throw error;
+        // Use smart job search function
+        const response = await fetch('/.netlify/functions/smart-job-search', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                keywords: searchParams.keywords,
+                location: searchParams.location,
+                jobType: searchParams.jobType || 'full-time',
+                salaryMin: searchParams.salaryMin,
+                salaryMax: searchParams.salaryMax,
+                userId: (await window.supabase.auth.getUser()).data.user?.id
+            })
+        });
 
-        displayJobResults(jobs);
+        const data = await response.json();
+        
+        if (data.jobs && data.jobs.length > 0) {
+            displayJobResults(data.jobs);
+        } else {
+            // Try backup job search for interface testing
+            try {
+                const backupResponse = await fetch('/.netlify/functions/backup-job-search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        keywords: searchParams.keywords,
+                        location: searchParams.location
+                    })
+                });
+
+                const backupData = await backupResponse.json();
+                
+                if (backupData.jobs && backupData.jobs.length > 0) {
+                    displayJobResults(backupData.jobs);
+                    // Show warning about sample data
+                    if (resultsContainer) {
+                        const warningDiv = document.createElement('div');
+                        warningDiv.className = 'alert alert-warning';
+                        warningDiv.innerHTML = `
+                            <strong>⚠️ Interface Testing Mode</strong><br>
+                            ${backupData.message}<br>
+                            <small>API Status: ${JSON.stringify(backupData.api_status, null, 2)}</small>
+                        `;
+                        resultsContainer.insertBefore(warningDiv, resultsContainer.firstChild);
+                    }
+                } else {
+                    if (resultsContainer) {
+                        resultsContainer.innerHTML = '<div class="no-jobs">No jobs found. Our scrapers are working to find more opportunities. Please check back later!</div>';
+                    }
+                }
+            } catch (backupError) {
+                console.error('Backup job search failed:', backupError);
+                if (resultsContainer) {
+                    resultsContainer.innerHTML = '<div class="no-jobs">No jobs found. Our scrapers are working to find more opportunities. Please check back later!</div>';
+                }
+            }
+        }
+
     } catch (error) {
         console.error('Job search error:', error);
+        const resultsContainer = document.getElementById('jobResults');
+        if (resultsContainer) {
+            resultsContainer.innerHTML = '<div class="error">Failed to search jobs. Please try again.</div>';
+        }
         showAlert('danger', 'Failed to search jobs');
     }
 }
@@ -631,16 +694,20 @@ function displayJobResults(jobs) {
         const jobCard = document.createElement('div');
         jobCard.className = 'job-card';
         jobCard.innerHTML = `
-            <h3>${job.title}</h3>
-            <p class="company">${job.company}</p>
-            <p class="location">${job.location}</p>
-            <p class="description">${job.description.substring(0, 150)}...</p>
-            <button class="button button-primary apply-btn" data-job-id="${job.id}">Apply Now</button>
+            <h3>${job.job_title || job.title}</h3>
+            <p class="company">${job.employer_name || job.company}</p>
+            <p class="location">${job.job_city || job.location}</p>
+            <p class="description">${(job.job_description || job.description || '').substring(0, 150)}...</p>
+            ${job.job_apply_link ? 
+                `<a href="${job.job_apply_link}" target="_blank" class="button button-primary">Apply Now</a>` : 
+                `<button class="button button-primary apply-btn" data-job-id="${job.id}">Apply Now</button>`
+            }
+            ${job.job_salary ? `<p class="salary">💰 ${job.job_salary}</p>` : ''}
         `;
         resultsContainer.appendChild(jobCard);
     });
 
-    // Add event listeners to dynamically created buttons
+    // Add event listeners to dynamically created buttons (for jobs without direct apply links)
     document.querySelectorAll('.apply-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             applyForJob(e.target.dataset.jobId);
