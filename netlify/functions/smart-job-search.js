@@ -1,6 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
-const { scrapeITC2CJobs, shouldUseC2CScraper } = require('./it-c2c-scraper');
 
 // Clean environment variables (remove quotes and semicolons)
 const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/[';]/g, '');
@@ -9,12 +8,57 @@ const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABA
 // Initialize Supabase
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-// Live search function (simplified version of your existing scrapers)
+// Use the Enhanced Smart Scraper for live searches
+async function callEnhancedSmartScraper(query, location) {
+    try {
+        console.log(`🚀 Calling Enhanced Smart Scraper for: "${query}" in ${location}`);
+        
+        // Call the smart scraper with search mode
+        const response = await axios.post('/.netlify/functions/smart-job-scraper?search=true', {
+            query: query,
+            location: location,
+            jobType: 'all'
+        }, {
+            timeout: 30000,
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.status === 200 && response.data?.success) {
+            console.log(`✅ Enhanced Smart Scraper found ${response.data.jobs?.length || 0} jobs`);
+            return response.data.jobs || [];
+        } else {
+            console.log('⚠️ Enhanced Smart Scraper returned no results');
+            return [];
+        }
+        
+    } catch (error) {
+        console.error('❌ Enhanced Smart Scraper error:', error.message);
+        return [];
+    }
+}
+
+// Live search function using Enhanced Smart Scraper
 async function performLiveSearch(searchParams) {
     const { query = 'software developer', location = 'remote', limit = 10 } = searchParams;
-    const jobs = [];
+    let jobs = [];
     
     try {
+        // First try the Enhanced Smart Scraper
+        const smartJobs = await callEnhancedSmartScraper(query, location);
+        if (smartJobs.length > 0) {
+            jobs = smartJobs.slice(0, limit).map(job => ({
+                ...job,
+                is_live_search: true,
+                match_score: 85 // High score for smart scraper results
+            }));
+            
+            console.log(`✅ Enhanced Smart Scraper provided ${jobs.length} jobs`);
+            return jobs;
+        }
+        
+        // Fallback to direct API calls if smart scraper is unavailable
+        console.log('🔄 Falling back to direct API calls...');
+        
         // JSearch API (if available)
         if (process.env.JSEARCH_API_KEY) {
             try {
@@ -43,10 +87,10 @@ async function performLiveSearch(searchParams) {
                             work_mode: job.job_is_remote ? 'Remote' : 'On-site',
                             description: job.job_description || job.job_highlights?.Qualifications?.join('; ') || 'Great opportunity',
                             url: job.job_apply_link || job.job_google_link || '#',
-                            source: 'JSearch (Live)',
+                            source: 'JSearch (Live Fallback)',
                             posted_date: job.job_posted_at_datetime_utc || new Date().toISOString(),
                             is_live_search: true,
-                            match_score: 75 // Default match score for live results
+                            match_score: 75
                         });
                     }
                 }
@@ -84,7 +128,7 @@ async function performLiveSearch(searchParams) {
                             work_mode: 'On-site',
                             description: job.description || 'Great opportunity in a growing company',
                             url: job.redirect_url || '#',
-                            source: 'Adzuna (Live)',
+                            source: 'Adzuna (Live Fallback)',
                             posted_date: job.created || new Date().toISOString(),
                             is_live_search: true,
                             match_score: 70
@@ -98,7 +142,7 @@ async function performLiveSearch(searchParams) {
 
         // NO FAKE JOBS - If no real jobs found, return empty with proper message
         if (jobs.length === 0) {
-            console.log('❌ No genuine jobs found - continuous search will find real opportunities');
+            console.log('❌ No genuine jobs found - Enhanced Smart Scraper running 24/7 will find real opportunities');
         }
 
         return jobs;
@@ -169,55 +213,91 @@ exports.handler = async (event, context) => {
         // STEP 1: Try background database first (if not forcing refresh)
         if (!forceRefresh && supabase) {
             try {
-                const { data: backgroundJobs, error } = await supabase
-                    .from('daily_job_recommendations')
-                    .select(`
-                        profile_matched_jobs (
-                            profile_match_score,
-                            scraped_jobs (
-                                job_id, title, company, location, salary, job_type, 
-                                work_mode, description, url, source, posted_date, 
-                                extracted_skills, ghost_score, is_ghost_job
-                            )
-                        )
-                    `)
-                    .eq('user_id', userId)
-                    .eq('is_active', true)
+                console.log(`🔍 Searching database for user ${userId}...`);
+                
+                // Query 1: User-specific jobs
+                const { data: userJobs, error: userError } = await supabase
+                    .from('scraped_jobs')
+                    .select('*')
+                    .eq('profile_id', userId)
+                    .order('scraped_at', { ascending: false })
                     .limit(20);
 
-                if (!error && backgroundJobs && backgroundJobs.length > 0) {
-                    for (const rec of backgroundJobs) {
-                        if (rec.profile_matched_jobs?.scraped_jobs) {
-                            const job = rec.profile_matched_jobs.scraped_jobs;
-                            jobs.push({
-                                id: job.job_id,
-                                title: job.title,
-                                company: job.company,
-                                location: job.location,
-                                salary: job.salary,
-                                job_type: job.job_type,
-                                work_mode: job.work_mode,
-                                description: job.description,
-                                url: job.url,
-                                source: `${job.source} (Background)`,
-                                posted_date: job.posted_date,
-                                extracted_skills: job.extracted_skills,
-                                match_score: rec.profile_matched_jobs.profile_match_score,
-                                is_background: true,
-                                is_genuine: !job.is_ghost_job
-                            });
-                        }
+                // Query 2: Global constant search jobs (available to all users)
+                const { data: globalJobs, error: globalError } = await supabase
+                    .from('scraped_jobs')
+                    .select('*')
+                    .is('profile_id', null)
+                    .eq('is_constant_search', true)
+                    .order('scraped_at', { ascending: false })
+                    .limit(10);
+
+                if (!userError && !globalError) {
+                    // Combine user-specific and global jobs
+                    const allDbJobs = [];
+                    
+                    // Add user-specific jobs first (higher priority)
+                    if (userJobs && userJobs.length > 0) {
+                        allDbJobs.push(...userJobs.map(job => ({
+                            id: job.job_id || job.id,
+                            title: job.title,
+                            company: job.company,
+                            location: job.location,
+                            salary: job.salary,
+                            job_type: job.job_type,
+                            work_mode: job.work_mode,
+                            description: job.description,
+                            url: job.url,
+                            source: job.source + ' (Profile Match)',
+                            posted_date: job.posted_date,
+                            match_score: job.match_score || 80,
+                            is_from_database: true,
+                            job_source: 'user_specific'
+                        })));
+                        console.log(`✅ Found ${userJobs.length} user-specific jobs in database`);
                     }
-                    source = 'background_database';
-                    console.log(`✅ Found ${jobs.length} jobs from background database`);
-                } else if (error) {
-                    console.log('Database query error:', error.message);
+                    
+                    // Add global constant search jobs (PeopleSoft, etc.)
+                    if (globalJobs && globalJobs.length > 0) {
+                        allDbJobs.push(...globalJobs.map(job => ({
+                            id: job.job_id || job.id,
+                            title: job.title,
+                            company: job.company,
+                            location: job.location,
+                            salary: job.salary,
+                            job_type: job.job_type,
+                            work_mode: job.work_mode,
+                            description: job.description,
+                            url: job.url,
+                            source: job.source + ' (Premium Opportunity)',
+                            posted_date: job.posted_date,
+                            match_score: 85, // High score for premium jobs
+                            is_from_database: true,
+                            job_source: 'constant_search',
+                            constant_search_type: job.constant_search_type
+                        })));
+                        console.log(`✅ Found ${globalJobs.length} premium constant search jobs`);
+                    }
+
+                    if (allDbJobs.length > 0) {
+                        // Sort combined results by match score and date
+                        allDbJobs.sort((a, b) => {
+                            if (a.match_score !== b.match_score) {
+                                return b.match_score - a.match_score; // Higher score first
+                            }
+                            return new Date(b.posted_date) - new Date(a.posted_date); // Newer first
+                        });
+
+                        jobs = allDbJobs.slice(0, 10);
+                        source = `Database (${userJobs?.length || 0} profile + ${globalJobs?.length || 0} premium)`;
+                        
+                        console.log(`✅ Using database results: ${jobs.length} total jobs`);
+                    }
                 }
             } catch (dbError) {
-                console.log('Background database not available, falling back to live search:', dbError.message);
+                console.error('Database search error:', dbError);
+                // Continue to live search if database fails
             }
-        } else {
-            console.log('Supabase credentials not available or refresh forced, skipping database search');
         }
 
         // STEP 2: If no background jobs found, get first 10 real jobs ASAP

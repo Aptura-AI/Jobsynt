@@ -29,7 +29,7 @@ exports.handler = async (event, context) => {
         // Get real subscriber data from profiles table
         const { data: profiles, error } = await supabase
             .from('profiles')
-            .select('id, email, full_name, created_at, target_role')
+            .select('id, email, first_name, last_name, created_at, current_title')
             .order('created_at', { ascending: false })
             .limit(10); // Latest 10 subscribers
 
@@ -48,12 +48,12 @@ exports.handler = async (event, context) => {
                 .eq('profile_id', profile.id);
 
             subscribers.push({
-                name: profile.full_name || 'Unknown User',
+                name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown User',
                 email: profile.email || 'No email',
                 plan: 'Free', // Default plan - update based on your billing system
                 joined: profile.created_at,
                 jobs: jobCount || 0,
-                target_role: profile.target_role
+                target_role: profile.current_title
             });
         }
 

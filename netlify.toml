@@ -21,9 +21,8 @@
   to = "/index.html"
   status = 200
 
-# Scheduled Functions
+# 24/7 Enhanced Smart Job Scraper - The ONLY scraper needed
 [functions.background-job-cron]
-  schedule = "0 */30 * * *"  # Every 30 minutes - IT C2C Scraper
+  schedule = "0 */15 * * *"  # Every 15 minutes - Enhanced Smart IT Contract Scraper targeting Dice, Indeed, LinkedIn, Upwork & FlexJobs
 
-[functions.general-job-scraper]
-  schedule = "0 */45 * * *"  # Every 45 minutes - General Jobs (BDM, Sales, etc.)
+# ALL OTHER SCRAPERS DELETED - Single enhanced scraper handles everything intelligently

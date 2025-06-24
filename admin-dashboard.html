@@ -164,7 +164,7 @@
         <!-- Action Buttons -->
         <div class="flex flex-wrap gap-4 mt-8">
             <button id="manualScrapeBtn" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors">
-                <i class="fas fa-play mr-2"></i>Run IT C2C Scrape
+                <i class="fas fa-play mr-2"></i>Run Enhanced IT Contract Scrape
             </button>
             <button id="generalScrapeBtn" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors">
                 <i class="fas fa-briefcase mr-2"></i>Run General Scrape (BDM/Sales)
@@ -258,25 +258,26 @@
             }
 
             async loadScrapersStatus() {
+                let scrapers = [];
+                
                 try {
                     // Fetch real scraper status from backend
                     const response = await fetch('/.netlify/functions/scraper-status');
-                    let scrapers = [];
                     
                     if (response.ok) {
                         const data = await response.json();
                         scrapers = data.scrapers || [];
                     } else {
-                        // Show only the active IT C2C scraper (all others deleted to avoid costs)
+                        // Show only the active enhanced scraper
                         scrapers = [
-                            { name: 'it-c2c-scraper.js', status: 'active', size: '15KB', lastRun: 'Unknown', jobsScraped: 0, type: 'ACTIVE', description: 'IT Contract C2C Jobs - Running 24/7' }
+                            { name: 'Enhanced IT Contract Scraper', status: 'active', size: '18KB', lastRun: 'Unknown', jobsScraped: 0, type: 'ACTIVE', description: 'Smart IT Contract Jobs - Targeting Dice, Indeed, LinkedIn, Upwork & FlexJobs' }
                         ];
                     }
                 } catch (error) {
                     console.error('Error fetching scraper status:', error);
                     // Show only the active scraper if error
                     scrapers = [
-                        { name: 'it-c2c-scraper.js', status: 'active', size: '15KB', lastRun: 'Unknown', jobsScraped: 0, type: 'ACTIVE', description: 'IT Contract C2C Jobs - Running 24/7' }
+                        { name: 'Enhanced IT Contract Scraper', status: 'active', size: '18KB', lastRun: 'Unknown', jobsScraped: 0, type: 'ACTIVE', description: 'Smart IT Contract Jobs - Targeting Dice, Indeed, LinkedIn, Upwork & FlexJobs' }
                     ];
                 }
 
@@ -421,28 +422,30 @@
             async runManualScrape() {
                 const btn = document.getElementById('manualScrapeBtn');
                 btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Running IT C2C Scrape...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Running Enhanced IT Contract Scrape...';
                 
                 try {
-                    const response = await fetch('/.netlify/functions/it-c2c-scraper', {
-                        method: 'POST'
+                    const response = await fetch('/.netlify/functions/smart-job-scraper?manual=true', {
+                        method: 'GET'
                     });
                     
                     if (response.ok) {
                         const result = await response.json();
-                        this.showSuccess(`IT C2C Scrape completed! Found ${result.jobsFound || 0} jobs, saved ${result.jobsSaved || 0} jobs.`);
+                        this.showSuccess(`Enhanced IT Contract Scrape completed! Processed ${result.profiles_processed || 0} profiles, found ${result.total_jobs_found || 0} jobs, saved ${result.total_jobs_saved || 0} new opportunities.`);
                     } else {
-                        this.showError('IT C2C scrape failed. Check logs for details.');
+                        const errorText = await response.text();
+                        console.error('Scrape failed:', errorText);
+                        this.showError('Enhanced IT Contract scrape failed. Check logs for details.');
                     }
                     
                     // Refresh data after scrape
                     this.loadDashboardData();
                 } catch (error) {
-                    console.error('Error triggering IT C2C scrape:', error);
-                    this.showError('Error triggering IT C2C scrape: ' + error.message);
+                    console.error('Error triggering enhanced IT contract scrape:', error);
+                    this.showError('Error triggering enhanced IT contract scrape: ' + error.message);
                 } finally {
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-play mr-2"></i>Run IT C2C Scrape';
+                    btn.innerHTML = '<i class="fas fa-play mr-2"></i>Run Enhanced IT Contract Scrape';
                 }
             }
 
