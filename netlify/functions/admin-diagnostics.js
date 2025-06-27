@@ -35,40 +35,47 @@ exports.handler = async (event, context) => {
         if (!supabase) {
             diagnostics.supabaseConnection = 'Failed - Missing environment variables';
         } else {
-            // Test basic connection
-            const { data, error } = await supabase.auth.getUser();
-            if (error && error.message !== 'No user found') {
-                diagnostics.supabaseConnection = `Error: ${error.message}`;
-            } else {
-                diagnostics.supabaseConnection = 'Connected';
-                
-                // Test table access
-                try {
-                    const { count: profilesCount } = await supabase
-                        .from('profiles')
-                        .select('id', { count: 'exact', head: true });
-                    diagnostics.tables.profiles = profilesCount || 0;
-                } catch (e) {
-                    diagnostics.tables.profiles = `Error: ${e.message}`;
+            // Test basic connection by querying a table instead of auth.getUser()
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .limit(1);
+                if (error) {
+                    diagnostics.supabaseConnection = `Error: ${error.message}`;
+                } else {
+                    diagnostics.supabaseConnection = 'Connected';
                 }
+            } catch (e) {
+                diagnostics.supabaseConnection = `Error: ${e.message}`;
+            }
+            
+            // Test table access
+            try {
+                const { count: profilesCount } = await supabase
+                    .from('profiles')
+                    .select('id', { count: 'exact', head: true });
+                diagnostics.tables.profiles = profilesCount || 0;
+            } catch (e) {
+                diagnostics.tables.profiles = `Error: ${e.message}`;
+            }
 
-                try {
-                    const { count: jobsCount } = await supabase
-                        .from('scraped_jobs')
-                        .select('id', { count: 'exact', head: true });
-                    diagnostics.tables.scraped_jobs = jobsCount || 0;
-                } catch (e) {
-                    diagnostics.tables.scraped_jobs = `Error: ${e.message}`;
-                }
+            try {
+                const { count: jobsCount } = await supabase
+                    .from('scraped_jobs')
+                    .select('id', { count: 'exact', head: true });
+                diagnostics.tables.scraped_jobs = jobsCount || 0;
+            } catch (e) {
+                diagnostics.tables.scraped_jobs = `Error: ${e.message}`;
+            }
 
-                try {
-                    const { count: favoritesCount } = await supabase
-                        .from('favorite_companies')
-                        .select('id', { count: 'exact', head: true });
-                    diagnostics.tables.favorite_companies = favoritesCount || 0;
-                } catch (e) {
-                    diagnostics.tables.favorite_companies = `Error: ${e.message}`;
-                }
+            try {
+                const { count: favoritesCount } = await supabase
+                    .from('favorite_companies')
+                    .select('id', { count: 'exact', head: true });
+                diagnostics.tables.favorite_companies = favoritesCount || 0;
+            } catch (e) {
+                diagnostics.tables.favorite_companies = `Error: ${e.message}`;
             }
         }
 
