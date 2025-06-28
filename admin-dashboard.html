@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JobSynt Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="/public/css/tailwind-built.css">
+    <link rel="stylesheet" href="/public/css/styles.css">
     <style>
         .admin-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -37,6 +38,9 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             border: 1px solid #e5e7eb;
         }
+        /* Custom scrollbar for dark mode and modern look */
+        ::-webkit-scrollbar { width: 8px; background: #f3f4f6; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -50,11 +54,11 @@
                         JobSynt Admin Dashboard
                     </h1>
                 </div>
-                <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-4 justify-end flex-1">
                     <button id="refreshBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
                         <i class="fas fa-sync-alt mr-2"></i>Refresh Data
                     </button>
-                    <div id="lastUpdated" class="text-sm text-gray-500"></div>
+                    <div id="lastUpdated" class="text-sm text-gray-500 ml-6"></div>
                 </div>
             </div>
         </div>
@@ -147,11 +151,11 @@
 
         <!-- Action Buttons -->
         <div class="flex flex-wrap gap-4 mt-8">
-            <button id="run-it-scraper" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors">
-                <i class="fas fa-play mr-2"></i>Run IT Contract Scraper
+            <button id="manualScrapeBtn" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors">
+                <i class="fas fa-play mr-2"></i>Run Enhanced IT Contract Scrape
             </button>
-            <button id="run-crm-scraper" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors">
-                <i class="fas fa-briefcase mr-2"></i>Run CRM Scraper (BDM/Sales)
+            <button id="generalScrapeBtn" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-briefcase mr-2"></i>Run General Scrape (BDM/Sales)
             </button>
             <button id="cleanupBtn" class="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors">
                 <i class="fas fa-trash mr-2"></i>Cleanup Old Jobs
@@ -191,8 +195,8 @@
 
             setupEventListeners() {
                 document.getElementById('refreshBtn').addEventListener('click', () => this.loadDashboardData());
-                document.getElementById('run-it-scraper').addEventListener('click', () => this.runManualScrape('it'));
-                document.getElementById('run-crm-scraper').addEventListener('click', () => this.runManualScrape('crm'));
+                document.getElementById('manualScrapeBtn').addEventListener('click', () => this.runManualScrape('it'));
+                document.getElementById('generalScrapeBtn').addEventListener('click', () => this.runManualScrape('crm'));
                 document.getElementById('cleanupBtn').addEventListener('click', () => this.cleanupOldJobs());
                 document.getElementById('viewJobsBtn').addEventListener('click', () => this.viewAllJobs());
                 document.getElementById('optimizeDbBtn').addEventListener('click', () => this.optimizeDatabase());
