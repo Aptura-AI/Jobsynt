@@ -9,6 +9,7 @@ type Candidate = {
   id: string;
   name: string;
   title: string;
+  location: string;
   skills: string[];
   experience: number;
   status?: string;
