@@ -1,0 +1,23 @@
+[
+  {
+    "id": "job001",
+    "title": "Junior React Developer",
+    "company": "TechFlow",
+    "location": "Remote",
+    "salary": "$60-80K",
+    "requirements": "React, JavaScript, 1-3 years exp",
+    "postedDate": "2025-12-01",
+    "description": "Build modern UIs with React and Tailwind..."
+  },
+  {
+    "id": "job002",
+    "title": "Senior Full-Stack Engineer",
+    "company": "BigCorp",
+    "location": "San Francisco",
+    "salary": "$180K+",
+    "requirements": "10+ years, system design, leadership",
+    "postedDate": "2025-08-15",
+    "description": "Looking for a rockstar ninja..."
+  }
+]
+
