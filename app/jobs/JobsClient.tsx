@@ -24,7 +24,7 @@ export default function JobsClient({ jobs }: { jobs: Job[] }) {
     <div className="mx-auto max-w-6xl px-4 py-10">
       <div className="mb-6 space-y-2">
         <p className="text-sm font-semibold uppercase tracking-[0.1em] text-primary">Open Roles</p>
-        <h1 className="text-3xl font-bold text-ink">Jobs tailored to Oracle & Cloud talent</h1>
+        <h1 className="text-3xl font-bold text-ink">Jobs tailored to ERP & Cloud talent</h1>
         <p className="text-muted">Filter by location, experience, skills, and work mode.</p>
       </div>
       <div className="grid gap-6 lg:grid-cols-[320px,1fr]">

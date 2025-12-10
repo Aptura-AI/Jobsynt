@@ -39,7 +39,7 @@ export default function LoginPage() {
   return (
     <div className="mx-auto max-w-md px-4 py-12">
       <h1 className="text-3xl font-bold text-ink">Login</h1>
-      <p className="mt-2 text-muted">Access your JobSynth account.</p>
+      <p className="mt-2 text-muted">Access your Jobsynt account.</p>
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
         <Input label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input label="Password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />

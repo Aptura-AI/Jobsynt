@@ -1,7 +1,7 @@
 const steps = [
   {
     title: 'Post roles & needs',
-    desc: 'Share skill, experience, and work-mode requirements for Oracle/Cloud roles.',
+    desc: 'Share skill, experience, and work-mode requirements for ERP/Cloud roles.',
   },
   {
     title: 'Candidates build profiles',
@@ -22,7 +22,7 @@ export default function HowItWorks() {
     <section className="bg-surface">
       <div className="mx-auto max-w-6xl px-4 py-14">
         <div className="mb-8 text-center">
-          <h2 className="text-3xl font-bold text-ink">How JobSynth works</h2>
+          <h2 className="text-3xl font-bold text-ink">How Jobsynt works</h2>
           <p className="mt-2 text-muted">Simple steps to move from req to shortlist.</p>
         </div>
         <div className="grid gap-6 md:grid-cols-4">

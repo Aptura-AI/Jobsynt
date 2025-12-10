@@ -1,7 +1,7 @@
 const features = [
   {
-    title: 'Niche Oracle & Cloud focus',
-    desc: 'We curate talent specifically for Oracle Cloud, OCI, and adjacent IT roles.',
+    title: 'Niche ERP & Cloud focus',
+    desc: 'We curate talent specifically for ERP systems, cloud platforms, and IT roles.',
   },
   {
     title: 'AI-assisted matching',
@@ -22,8 +22,8 @@ export default function FeatureList() {
     <section className="bg-white">
       <div className="mx-auto max-w-6xl px-4 py-14">
         <div className="mb-8 text-center">
-          <h2 className="text-3xl font-bold text-ink">Why teams choose JobSynth</h2>
-          <p className="mt-2 text-muted">Built for Oracle, cloud, and IT delivery teams who need vetted specialists quickly.</p>
+          <h2 className="text-3xl font-bold text-ink">Why teams choose Jobsynt</h2>
+          <p className="mt-2 text-muted">Built for ERP, cloud, and IT delivery teams who need vetted specialists quickly.</p>
         </div>
         <div className="grid gap-6 md:grid-cols-2">
           {features.map((feature) => (

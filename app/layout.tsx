@@ -7,13 +7,13 @@ import Footer from '@/components/Footer';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'JobSynth | AI-Powered Talent Marketplace',
-  description: 'Your AI-Powered Talent Marketplace for Oracle, Cloud & IT Professionals.',
+  title: 'Jobsynt | AI-Powered Talent Marketplace',
+  description: 'Your AI-Powered Talent Marketplace for ERP, Cloud & IT Professionals.',
   openGraph: {
-    title: 'JobSynth | AI-Powered Talent Marketplace',
-    description: 'Find Oracle, Cloud, and IT experts faster with JobSynth.',
-    url: 'https://jobsynth.com',
-    siteName: 'JobSynth',
+    title: 'Jobsynt | AI-Powered Talent Marketplace',
+    description: 'Find ERP, Cloud, and IT experts faster with Jobsynt.',
+    url: 'https://jobsynt.com',
+    siteName: 'Jobsynt',
   },
 };
 

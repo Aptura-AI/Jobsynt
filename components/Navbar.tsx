@@ -22,7 +22,7 @@ export default function Navbar() {
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <Link href="/" className="text-lg font-bold text-primary">
-          JobSynth
+          Jobsynt
         </Link>
         <nav className="flex items-center gap-6 text-sm font-semibold text-ink">
           {navItems.map((item) => (
