@@ -20,7 +20,7 @@ type Candidate = {
 export default function DashboardClient({ candidates }: { candidates: Candidate[] }) {
   const [search, setSearch] = useState('');
   const [list, setList] = useState(candidates);
-  const filtered = filterCandidates(list, { search, skills: [], location: '', minExperience: null });
+  const filtered = filterCandidates(list, { search, skills: [], location: '', minExperience: undefined });
 
   const updateStatus = async (id: string, status: string) => {
     await fetch(`/api/candidates/${id}`, {

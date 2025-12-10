@@ -17,7 +17,7 @@ type Candidate = {
 
 export default function TalentClient({ candidates }: { candidates: Candidate[] }) {
   const [filters, setFilters] = useState({ search: '', location: '', minExperience: null as number | null, skills: [] as string[] });
-  const filtered = filterCandidates(candidates, filters);
+  const filtered = filterCandidates(candidates, { ...filters, minExperience: filters.minExperience ?? undefined });
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <div className="mb-6 space-y-2">
