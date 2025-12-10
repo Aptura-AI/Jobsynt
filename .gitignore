@@ -1,5 +1,5 @@
 # Dependencies
-node_modules
+node_modules/
 /.pnp
 .pnp.js
 
@@ -34,21 +34,29 @@ yarn-error.log*
 .vercel
 
 # Netlify
-.netlify
+.netlify/
 netlify/
 
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
 
-# Images and media
+# Images and media (exclude all except favicon.ico in public/)
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.svg
-*.ico
 *.webp
+# Allow only favicon.ico in public root
+!public/favicon.ico
+# Exclude all other images in public
+public/**/*.png
+public/**/*.jpg
+public/**/*.jpeg
+public/**/*.gif
+public/**/*.svg
+public/**/*.webp
 
 # Documents
 *.pdf
@@ -59,19 +67,32 @@ next-env.d.ts
 *.sql
 
 # Uploads
-/uploads
-public/uploads
+/uploads/
+public/uploads/
 
-# Old static HTML files
+# Old static HTML files (exclude all root HTML files)
 *.html
+# Allow HTML in app directory if needed
 !app/**/*.html
 
 # Old server files
 server.js
 whatsapp-channel-job-scraper.js
+jobsynt-integration.js
 
 # Ghost job finder extension
 ghost-job-finder/
+
+# Old API folder (if not using Next.js API routes)
+/api/
+# But allow app/api
+!app/api/
+
+# Old public JS/CSS (keep only what's needed)
+public/js/
+public/css/
+# But allow public structure for Next.js
+!public/_headers
 
 # IDE
 .vscode/
