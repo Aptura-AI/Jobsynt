@@ -28,7 +28,7 @@ export default function LoginPage() {
       // Safe redirect: validate route and prevent open redirect attacks
       const next = searchParams.get('next');
       const redirectTo = next?.startsWith('/') ? next : '/';
-      router.push(redirectTo as any);
+      router.push(redirectTo);
     } catch (err) {
       setMessage((err as Error).message);
     } finally {

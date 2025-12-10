@@ -23,7 +23,7 @@ export default function SignupPage() {
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) throw new Error('Unable to sign up');
-      router.push('/login' as any);
+      router.push('/login');
     } catch (err) {
       setMessage((err as Error).message);
     } finally {

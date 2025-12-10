@@ -26,7 +26,7 @@ export default function Navbar() {
         </Link>
         <nav className="flex items-center gap-6 text-sm font-semibold text-ink">
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href as string} className="hover:text-primary">
+            <Link key={item.href} href={item.href} className="hover:text-primary">
               {item.label}
             </Link>
           ))}
