@@ -24,8 +24,11 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) throw new Error('Invalid credentials');
-      const next = searchParams.get('next') || '/';
-      router.push(next);
+      
+      // Safe redirect: validate route and prevent open redirect attacks
+      const next = searchParams.get('next');
+      const redirectTo = next?.startsWith('/') ? next : '/';
+      router.push(redirectTo as any);
     } catch (err) {
       setMessage((err as Error).message);
     } finally {
