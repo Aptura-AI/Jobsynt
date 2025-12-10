@@ -1,8 +1,7 @@
-import Button from '@/components/Button';
 import { readJSON } from '@/utils/fs';
 import { getAuthTokenFromCookies, verifyToken } from '@/utils/auth';
-import { notFound, redirect } from 'next/navigation';
-import { useState } from 'react';
+import { notFound } from 'next/navigation';
+import ApplyButton from './ApplyButton';
 
 type Job = {
   id: string;
@@ -21,43 +20,6 @@ type Job = {
 async function getJob(id: string): Promise<Job | undefined> {
   const jobs = await readJSON<Job[]>('jobs.json');
   return jobs.find((j) => j.id === id);
-}
-
-function ApplyButton({ jobId, isLoggedIn }: { jobId: string; isLoggedIn: boolean }) {
-  'use client';
-  const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const handleApply = async () => {
-    if (!isLoggedIn) {
-      window.location.href = `/login?next=/jobs/${jobId}`;
-      return;
-    }
-    setLoading(true);
-    setMessage(null);
-    try {
-      const res = await fetch('/api/apply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId }),
-      });
-      if (!res.ok) throw new Error('Unable to submit application');
-      setMessage('Application submitted. A recruiter will reach out.');
-    } catch (err) {
-      setMessage((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-4">
-      <Button onClick={handleApply} loading={loading}>
-        Apply
-      </Button>
-      {message && <span className="text-sm text-muted">{message}</span>}
-    </div>
-  );
 }
 
 export default async function JobDetails({ params }: { params: { id: string } }) {

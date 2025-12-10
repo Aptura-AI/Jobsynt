@@ -1,11 +1,8 @@
-import DashboardTable from '@/components/DashboardTable';
 import JobCard from '@/components/JobCard';
-import SearchBar from '@/components/SearchBar';
-import { filterCandidates } from '@/utils/filters';
 import { getAuthTokenFromCookies, verifyToken } from '@/utils/auth';
 import { readJSON } from '@/utils/fs';
 import { redirect } from 'next/navigation';
-import { useState } from 'react';
+import DashboardClient from './DashboardClient';
 
 type Candidate = {
   id: string;
@@ -36,38 +33,6 @@ async function getData() {
     readJSON<Job[]>('jobs.json'),
   ]);
   return { candidates, jobs };
-}
-
-function DashboardClient({ candidates }: { candidates: Candidate[] }) {
-  'use client';
-  const [search, setSearch] = useState('');
-  const [list, setList] = useState(candidates);
-  const filtered = filterCandidates(list, { search, skills: [], location: '', minExperience: null });
-
-  const updateStatus = async (id: string, status: string) => {
-    await fetch(`/api/candidates/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
-    setList((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
-  };
-
-  const updateNotes = async (id: string, notes: string) => {
-    await fetch(`/api/candidates/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notes }),
-    });
-    setList((prev) => prev.map((c) => (c.id === id ? { ...c, notes } : c)));
-  };
-
-  return (
-    <div className="space-y-4">
-      <SearchBar value={search} onChange={setSearch} placeholder="Search candidates by name or title" onSubmit={() => {}} />
-      <DashboardTable candidates={filtered} onUpdateStatus={updateStatus} onUpdateNotes={updateNotes} />
-    </div>
-  );
 }
 
 export default async function DashboardPage() {
