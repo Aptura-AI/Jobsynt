@@ -64,8 +64,11 @@ OUTPUT FORMAT (exact JSON):
 {
   "analysis": { "strengths": string[], "skills": string[], "gaps": string[], "profileScore": number },
   "matches": [{ "id": string, "title": string, "company": string, "fitScore": number, "reasons": string[], "isGhost": boolean }],
-  "guidance": { "advice": string, "courses": string[], "nextSteps": string[] }
+  "guidance": { "advice": string, "courses": string[], "nextSteps": string[] },
+  "keywords": ["query1", "query2", "query3"]
 }
+
+IMPORTANT: After analysis, generate 3-5 precise keyword queries for job scanning (e.g., "React developer remote 2 years exp", "frontend engineer US salary 60k+", "ERP consultant cloud"). These will be used to scrape fresh jobs from the web.
 
 Jobs data: ${JSON.stringify(jobs)}
 Candidates data: ${JSON.stringify(candidates)}
@@ -82,6 +85,34 @@ User message: """${userMessage || 'Analyze my profile and find jobs'}"""
       result = JSON.parse(raw);
     } catch {
       result = { error: 'AI returned invalid JSON', raw };
+    }
+
+    // If keywords exist, trigger job scanning (async, don't block response)
+    const keywords = result.keywords || [];
+    if (keywords.length > 0 && (process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN)) {
+      // Trigger scan in background (fire and forget)
+      // Construct the correct URL for server-side fetch
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL 
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+        || 'http://localhost:3000';
+      
+      // Fire and forget - don't await, let it run in background
+      fetch(`${baseUrl}/api/scan-jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keywords }),
+      }).then(async (scanRes) => {
+        if (scanRes.ok) {
+          const scanData = await scanRes.json();
+          console.log(`Scanned ${scanData.newJobs || 0} new jobs`);
+        }
+      }).catch((error) => {
+        console.error('Job scanning error:', error);
+      });
+      
+      // Add scanning status to response
+      result.scanning = true;
+      result.keywords = keywords;
     }
 
     return NextResponse.json(result);

@@ -152,6 +152,34 @@ export default function AIMentorUpload() {
                 </div>
               )}
 
+              {/* Fresh Jobs Section */}
+              {result.freshJobs !== undefined && (
+                <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+                  <p className="font-semibold">✓ Scanned {result.freshJobs} new matching jobs from the web!</p>
+                  {result.totalJobs && <p className="mt-1 text-xs">Total jobs in database: {result.totalJobs}</p>}
+                </div>
+              )}
+
+              {result.scanning && !result.freshJobs && (
+                <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-700">
+                  <p>🔄 Scanning web for fresh jobs based on your profile... This may take 30-60 seconds.</p>
+                </div>
+              )}
+
+              {/* Keywords Section */}
+              {result.keywords && result.keywords.length > 0 && (
+                <div>
+                  <h4 className="mb-2 font-semibold text-ink">Search Keywords Used</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {result.keywords.map((keyword: string, idx: number) => (
+                      <span key={idx} className="rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Guidance Section */}
               {result.guidance && (
                 <div>
