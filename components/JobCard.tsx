@@ -34,7 +34,7 @@ export default function JobCard({ job }: { job: Job }) {
       </div>
       <div className="mt-4 flex items-center justify-between">
         {job.rate && <span className="text-sm font-semibold text-ink">{job.rate}</span>}
-        <Link href={`/jobs/${job.id}`} className="text-sm font-semibold text-primary hover:underline">
+        <Link href={`/jobs/${job.id}` as string} className="text-sm font-semibold text-primary hover:underline">
           View Job →
         </Link>
       </div>
