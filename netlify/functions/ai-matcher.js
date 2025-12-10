@@ -2,6 +2,8 @@
 // AI-powered job matching based on user profile and preferences
 const axios = require('axios');
 
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -75,25 +77,65 @@ exports.handler = async (event, context) => {
   }
 };
 
+async function gptMatchScore(userProfile, job) {
+  if (!OPENAI_API_KEY) return null;
+  const prompt = `You are an expert job matching assistant. Given the following user profile and job description, rate how strong the match is (0-100, where 100 is a perfect fit) and give a short reason.\n\nUser Profile:\n${JSON.stringify(userProfile, null, 2)}\n\nJob:\n${JSON.stringify(job, null, 2)}\n\nRespond in JSON: {\"score\": <number>, \"reason\": <string>}`;
+  try {
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: 'gpt-3.5-turbo',
+      messages: [
+        { role: 'system', content: 'You are a helpful AI job matching assistant.' },
+        { role: 'user', content: prompt }
+      ],
+      max_tokens: 120,
+      temperature: 0.2
+    }, {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const text = response.data.choices[0].message.content;
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      return parsed;
+    }
+    return null;
+  } catch (err) {
+    console.error('GPT match error:', err.response?.data || err.message);
+    return null;
+  }
+}
+
 async function rankJobs(userProfile, jobs) {
   try {
-    const rankedJobs = [];
-
-    for (const job of jobs) {
+    // Step 1: Use existing scoring to filter top 20 jobs
+    const prelimRanked = jobs.map(job => {
       const matchScore = calculateMatchScore(userProfile, job);
-      const matchReasons = getMatchReasons(userProfile, job, matchScore);
-      
+      return { ...job, prelimScore: matchScore };
+    }).sort((a, b) => b.prelimScore - a.prelimScore).slice(0, 20);
+
+    // Step 2: Use GPT to rescore and explain
+    const rankedJobs = [];
+    for (const job of prelimRanked) {
+      let gptResult = null;
+      if (OPENAI_API_KEY) {
+        gptResult = await gptMatchScore(userProfile, job);
+      }
+      const matchScore = gptResult?.score ?? job.prelimScore;
+      const matchReasons = gptResult?.reason ? [gptResult.reason] : getMatchReasons(userProfile, job, matchScore);
       rankedJobs.push({
         ...job,
         matchScore,
         matchReasons,
         matchLevel: getMatchLevel(matchScore),
         applicationAdvice: getApplicationAdvice(userProfile, job, matchScore),
-        matchDetails: getMatchDetails(userProfile, job)
+        matchDetails: getMatchDetails(userProfile, job),
+        gptAnalyzed: !!gptResult
       });
     }
-
-    // Sort by match score (highest first)
+    // Sort by GPT match score (highest first)
     return rankedJobs.sort((a, b) => b.matchScore - a.matchScore);
   } catch (error) {
     console.error('Error ranking jobs:', error);

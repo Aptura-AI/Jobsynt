@@ -4,9 +4,361 @@ const axios = require('axios');
 // Clean environment variables (remove quotes and semicolons)
 const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/[';]/g, '');
 const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').replace(/[';]/g, '');
+const PERPLEXITY_API_KEY = (process.env.PERPLEXITY_API_KEY || '').replace(/[';]/g, '');
 
 // Initialize Supabase
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+
+const PRIMARY_JOB_BOARDS = ['Dice', 'LinkedIn', 'Indeed'];
+const SECONDARY_JOB_BOARDS = ['Monster', 'ZipRecruiter', 'CareerBuilder', 'SimplyHired', 'Glassdoor'];
+const MAX_JOBS_PER_DAY = 10;
+const INITIAL_LOOKBACK_DAYS = 14;
+const DAILY_LOOKBACK_HOURS = 24;
+
+const PST_TIMEZONE = 'America/Los_Angeles';
+
+/**
+ * Parse JSON that may be wrapped in markdown/code fences.
+ */
+function extractJsonPayload(rawText) {
+    if (!rawText) return null;
+    try {
+        const trimmed = rawText.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            return JSON.parse(trimmed);
+        }
+        const fenceMatch = trimmed.match(/```(?:json)?([\s\S]*?)```/i);
+        if (fenceMatch) {
+            return JSON.parse(fenceMatch[1].trim());
+        }
+        const bracesMatch = trimmed.match(/(\{[\s\S]+\})/);
+        if (bracesMatch) {
+            return JSON.parse(bracesMatch[1]);
+        }
+        const arrayMatch = trimmed.match(/(\[[\s\S]+\])/);
+        if (arrayMatch) {
+            return JSON.parse(arrayMatch[1]);
+        }
+    } catch (err) {
+        console.error('Failed to parse Perplexity response as JSON:', err.message);
+    }
+    return null;
+}
+
+/**
+ * Normalize raw Perplexity job data into internal format.
+ */
+function normalizePerplexityJobs(rawJobs = [], defaults = {}) {
+    if (!Array.isArray(rawJobs)) {
+        rawJobs = rawJobs.jobs || rawJobs.results || [];
+    }
+    if (!Array.isArray(rawJobs)) return [];
+
+    return rawJobs
+        .filter(job => job && job.title && job.company && job.url && /^https?:\/\//.test(job.url))
+        .map((job, idx) => ({
+            id: job.id || `perplexity_${Date.now()}_${idx}`,
+            title: job.title.trim(),
+            company: job.company.trim(),
+            location: job.location || defaults.location || 'Remote',
+            salary: job.salary || 'Not specified',
+            job_type: job.job_type || job.type || 'Contract',
+            work_mode: job.work_mode || (job.remote ? 'Remote' : 'On-site'),
+            description: job.description || '',
+            url: job.url,
+            source: job.source || 'Perplexity (Live Search)',
+            posted_date: job.posted_date || job.date || new Date().toISOString(),
+            is_live_search: true,
+            match_score: job.match_score || 82,
+            is_genuine: true,
+            remote: job.remote ?? /remote/i.test(job.location || '')
+        }));
+}
+
+/**
+ * Use Perplexity API to fetch latest job postings.
+ */
+async function fetchJobsFromPerplexity({ query, location, limit = 10, aiContext = {}, preferGoogle = false }) {
+    if (!PERPLEXITY_API_KEY) {
+        console.log('⚠️ PERPLEXITY_API_KEY not configured. Skipping Perplexity search.');
+        return [];
+    }
+
+    try {
+        console.log(`🤝 Fetching jobs from Perplexity for "${query}" in "${location}"`);
+        const salaryHint = aiContext?.salaryRange
+            ? `Prioritize roles paying between ${aiContext.salaryRange.min || '$70/hr'} and ${aiContext.salaryRange.max || 'upper range requested by user'}.`
+            : 'Prioritize roles paying at least $70/hr or $140k annually.';
+
+        const preferenceHint = [
+            aiContext?.preferredLocations?.length ? `User prefers locations: ${aiContext.preferredLocations.join(', ')}.` : 'User is open to remote roles across the US.',
+            aiContext?.workMode ? `Work mode preference: ${aiContext.workMode}.` : 'Remote or hybrid acceptable.',
+            aiContext?.jobType ? `Job type preference: ${aiContext.jobType}.` : 'Contract/C2C preferred.'
+        ].join(' ');
+
+        const skillsHint = aiContext?.skills?.length
+            ? `Top resume skills: ${aiContext.skills.slice(0, 8).join(', ')}.`
+            : 'Skill focus: PeopleSoft, SAP, ERP, Azure, AI/ML, Python.';
+
+        const systemPrompt = [
+            'You are an enterprise sourcing analyst returning ONLY verified job listings.',
+            'Every job must include a working link, company name, title, description snippet, compensation/rate info if available, job type, work mode, posted date (ISO or relative), and explicit source.',
+            'Never fabricate or hallucinate information. If unsure, omit the job.',
+            'Prefer Dice, LinkedIn, and Indeed first; if fewer than required jobs exist there, expand to other reputable job boards. Use company career pages via Google only when primary boards have <10 results.'
+        ].join(' ');
+
+        const sourcingChannel = preferGoogle
+            ? 'Primary boards were exhausted. Use Google with queries like "site:careers.company.com {query}" to source fresh postings directly from company career pages. Only include results from official career portals.'
+            : 'Stay within Dice, LinkedIn, and Indeed first. Only add other well-known boards if fewer than 10 qualifying jobs exist.';
+
+        const userPrompt = [
+            `Find currently open "${query}" roles located in "${location || 'United States'}" posted within the last ${preferGoogle ? '14' : '7'} days.`,
+            preferenceHint,
+            salaryHint,
+            skillsHint,
+            aiContext?.resumeSummary ? `Resume summary: ${aiContext.resumeSummary.substring(0, 800)}` : '',
+            sourcingChannel,
+            `Return JSON only with key "jobs": [{"title","company","location","salary","job_type","work_mode","description","url","source","posted_date","remote","key_requirements"}].`,
+            `Deliver up to ${limit} best matches with no duplicates and ensure each link is unique.`
+        ].filter(Boolean).join(' ');
+
+        const response = await axios.post('https://api.perplexity.ai/chat/completions', {
+            model: 'sonar-pro',
+            temperature: 0.2,
+            max_tokens: 800,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ]
+        }, {
+            headers: {
+                'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 25000
+        });
+
+        const rawContent = response.data?.choices?.[0]?.message?.content;
+        const parsed = extractJsonPayload(rawContent);
+        const normalized = normalizePerplexityJobs(parsed, { location });
+        const limited = normalized.slice(0, limit);
+
+        console.log(`✅ Perplexity returned ${limited.length} verified jobs`);
+        return limited;
+    } catch (error) {
+        console.error('❌ Perplexity API error:', error.response?.data || error.message);
+        return [];
+    }
+}
+
+function dedupeJobs(jobs = []) {
+    const seen = new Set();
+    const deduped = [];
+    for (const job of jobs) {
+        const key = (job.url || job.job_apply_link || job.job_google_link || job.id || `${job.title}-${job.company}-${job.location}`).toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(job);
+    }
+    return deduped;
+}
+
+function formatJobBoardName(source = '') {
+    if (!source) return 'Unknown';
+    const normalized = source.toLowerCase();
+    if (normalized.includes('dice')) return 'Dice';
+    if (normalized.includes('linkedin')) return 'LinkedIn';
+    if (normalized.includes('indeed')) return 'Indeed';
+    if (normalized.includes('perplexity')) return 'Perplexity Research';
+    if (normalized.includes('google')) return 'Google Careers';
+    if (normalized.includes('jsearch')) return 'JSearch Aggregator';
+    return source;
+}
+
+function deriveKeyRequirements(job = {}, fallbackSkills = []) {
+    const text = `${job.description || ''} ${job.job_highlights?.Qualifications?.join(' ') || ''}`.toLowerCase();
+    const skills = new Set();
+    const keywords = fallbackSkills.length ? fallbackSkills : ['peoplesoft','sap','oracle','azure','python','ai','ml','erp','hcm','financials'];
+    keywords.forEach(skill => {
+        if (!skill) return;
+        if (text.includes(skill.toLowerCase())) skills.add(skill);
+    });
+    return Array.from(skills).slice(0, 4);
+}
+
+function formatPostedLabel(dateInput) {
+    if (!dateInput) return 'Recently posted';
+    const parsed = new Date(dateInput);
+    if (Number.isNaN(parsed.getTime())) {
+        const text = (dateInput || '').toString().toLowerCase();
+        if (text.includes('7') || text.includes('week')) return 'Last 7 days';
+        if (text.includes('14')) return 'Last 2 weeks';
+        return dateInput;
+    }
+    const diffDays = (Date.now() - parsed.getTime()) / (1000 * 60 * 60 * 24);
+    if (diffDays <= 1) return 'Last 24 hours';
+    if (diffDays <= 7) return 'Last 7 days';
+    if (diffDays <= 14) return 'Last 2 weeks';
+    return parsed.toISOString().split('T')[0];
+}
+
+function mapJobToOutput(job, options = {}) {
+    const keyRequirements = job.key_requirements || deriveKeyRequirements(job, options?.skills || []);
+    return {
+        job_id: job.id || job.job_id || `${job.company}-${job.title}`.replace(/\s+/g, '-'),
+        job_title: job.job_title || job.title || 'Opportunity',
+        company: job.company || job.employer_name || 'Company Confidential',
+        location: job.location || job.job_location || job.job_city || 'Remote',
+        rate_salary: job.rate_salary || job.salary || job.job_salary || job.compensation || 'Market Rate',
+        contract_type: job.contract_type || job.job_type || job.employment_type || 'Contract',
+        posted: formatPostedLabel(job.posted_date || job.created_at),
+        key_requirements: keyRequirements,
+        job_board: formatJobBoardName(job.source),
+        source_link: job.url || job.apply_url || job.job_apply_link || job.job_google_link || '#',
+        is_remote: job.remote ?? /remote/i.test(`${job.location || ''} ${job.description || ''}`),
+        original: job
+    };
+}
+
+function enforceJobQuota(jobs = [], { limit = MAX_JOBS_PER_DAY, appliedLinks = new Set() } = {}) {
+    const filtered = jobs.filter(job => {
+        const url = job.url || job.apply_url || job.job_apply_link;
+        if (!url) return true;
+        return !appliedLinks.has(url);
+    });
+    const deduped = dedupeJobs(filtered);
+    return deduped.slice(0, limit);
+}
+
+function getPSTHour() {
+    try {
+        return parseInt(new Intl.DateTimeFormat('en-US', {
+            timeZone: PST_TIMEZONE,
+            hour: '2-digit',
+            hour12: false
+        }).format(new Date()), 10);
+    } catch {
+        return null;
+    }
+}
+
+async function fetchUserProfile(userId) {
+    if (!supabase || !userId) return null;
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('id,user_id,created_at,current_title,skills,resume_summary,resume_headline,preferred_locations,salary_expectation,work_preferences,experience,job_type_preference')
+            .eq('user_id', userId)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
+    } catch (err) {
+        console.log('⚠️ Unable to fetch user profile:', err.message);
+        return null;
+    }
+}
+
+async function fetchAppliedJobLinks(userId) {
+    if (!supabase || !userId) return new Set();
+    try {
+        const { data, error } = await supabase
+            .from('job_applications')
+            .select('job_url, job_id')
+            .eq('user_id', userId);
+        if (error) throw error;
+        const links = new Set();
+        (data || []).forEach(row => {
+            if (row.job_url) links.add(row.job_url);
+            if (row.job_id) links.add(row.job_id);
+        });
+        return links;
+    } catch (err) {
+        console.log('⚠️ Unable to fetch applied jobs:', err.message);
+        return new Set();
+    }
+}
+
+function isInitialWindow(profile) {
+    if (!profile?.created_at) return false;
+    const created = new Date(profile.created_at);
+    if (Number.isNaN(created.getTime())) return false;
+    const hoursOld = (Date.now() - created.getTime()) / (1000 * 60 * 60);
+    return hoursOld <= 24;
+}
+
+function buildAIContext(profile, searchParams) {
+    const skills = Array.isArray(profile?.skills)
+        ? profile.skills
+        : typeof profile?.skills === 'string'
+            ? profile.skills.split(',').map(s => s.trim()).filter(Boolean)
+            : [];
+    return {
+        resumeSummary: profile?.resume_summary || profile?.resume_headline || '',
+        skills,
+        preferredLocations: profile?.preferred_locations || (searchParams.location ? [searchParams.location] : []),
+        salaryRange: {
+            min: searchParams.salary_min || profile?.salary_expectation,
+            max: searchParams.salary_max || profile?.salary_expectation
+        },
+        workMode: searchParams.work_mode || profile?.work_preferences,
+        jobType: searchParams.job_type || profile?.job_type_preference
+    };
+}
+
+async function fetchDatabaseJobs({ keywords, lookbackDays, location, limit, appliedLinks, preferredBoards, skills }) {
+    if (!supabase) return [];
+    try {
+        const lookbackDate = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+        let query = supabase
+            .from('scraped_jobs')
+            .select('*')
+            .gte('posted_date', lookbackDate)
+            .order('posted_date', { ascending: false });
+
+        if (preferredBoards?.length) {
+            query = query.in('source', preferredBoards);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        if (!data?.length) {
+            return [];
+        }
+
+        const keywordList = (keywords || '')
+            .toLowerCase()
+            .split(/\s+|,|\/|\band\b|\bor\b/gi)
+            .map(k => k.trim())
+            .filter(Boolean);
+
+        const scored = data.map(job => {
+            const jobText = `${job.title || ''} ${job.description || ''}`.toLowerCase();
+            let matchCount = 0;
+            keywordList.forEach(kw => {
+                if (!kw) return;
+                if (jobText.includes(kw)) matchCount += 1;
+            });
+            return { ...job, matchCount };
+        }).filter(job => job.matchCount > 0);
+
+        const filtered = scored.filter(job => {
+            if (!location || location.toLowerCase() === 'remote') return true;
+            return (job.location || '').toLowerCase().includes(location.toLowerCase());
+        });
+
+        return enforceJobQuota(
+            filtered.sort((a, b) => b.matchCount - a.matchCount),
+            { limit, appliedLinks }
+        ).map(job => ({
+            ...job,
+            key_requirements: deriveKeyRequirements(job, skills)
+        }));
+    } catch (err) {
+        console.log('⚠️ Database job fetch failed:', err.message);
+        return [];
+    }
+}
 
 // Use the Enhanced Smart Scraper for live searches
 async function callEnhancedSmartScraper(query, location) {
@@ -38,11 +390,19 @@ async function callEnhancedSmartScraper(query, location) {
 }
 
 // Live search function using Enhanced Smart Scraper
-async function performLiveSearch(searchParams) {
+async function performLiveSearch(searchParams, aiContext = {}) {
     const { query = 'software developer', location = 'remote', limit = 10 } = searchParams;
     let jobs = [];
     
     try {
+        // First try Perplexity for live verified jobs
+        const perplexityJobs = await fetchJobsFromPerplexity({ query, location, limit, aiContext });
+        if (perplexityJobs.length > 0) {
+            jobs = perplexityJobs;
+            console.log(`✅ Using ${jobs.length} jobs from Perplexity live search`);
+            return jobs;
+        }
+
         // First try the Enhanced Smart Scraper
         const smartJobs = await callEnhancedSmartScraper(query, location);
         if (smartJobs.length > 0) {
@@ -140,9 +500,24 @@ async function performLiveSearch(searchParams) {
             }
         }
 
-        // NO FAKE JOBS - If no real jobs found, return empty with proper message
+        // If still empty, ask Perplexity to switch to Google/company career pages
         if (jobs.length === 0) {
-            console.log('❌ No genuine jobs found - Enhanced Smart Scraper running 24/7 will find real opportunities');
+            console.log('⚠️ Primary job boards empty. Switching Perplexity to Google/company career pages...');
+            const googleJobs = await fetchJobsFromPerplexity({
+                query,
+                location,
+                limit,
+                aiContext,
+                preferGoogle: true
+            });
+            if (googleJobs.length > 0) {
+                jobs = googleJobs.map(job => ({
+                    ...job,
+                    source: job.source || 'Perplexity (Google Careers)'
+                }));
+            } else {
+                console.log('❌ No genuine jobs found even after Google fallback.');
+            }
         }
 
         return jobs;
@@ -153,6 +528,56 @@ async function performLiveSearch(searchParams) {
         console.log('❌ Live search failed - only genuine jobs will be shown');
         return [];
     }
+}
+
+// Helper to determine if user wants C2C/contract jobs
+function wantsC2C(jobTypes, keywords) {
+    const c2cTerms = ['c2c', 'corp to corp', 'contract'];
+    if (!jobTypes && !keywords) return false;
+    const jt = (jobTypes || '').toLowerCase();
+    const kw = (keywords || '').toLowerCase();
+    return c2cTerms.some(term => jt.includes(term) || kw.includes(term));
+}
+
+// Enhanced robust job search
+async function performRobustSearch(searchParams, aiContext = {}) {
+    let { query = 'software developer', location = 'remote', limit = 10, job_types = '', keywords = '' } = searchParams;
+    let jobs = [];
+    let attempts = [];
+    // If user wants C2C, always append contract terms
+    if (wantsC2C(job_types, query)) {
+        query += ' c2c "Corp to Corp" contract';
+    }
+    // Try full query first
+    attempts.push(query);
+    // If query has commas, try each keyword separately
+    if (query.includes(',')) {
+        const keywordsArr = query.split(',').map(s => s.trim()).filter(Boolean);
+        attempts.push(...keywordsArr.map(k => wantsC2C(job_types, k) ? k + ' c2c "Corp to Corp" contract' : k));
+    }
+    // Always try a very broad fallback
+    attempts.push('SAP c2c contract');
+    attempts.push('IT c2c contract');
+    for (const attempt of attempts) {
+        const found = await performLiveSearch({ query: attempt, location, limit, job_types }, aiContext);
+        // Filter out full-time/permanent jobs if user wants C2C
+        let filtered = found;
+        if (wantsC2C(job_types, attempt)) {
+            filtered = found.filter(job => {
+                const jt = (job.job_type || job.type || '').toLowerCase();
+                const desc = (job.description || '').toLowerCase();
+                return jt.includes('contract') || jt.includes('c2c') || jt.includes('corp') || desc.includes('contract') || desc.includes('c2c') || desc.includes('corp to corp');
+            });
+        }
+        if (filtered && filtered.length > 0) {
+            console.log(`✅ Found jobs for query: ${attempt}`);
+            return filtered;
+        } else {
+            console.log(`❌ No jobs found for query: ${attempt}`);
+        }
+    }
+    // If still no jobs, return empty
+    return [];
 }
 
 exports.handler = async (event, context) => {
@@ -207,193 +632,77 @@ exports.handler = async (event, context) => {
             search_priority: searchPriority
         });
 
+        // Profile + context
+        const profile = await fetchUserProfile(userId);
+        const aiContext = buildAIContext(profile, {
+            location,
+            salary_min: salaryMin,
+            salary_max: salaryMax,
+            work_mode: workModes,
+            job_type: jobTypes
+        });
+        const appliedLinks = await fetchAppliedJobLinks(userId);
+        const initialWindow = isInitialWindow(profile);
+        const pstHour = getPSTHour();
+        if (pstHour !== null) {
+            console.log(`🕔 Current PST hour: ${pstHour}. Daily automation targets 17:00 PST.`);
+        }
+
         let jobs = [];
-        let source = 'unknown';
+        let source = initialWindow ? 'initial_two_week_sweep' : 'daily_refresh';
 
-        // STEP 1: Try background database first (if not forcing refresh)
-        if (!forceRefresh && supabase) {
-            try {
-                console.log(`🔍 Searching database for user ${userId}...`);
-                
-                // Query 1: User-specific jobs
-                const { data: userJobs, error: userError } = await supabase
-                    .from('scraped_jobs')
-                    .select('*')
-                    .eq('profile_id', userId)
-                    .order('scraped_at', { ascending: false })
-                    .limit(20);
+        // STEP 1: pull from internal database with appropriate lookback
+        const dbJobs = await fetchDatabaseJobs({
+            keywords,
+            lookbackDays: initialWindow ? INITIAL_LOOKBACK_DAYS : DAILY_LOOKBACK_HOURS / 24,
+            location,
+            limit: MAX_JOBS_PER_DAY,
+            appliedLinks,
+            preferredBoards: PRIMARY_JOB_BOARDS,
+            skills: aiContext.skills
+        });
+        jobs.push(...dbJobs);
 
-                // Query 2: Global constant search jobs (available to all users)
-                const { data: globalJobs, error: globalError } = await supabase
-                    .from('scraped_jobs')
-                    .select('*')
-                    .is('profile_id', null)
-                    .eq('is_constant_search', true)
-                    .order('scraped_at', { ascending: false })
-                    .limit(10);
-
-                if (!userError && !globalError) {
-                    // Combine user-specific and global jobs
-                    const allDbJobs = [];
-                    
-                    // Add user-specific jobs first (higher priority)
-                    if (userJobs && userJobs.length > 0) {
-                        allDbJobs.push(...userJobs.map(job => ({
-                            id: job.job_id || job.id,
-                            title: job.title,
-                            company: job.company,
-                            location: job.location,
-                            salary: job.salary,
-                            job_type: job.job_type,
-                            work_mode: job.work_mode,
-                            description: job.description,
-                            url: job.url,
-                            source: job.source + ' (Profile Match)',
-                            posted_date: job.posted_date,
-                            match_score: job.match_score || 80,
-                            is_from_database: true,
-                            job_source: 'user_specific'
-                        })));
-                        console.log(`✅ Found ${userJobs.length} user-specific jobs in database`);
-                    }
-                    
-                    // Add global constant search jobs (PeopleSoft, etc.)
-                    if (globalJobs && globalJobs.length > 0) {
-                        allDbJobs.push(...globalJobs.map(job => ({
-                            id: job.job_id || job.id,
-                            title: job.title,
-                            company: job.company,
-                            location: job.location,
-                            salary: job.salary,
-                            job_type: job.job_type,
-                            work_mode: job.work_mode,
-                            description: job.description,
-                            url: job.url,
-                            source: job.source + ' (Premium Opportunity)',
-                            posted_date: job.posted_date,
-                            match_score: 85, // High score for premium jobs
-                            is_from_database: true,
-                            job_source: 'constant_search',
-                            constant_search_type: job.constant_search_type
-                        })));
-                        console.log(`✅ Found ${globalJobs.length} premium constant search jobs`);
-                    }
-
-                    if (allDbJobs.length > 0) {
-                        // Sort combined results by match score and date
-                        allDbJobs.sort((a, b) => {
-                            if (a.match_score !== b.match_score) {
-                                return b.match_score - a.match_score; // Higher score first
-                            }
-                            return new Date(b.posted_date) - new Date(a.posted_date); // Newer first
-                        });
-
-                        jobs = allDbJobs.slice(0, 10);
-                        source = `Database (${userJobs?.length || 0} profile + ${globalJobs?.length || 0} premium)`;
-                        
-                        console.log(`✅ Using database results: ${jobs.length} total jobs`);
-                    }
-                }
-            } catch (dbError) {
-                console.error('Database search error:', dbError);
-                // Continue to live search if database fails
-            }
-        }
-
-        // STEP 2: If no background jobs found, get first 10 real jobs ASAP
-        if (jobs.length < 10 || forceRefresh) {
-            console.log('🔴 Need more jobs (have ' + jobs.length + '), getting first 10 real jobs ASAP...');
-            
-            // Trigger continuous job finder for this user (non-blocking)
-            if (userId !== 'anonymous' && process.env.URL) {
-                try {
-                    axios.post(`${process.env.URL}/.netlify/functions/continuous-job-finder`, {
-                        user_id: userId
-                    }, { timeout: 5000 }).catch(err => 
-                        console.log('Continuous search trigger failed:', err.message)
-                    );
-                } catch (error) {
-                    console.log('Failed to trigger continuous search:', error.message);
-                }
-            } else {
-                console.log('Skipping continuous search trigger - anonymous user or URL not set');
-            }
-            
-            // Check if this is an IT C2C search
-            if (shouldUseC2CScraper(keywords, jobTypes)) {
-                console.log('🎯 IT C2C criteria detected, using specialized C2C scraper...');
-                try {
-                    const c2cResult = await scrapeITC2CJobs(keywords, location);
-                    if (c2cResult.success && c2cResult.jobs.length > 0) {
-                        jobs = c2cResult.jobs;
-                        source = 'it_c2c_specialist';
-                        console.log(`✅ Found ${jobs.length} IT C2C jobs from specialized platforms`);
-                    } else {
-                        throw new Error('C2C scraper returned no results');
-                    }
-                } catch (c2cError) {
-                    console.log('C2C scraper failed, falling back to general live search:', c2cError.message);
-                    const liveJobs = await performLiveSearch({ 
-                        query: keywords, 
-                        location, 
-                        limit: 10,
-                        visa_status: visaStatus,
-                        salary_min: salaryMin,
-                        salary_max: salaryMax,
-                        experience_level: experienceLevel,
-                        job_types: jobTypes,
-                        work_modes: workModes
-                    });
-                    jobs = liveJobs;
-                    source = 'live_search_fallback';
-                }
-            } else {
-                console.log('🔍 Performing general live search for first 10 real jobs...');
-                const liveJobs = await performLiveSearch({ 
-                    query: keywords, 
-                    location, 
-                    limit: 10,
-                    visa_status: visaStatus,
-                    salary_min: salaryMin,
-                    salary_max: salaryMax,
-                    experience_level: experienceLevel,
-                    job_types: jobTypes,
-                    work_modes: workModes
-                });
-                jobs = liveJobs;
-                source = 'live_search';
-            }
-            
-            console.log(`✅ Found ${jobs.length} jobs from ${source}`);
-        }
-
-        // STEP 3: If we have both, mix them intelligently
-        if (source === 'background_database' && jobs.length < 10) {
-            console.log('🔄 Supplementing background jobs with live search...');
-            const supplementaryJobs = await performLiveSearch({ 
+        // STEP 2: If fewer than quota, expand to other boards + live sourcing
+        if (jobs.length < MAX_JOBS_PER_DAY || forceRefresh) {
+            console.log('🔄 Expanding search to live job boards via scrapers/Perplexity');
+            const liveJobs = await performRobustSearch({ 
                 query: keywords, 
                 location, 
-                limit: 10 - jobs.length,
+                limit: MAX_JOBS_PER_DAY,
                 visa_status: visaStatus,
                 salary_min: salaryMin,
                 salary_max: salaryMax,
                 experience_level: experienceLevel,
                 job_types: jobTypes,
                 work_modes: workModes
-            });
-            jobs = [...jobs, ...supplementaryJobs.slice(0, 10 - jobs.length)];
-            source = 'hybrid';
+            }, aiContext);
+            jobs.push(...liveJobs);
+            source = liveJobs.length > 0 ? 'live_search' : source;
         }
 
-        // Sort by match score and limit to first 10 real jobs
-        jobs = jobs
-            .sort((a, b) => (b.match_score || 0) - (a.match_score || 0))
-            .slice(0, 10);
+        // STEP 3: If still under quota, use secondary boards from DB
+        if (jobs.length < MAX_JOBS_PER_DAY) {
+            const secondaryDbJobs = await fetchDatabaseJobs({
+                keywords,
+                lookbackDays: initialWindow ? INITIAL_LOOKBACK_DAYS : DAILY_LOOKBACK_HOURS / 24,
+                location,
+                limit: MAX_JOBS_PER_DAY,
+                appliedLinks,
+                preferredBoards: SECONDARY_JOB_BOARDS,
+                skills: aiContext.skills
+            });
+            jobs.push(...secondaryDbJobs);
+        }
+
+        // STEP 4: Enforce quota/dedup and map to desired format
+        jobs = enforceJobQuota(jobs, { limit: MAX_JOBS_PER_DAY, appliedLinks });
+        const formattedJobs = jobs.map(job => mapJobToOutput(job, { skills: aiContext.skills }));
 
         const response = {
             success: true,
-            jobs: jobs,
-            count: jobs.length,
+            jobs: formattedJobs,
+            count: formattedJobs.length,
             source: source,
             search_params: { 
                 keywords, 
@@ -407,31 +716,21 @@ exports.handler = async (event, context) => {
                 search_priority: searchPriority
             },
             summary: {
-                background_jobs: jobs.filter(j => j.is_background).length,
-                live_jobs: jobs.filter(j => j.is_live_search).length,
-                c2c_jobs: jobs.filter(j => j.is_c2c).length,
-                sample_jobs: jobs.filter(j => j.is_sample).length,
-                fallback_jobs: jobs.filter(j => j.is_fallback).length,
-                average_match_score: jobs.length > 0 
-                    ? Math.round(jobs.reduce((sum, job) => sum + (job.match_score || 0), 0) / jobs.length)
-                    : 0,
-                specialization: source === 'it_c2c_specialist' ? 'IT C2C Contracts' : 'General',
-                gpt_analyzed: jobs.filter(j => j.gpt_analyzed).length,
-                ghost_filtered: jobs.filter(j => j.is_genuine === true).length,
-                total_scraped: jobs.length + (jobs.filter(j => j.is_sample).length * 5) // Estimate
+                daily_quota: MAX_JOBS_PER_DAY,
+                delivered: formattedJobs.length,
+                initial_window: initialWindow,
+                job_boards_used: Array.from(new Set(formattedJobs.map(job => job.job_board))),
+                remote_jobs: formattedJobs.filter(j => j.is_remote).length,
+                pst_hour_executed: pstHour
             },
-            message: jobs.length === 0
-                ? `No genuine jobs found right now. Our continuous AI search system is now actively scanning 30+ job boards for real opportunities that match your profile. Check back soon!`
-                : source === 'background_database' 
-                ? `Found ${jobs.length} pre-analyzed genuine jobs from your personalized database`
-                : source === 'it_c2c_specialist'
-                ? `Found ${jobs.length} IT C2C contract opportunities from specialized platforms (Dice, TechFetch, Corp-to-Corp.org, Benchfolks). LinkedIn given lower priority as requested.`
-                : source === 'live_search'
-                ? `Found ${jobs.length} genuine jobs from live search. Our continuous background system is building your personalized job database.`
-                : `Found ${jobs.length} genuine jobs using hybrid search. Your personalized database is growing!`,
-            next_steps: source === 'live_search' 
-                ? 'Visit again later for personalized, pre-analyzed job recommendations from our background system.'
-                : 'Jobs are continuously updated in the background for better matches.'
+            message: formattedJobs.length === 0
+                ? `No genuine jobs found right now. Automated sourcing will continue hourly and perform the prioritized 5 PM PST sweep.`
+                : initialWindow
+                ? `Found ${formattedJobs.length} best matches from the past 14 days across Dice, LinkedIn, and Indeed.`
+                : `Delivered ${formattedJobs.length} fresh daily postings prioritized for the current profile.`,
+            next_steps: formattedJobs.length < MAX_JOBS_PER_DAY
+                ? 'Monitoring additional boards and company career pages to fill the remaining quota.'
+                : 'Quota reached. Next daily sweep scheduled for 5 PM PST.'
         };
 
         return {

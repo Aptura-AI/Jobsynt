@@ -125,9 +125,9 @@
         </div>
 
         <!-- Main Content Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <!-- Subscribers Overview -->
-            <div class="metric-card">
+            <div class="metric-card lg:col-span-1">
                 <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Subscribers</h3>
                 <div id="subscribersOverview" class="space-y-3">
                     <!-- Subscribers will be loaded here -->
@@ -135,7 +135,7 @@
             </div>
 
             <!-- Database Stats -->
-            <div class="metric-card">
+            <div class="metric-card lg:col-span-1">
                 <h3 class="text-lg font-semibold text-gray-900 mb-4">Database Statistics</h3>
                 <div id="databaseStats" class="space-y-4">
                     <!-- Database stats will be loaded here -->
@@ -147,16 +147,32 @@
                     </p>
                 </div>
             </div>
+
+            <!-- Users / Super Admin Controls -->
+            <div class="metric-card lg:col-span-1">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Users (Super Admin)</h3>
+                    <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700 font-semibold">DEV ONLY</span>
+                </div>
+                <p class="text-xs text-gray-500 mb-3">
+                    Click a user to open their dashboard in impersonation mode. Super admin will be able to edit profiles and apply to jobs exactly as that user.
+                </p>
+                <div id="adminUsersList" class="space-y-2 max-h-96 overflow-y-auto">
+                    <!-- Users will be loaded here -->
+                </div>
+            </div>
         </div>
 
         <!-- Action Buttons -->
         <div class="flex flex-wrap gap-4 mt-8">
             <button id="manualScrapeBtn" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors">
-                <i class="fas fa-play mr-2"></i>Run Enhanced IT Contract Scrape
+                <i class="fas fa-play mr-2"></i>Run Smart Job Scraper
             </button>
+            <span id="it-scraper-status" class="text-sm ml-2"></span>
             <button id="generalScrapeBtn" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors">
-                <i class="fas fa-briefcase mr-2"></i>Run General Scrape (BDM/Sales)
+                <i class="fas fa-briefcase mr-2"></i>Run CRM Job Scraper
             </button>
+            <span id="crm-scraper-status" class="text-sm ml-2"></span>
             <button id="cleanupBtn" class="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors">
                 <i class="fas fa-trash mr-2"></i>Cleanup Old Jobs
             </button>
@@ -216,7 +232,8 @@
                         this.loadQuickStats(),
                         this.loadScrapersStatus(),
                         this.loadSubscribers(),
-                        this.loadDatabaseStats()
+                        this.loadDatabaseStats(),
+                        this.loadUsers()
                     ]);
                     this.updateLastUpdatedTime();
                 } catch (error) {
@@ -242,8 +259,8 @@
             async loadScrapersStatus() {
                 // Only show the two real scrapers
                 const scrapers = [
-                    { name: 'Enhanced IT Contract Scraper', status: 'active', size: '18KB', lastRun: 'Auto/Manual', jobsScraped: '-', type: 'ACTIVE', description: 'Smart IT Contract Jobs - Targeting Dice, Indeed, LinkedIn, Upwork & FlexJobs' },
-                    { name: 'CRM General Job Scraper', status: 'active', size: '16KB', lastRun: 'Auto/Manual', jobsScraped: '-', type: 'ACTIVE', description: 'General contract jobs (BDM, sales, marketing, etc.)' }
+                    { name: 'Smart Job Scraper', status: 'active', size: '18KB', lastRun: 'Auto/Manual', jobsScraped: '-', type: 'ACTIVE', description: 'AI-powered IT/Tech job scraper for Dice, Indeed, LinkedIn, Upwork, FlexJobs' },
+                    { name: 'CRM Job Scraper', status: 'active', size: '16KB', lastRun: 'Auto/Manual', jobsScraped: '-', type: 'ACTIVE', description: 'AI-powered CRM/general job scraper for sales, marketing, BDM, etc.' }
                 ];
                 const container = document.getElementById('scrapersStatus');
                 container.innerHTML = scrapers.map(scraper => `
@@ -354,6 +371,65 @@
                 }
             }
 
+            async loadUsers() {
+                const container = document.getElementById('adminUsersList');
+                if (!container) return;
+                try {
+                    const response = await fetch('/.netlify/functions/admin-users');
+                    let users = [];
+                    if (response.ok) {
+                        const data = await response.json();
+                        users = data.users || [];
+                    }
+                    if (users.length === 0) {
+                        container.innerHTML = `
+                            <div class="p-4 bg-gray-50 rounded-lg text-sm text-gray-500">
+                                No profiles found yet.
+                            </div>
+                        `;
+                        return;
+                    }
+                    container.innerHTML = users.map(user => `
+                        <button
+                            class="w-full flex items-center justify-between p-2 bg-gray-50 hover:bg-blue-50 rounded-lg text-left text-sm impersonate-user-btn"
+                            data-profile-id="${user.profile_id}"
+                            data-user-email="${user.email || ''}"
+                            data-user-name="${user.name || ''}"
+                        >
+                            <div>
+                                <p class="font-medium text-gray-900">${user.name || 'Unknown User'}</p>
+                                <p class="text-xs text-gray-500">${user.email || 'No email'} • ${user.current_title || 'No title'}</p>
+                            </div>
+                            <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Open as user</span>
+                        </button>
+                    `).join('');
+
+                    // Wire click handlers for impersonation
+                    container.querySelectorAll('.impersonate-user-btn').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            const profileId = btn.getAttribute('data-profile-id');
+                            const email = btn.getAttribute('data-user-email');
+                            const name = btn.getAttribute('data-user-name');
+                            const payload = {
+                                profile_id: profileId,
+                                user_email: email,
+                                user_name: name,
+                                activated_at: new Date().toISOString()
+                            };
+                            localStorage.setItem('jobsynt_super_admin_impersonation', JSON.stringify(payload));
+                            window.location.href = '/dashboard.html';
+                        });
+                    });
+                } catch (error) {
+                    console.error('Error loading admin users:', error);
+                    container.innerHTML = `
+                        <div class="p-4 bg-red-50 rounded-lg text-sm text-red-600">
+                            Failed to load users for impersonation.
+                        </div>
+                    `;
+                }
+            }
+
             async runManualScrape(type) {
                 let endpoint = '';
                 let statusSpan = null;
@@ -361,7 +437,7 @@
                     endpoint = '/.netlify/functions/smart-job-scraper?manualTrigger=true';
                     statusSpan = document.getElementById('it-scraper-status');
                 } else if (type === 'crm') {
-                    endpoint = '/.netlify/functions/crm-job-scraper?manualTrigger=true';
+                    endpoint = '/.netlify/functions/dice-job-scraper?manualTrigger=true';
                     statusSpan = document.getElementById('crm-scraper-status');
                 }
                 if (!endpoint || !statusSpan) return;

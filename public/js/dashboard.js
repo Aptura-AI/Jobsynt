@@ -3,6 +3,48 @@ let dashboardInitialized = false;
 window.dashboardInitialized = false; // Expose to window
 let authChecked = false;
 
+// Super admin impersonation context (DEV ONLY)
+let superAdminImpersonation = null;
+try {
+    const rawImpersonation = localStorage.getItem('jobsynt_super_admin_impersonation');
+    if (rawImpersonation) {
+        superAdminImpersonation = JSON.parse(rawImpersonation);
+        console.log('[Dashboard] Super admin impersonation active:', superAdminImpersonation);
+    }
+} catch (e) {
+    console.warn('[Dashboard] Failed to parse super admin impersonation payload');
+}
+
+function getActiveUserId(authUser) {
+    if (superAdminImpersonation && superAdminImpersonation.profile_id) {
+        return superAdminImpersonation.profile_id;
+    }
+    return authUser?.id;
+}
+
+function isSuperAdminImpersonating() {
+    return !!(superAdminImpersonation && superAdminImpersonation.profile_id);
+}
+
+function showSuperAdminBanner() {
+    if (!isSuperAdminImpersonating()) return;
+    const existing = document.getElementById('superAdminBanner');
+    if (existing) return;
+    const banner = document.createElement('div');
+    banner.id = 'superAdminBanner';
+    banner.className = 'super-admin-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:8px 16px;font-size:12px;display:flex;justify-content:space-between;align-items:center;';
+    banner.innerHTML = `
+        <span><strong>SUPER ADMIN MODE:</strong> You are impersonating <strong>${superAdminImpersonation.user_name || superAdminImpersonation.user_email || 'user'}</strong>. All actions will be performed on this profile.</span>
+        <button id="exitSuperAdminImpersonation" style="background:#fff;color:#b91c1c;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:bold;">Exit</button>
+    `;
+    document.body.prepend(banner);
+    document.getElementById('exitSuperAdminImpersonation').addEventListener('click', () => {
+        localStorage.removeItem('jobsynt_super_admin_impersonation');
+        window.location.reload();
+    });
+}
+
 async function waitForSupabase() {
     if (window.supabase) return;
     
@@ -67,12 +109,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Then initialize the rest of your dashboard
         console.log('[Dashboard] Starting dashboard initialization');
+        showSuperAdminBanner();
         await loadProfileData();
         await loadJobApplications();
         await loadNetworkingContacts();
         
         // Set up event listeners
         setupEventListeners();
+        
+        await populateJobSearchForm();
         
         dashboardInitialized = true;
         window.dashboardInitialized = true; // Update window variable
@@ -92,7 +137,7 @@ async function initializeProfile(user) {
         const { data: profile, error } = await window.supabase
             .from('profiles')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', getActiveUserId(user))
             .maybeSingle();
 
         if (error) throw error;
@@ -576,7 +621,8 @@ async function handleResumeUpload(e) {
 
         const file = fileInput.files[0];
         const fileExt = file.name.split('.').pop();
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        const activeUserId = getActiveUserId(user);
+        const fileName = `${activeUserId}-${Date.now()}.${fileExt}`;
         const filePath = `resumes/${fileName}`;
 
         const { error: uploadError } = await window.supabase.storage
@@ -588,7 +634,7 @@ async function handleResumeUpload(e) {
         const { error: updateError } = await window.supabase
             .from('profiles')
             .update({ resume_url: filePath })
-            .eq('id', user.id);
+            .eq('id', activeUserId);
 
         if (updateError) throw updateError;
 
@@ -603,8 +649,32 @@ async function handleResumeUpload(e) {
 async function handleJobSearch(e) {
     e.preventDefault();
     try {
+        // Collect form data
         const formData = new FormData(e.target);
-        const searchParams = Object.fromEntries(formData.entries());
+        const searchParams = {
+            position: formData.get('applicationPosition') || document.getElementById('applicationPosition').value,
+            location: formData.get('location') || 'United States',
+            salary_min: parseInt(formData.get('salaryMin') || document.getElementById('salaryMin').value) || 0,
+            salary_max: parseInt(formData.get('salaryMax') || document.getElementById('salaryMax').value) || 0,
+            work_mode: formData.get('workMode') || document.getElementById('workMode').value,
+            job_type: formData.get('jobType') || document.getElementById('jobType').value,
+            visa_status: formData.get('visa') || document.getElementById('visa').value,
+            search_type: formData.get('searchType') || 'jobs',
+            employment_status: formData.get('employmentStatus') || 'employed'
+        };
+
+        // Save search params to Supabase for scraper use
+        const { data: { user } } = await window.supabase.auth.getUser();
+        const activeUserId = getActiveUserId(user);
+        if (activeUserId) {
+            await window.supabase
+                .from('user_job_searches')
+                .upsert({
+                    user_id: activeUserId,
+                    ...searchParams,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: ['user_id'] });
+        }
 
         // Show loading indicator
         const resultsContainer = document.getElementById('jobResults');
@@ -612,68 +682,30 @@ async function handleJobSearch(e) {
             resultsContainer.innerHTML = '<div class="loading">🔍 Searching for jobs...</div>';
         }
 
-        // Use smart job search function
+        // Fetch jobs from Supabase (or your backend API)
+        // For demo, use smart-job-search as before
         const response = await fetch('/.netlify/functions/smart-job-search', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                keywords: searchParams.keywords,
-                location: searchParams.location,
-                jobType: searchParams.jobType || 'full-time',
-                salaryMin: searchParams.salaryMin,
-                salaryMax: searchParams.salaryMax,
-                userId: (await window.supabase.auth.getUser()).data.user?.id
+                position: searchParams.position
             })
         });
 
         const data = await response.json();
-        
-        if (data.jobs && data.jobs.length > 0) {
-            displayJobResults(data.jobs);
-        } else {
-            // Try backup job search for interface testing
-            try {
-                const backupResponse = await fetch('/.netlify/functions/backup-job-search', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        keywords: searchParams.keywords,
-                        location: searchParams.location
-                    })
-                });
+        let jobs = data.jobs || [];
 
-                const backupData = await backupResponse.json();
-                
-                if (backupData.jobs && backupData.jobs.length > 0) {
-                    displayJobResults(backupData.jobs);
-                    // Show warning about sample data
-                    if (resultsContainer) {
-                        const warningDiv = document.createElement('div');
-                        warningDiv.className = 'alert alert-warning';
-                        warningDiv.innerHTML = `
-                            <strong>⚠️ Interface Testing Mode</strong><br>
-                            ${backupData.message}<br>
-                            <small>API Status: ${JSON.stringify(backupData.api_status, null, 2)}</small>
-                        `;
-                        resultsContainer.insertBefore(warningDiv, resultsContainer.firstChild);
-                    }
-                } else {
-                    if (resultsContainer) {
-                        resultsContainer.innerHTML = '<div class="no-jobs">No jobs found. Our scrapers are working to find more opportunities. Please check back later!</div>';
-                    }
-                }
-            } catch (backupError) {
-                console.error('Backup job search failed:', backupError);
-                if (resultsContainer) {
-                    resultsContainer.innerHTML = '<div class="no-jobs">No jobs found. Our scrapers are working to find more opportunities. Please check back later!</div>';
-                }
+        // Remove AI matcher logic. Always display jobs from backend (up to 20)
+        if (jobs.length > 0) {
+            // Enforce daily job limit
+            displayJobResults(jobs.slice(0, 20));
+        } else {
+            if (resultsContainer) {
+                resultsContainer.innerHTML = '<div class="no-jobs">No jobs found. Our scrapers are working to find more opportunities. Please check back later!</div>';
             }
         }
-
     } catch (error) {
         console.error('Job search error:', error);
         const resultsContainer = document.getElementById('jobResults');
@@ -687,42 +719,61 @@ async function handleJobSearch(e) {
 function displayJobResults(jobs) {
     const resultsContainer = document.getElementById('jobResults');
     if (!resultsContainer) return;
+    if (!jobs.length) {
+        resultsContainer.innerHTML = '<p>No jobs found matching your criteria</p>';
+        return;
+    }
 
-    resultsContainer.innerHTML = jobs.length ? '' : '<p>No jobs found matching your criteria</p>';
+    const table = document.createElement('table');
+    table.className = 'job-results-table';
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th>Job Title</th>
+                <th>Company</th>
+                <th>Location</th>
+                <th>Rate/Salary</th>
+                <th>Contract Type</th>
+                <th>Posted</th>
+                <th>Key Requirements</th>
+                <th>Job Board</th>
+                <th>Source Link</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${jobs.map(job => `
+                <tr>
+                    <td>${job.job_title || job.title || '-'}</td>
+                    <td>${job.company || job.employer_name || '-'}</td>
+                    <td>${job.location || job.job_city || 'Remote'}</td>
+                    <td>${job.rate_salary || job.salary || job.job_salary || 'Market Rate'}</td>
+                    <td>${job.contract_type || job.job_type || 'Contract'}</td>
+                    <td>${job.posted || 'Recently posted'}</td>
+                    <td>${Array.isArray(job.key_requirements) ? job.key_requirements.join(', ') : (job.key_requirements || 'N/A')}</td>
+                    <td>${job.job_board || job.source || 'Unknown'}</td>
+                    <td>
+                        ${job.source_link || job.url || job.job_apply_link
+                            ? `<a href="${job.source_link || job.url || job.job_apply_link}" target="_blank" rel="noopener">Open</a>`
+                            : '—'}
+                    </td>
+                </tr>
+            `).join('')}
+        </tbody>
+    `;
 
-    jobs.forEach(job => {
-        const jobCard = document.createElement('div');
-        jobCard.className = 'job-card';
-        jobCard.innerHTML = `
-            <h3>${job.job_title || job.title}</h3>
-            <p class="company">${job.employer_name || job.company}</p>
-            <p class="location">${job.job_city || job.location}</p>
-            <p class="description">${(job.job_description || job.description || '').substring(0, 150)}...</p>
-            ${job.job_apply_link ? 
-                `<a href="${job.job_apply_link}" target="_blank" class="button button-primary">Apply Now</a>` : 
-                `<button class="button button-primary apply-btn" data-job-id="${job.id}">Apply Now</button>`
-            }
-            ${job.job_salary ? `<p class="salary">💰 ${job.job_salary}</p>` : ''}
-        `;
-        resultsContainer.appendChild(jobCard);
-    });
-
-    // Add event listeners to dynamically created buttons (for jobs without direct apply links)
-    document.querySelectorAll('.apply-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            applyForJob(e.target.dataset.jobId);
-        });
-    });
+    resultsContainer.innerHTML = '';
+    resultsContainer.appendChild(table);
 }
 
 async function handleApplicationSubmit(e) {
     e.preventDefault();
     try {
         const { data: { user } } = await window.supabase.auth.getUser();
+        const activeUserId = getActiveUserId(user);
         const formData = new FormData(e.target);
 
         const applicationData = {
-            user_id: user.id,
+            user_id: activeUserId,
             job_id: formData.get('jobId'),
             cover_letter: formData.get('coverLetter'),
             status: 'pending'
@@ -747,6 +798,7 @@ async function handleApplicationSubmit(e) {
 async function loadJobApplications() {
     try {
         const { data: { user } } = await window.supabase.auth.getUser();
+        const activeUserId = getActiveUserId(user);
         const { data: applications, error } = await window.supabase
             .from('job_applications')
             .select(`
@@ -757,7 +809,7 @@ async function loadJobApplications() {
                     location
                 )
             `)
-            .eq('user_id', user.id)
+            .eq('user_id', activeUserId)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -791,10 +843,11 @@ function displayApplications(applications) {
 async function loadNetworkingContacts() {
     try {
         const { data: { user } } = await window.supabase.auth.getUser();
+        const activeUserId = getActiveUserId(user);
         const { data: contacts, error } = await window.supabase
             .from('networking_contacts')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', activeUserId)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -831,11 +884,12 @@ function displayContacts(contacts) {
 async function applyForJob(jobId) {
     try {
         const { data: { user } } = await window.supabase.auth.getUser();
+        const activeUserId = getActiveUserId(user);
         
         const { error } = await window.supabase
             .from('job_applications')
             .insert({
-                user_id: user.id,
+                user_id: activeUserId,
                 job_id: jobId,
                 status: 'pending'
             });
@@ -861,10 +915,12 @@ async function loadProfileData() {
         const { data: { session } } = await window.supabase.auth.getSession();
         if (!session) return;
 
+        const activeUserId = getActiveUserId(session.user);
+
         const { data, error } = await window.supabase
             .from('profiles')
             .select('*')
-            .eq('user_id', session.user.id)
+            .eq('user_id', activeUserId)
             .maybeSingle();
 
         if (error) {
@@ -988,4 +1044,95 @@ async function loadNetworkingContacts() {
 function setupAdditionalForms() {
     // Additional form submission handlers can be added here if needed
     console.log('[Dashboard.js] Additional forms setup complete');
+}
+
+// On page load, fetch and populate AI Job Search form with latest saved data
+async function populateJobSearchForm() {
+    const { data: { user } } = await window.supabase.auth.getUser();
+    if (!user) return;
+    const { data, error } = await window.supabase
+        .from('user_job_searches')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (error || !data) return;
+    // Populate form fields
+    if (data.position) document.getElementById('applicationPosition').value = data.position;
+    if (data.location) document.getElementById('location').value = data.location;
+    if (data.salary_min) document.getElementById('salaryMin').value = data.salary_min;
+    if (data.salary_max) document.getElementById('salaryMax').value = data.salary_max;
+    if (data.work_mode) document.getElementById('workMode').value = data.work_mode;
+    if (data.job_type) document.getElementById('jobType').value = data.job_type;
+    if (data.visa_status) document.getElementById('visa').value = data.visa_status;
+    if (data.search_type) document.getElementById('searchType').value = data.search_type;
+    if (data.employment_status) {
+        const radios = document.querySelectorAll('input[name="employmentStatus"]');
+        radios.forEach(radio => { radio.checked = (radio.value === data.employment_status); });
+    }
+}
+
+function setupSalaryTypeHandler() {
+    // Profile section salary type
+    const salaryTypeSelect = document.getElementById('salaryType');
+    const salaryFromInput = document.getElementById('salaryFrom');
+    const salaryToInput = document.getElementById('salaryTo');
+    
+    // Job search section salary type
+    const jobSearchSalaryTypeSelect = document.getElementById('jobSearchSalaryType');
+    const salaryMinInput = document.getElementById('salaryMin');
+    const salaryMaxInput = document.getElementById('salaryMax');
+    
+    function updateSalaryInputs(selectedType, fromInput, toInput) {
+        switch(selectedType) {
+            case 'hourly':
+                fromInput.placeholder = 'From (e.g., 25)';
+                toInput.placeholder = 'To (e.g., 50)';
+                fromInput.step = '1';
+                toInput.step = '1';
+                fromInput.min = '0';
+                toInput.min = '0';
+                fromInput.max = '1000';
+                toInput.max = '1000';
+                break;
+            case 'monthly':
+                fromInput.placeholder = 'From (e.g., 5000)';
+                toInput.placeholder = 'To (e.g., 8000)';
+                fromInput.step = '100';
+                toInput.step = '100';
+                fromInput.min = '0';
+                toInput.min = '0';
+                fromInput.max = '';
+                toInput.max = '';
+                break;
+            case 'yearly':
+            default:
+                fromInput.placeholder = 'From (e.g., 60000)';
+                toInput.placeholder = 'To (e.g., 90000)';
+                fromInput.step = '1000';
+                toInput.step = '1000';
+                fromInput.min = '0';
+                toInput.min = '0';
+                fromInput.max = '';
+                toInput.max = '';
+                break;
+        }
+    }
+    
+    // Profile section handler
+    if (salaryTypeSelect && salaryFromInput && salaryToInput) {
+        salaryTypeSelect.addEventListener('change', function() {
+            updateSalaryInputs(this.value, salaryFromInput, salaryToInput);
+        });
+        salaryTypeSelect.dispatchEvent(new Event('change'));
+    }
+    
+    // Job search section handler
+    if (jobSearchSalaryTypeSelect && salaryMinInput && salaryMaxInput) {
+        jobSearchSalaryTypeSelect.addEventListener('change', function() {
+            updateSalaryInputs(this.value, salaryMinInput, salaryMaxInput);
+        });
+        jobSearchSalaryTypeSelect.dispatchEvent(new Event('change'));
+    }
 }

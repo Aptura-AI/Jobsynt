@@ -1,0 +1,13 @@
+[
+  {
+    "email": "admin@jobsynth.com",
+    "passwordHash": "$2b$10$CwTycUXWue0Thq9StjUM0uJ8ejfM/9H1X4Y.CvTqvW8pY/axsQ5e.",
+    "role": "admin"
+  },
+  {
+    "email": "user@jobsynth.com",
+    "passwordHash": "$2b$10$CwTycUXWue0Thq9StjUM0uJ8ejfM/9H1X4Y.CvTqvW8pY/axsQ5e.",
+    "role": "user"
+  }
+]
+

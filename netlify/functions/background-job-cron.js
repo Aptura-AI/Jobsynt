@@ -3,24 +3,24 @@
 
 const axios = require('axios');
 
-// SINGLE ENHANCED SCRAPER CONFIGURATION
+// Smart Job Scraper configuration
 const SMART_SCRAPER = {
-    name: 'Enhanced Smart IT Contract Scraper',
+    name: 'Smart Job Scraper',
     endpoint: '/.netlify/functions/smart-job-scraper',
     enabled: true,
-    description: 'AI-powered scraper targeting Dice, Indeed, LinkedIn, Upwork & FlexJobs for IT contract opportunities',
-    interval: '15 minutes', // Run every 15 minutes for 24/7 coverage
+    description: 'AI-powered IT/Tech job scraper for Dice, Indeed, LinkedIn, Upwork, FlexJobs',
+    interval: '60 minutes',
     focus: 'IT Contract & C2C Jobs',
-    target_sites: ['Dice.com', 'Indeed.com', 'LinkedIn', 'Upwork', 'FlexJobs']
+    target_sites: ['Dice.com', 'Indeed.com', 'LinkedIn', 'Upwork', 'FlexJobs', 'USAJobs.gov']
 };
 
-// --- CRM SCRAPER CONFIGURATION ---
+// CRM Job Scraper configuration
 const CRM_SCRAPER = {
-    name: 'CRM General Job Scraper',
-    endpoint: '/.netlify/functions/crm-job-scraper',
+    name: 'CRM Job Scraper',
+    endpoint: '/.netlify/functions/dice-job-scraper',
     enabled: true,
-    description: 'Scrapes general contract jobs (BDM, sales, marketing, etc.)',
-    interval: '45 minutes', // Run every 45 minutes for 24/7 coverage
+    description: 'AI-powered CRM/general job scraper for sales, marketing, BDM, etc.',
+    interval: '45 minutes',
     target_sites: ['Dice.com', 'Toptal', 'Upwork', 'FlexJobs', 'Robert Half', 'CyberCoders', 'Aquent', 'Gun.io', 'Hired', 'AngelList']
 };
 
@@ -83,7 +83,7 @@ async function runCrmScraper() {
         // Fallback: Try to import and run directly if HTTP call fails
         try {
             console.log('🔄 Attempting direct function call for CRM...');
-            const { handler } = require('./crm-job-scraper');
+            const { handler } = require('./dice-job-scraper');
             const result = await handler({ httpMethod: 'GET', queryStringParameters: { continuous: 'true' } }, {});
             if (result.statusCode === 200) {
                 const data = JSON.parse(result.body);

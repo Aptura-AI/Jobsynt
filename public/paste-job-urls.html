@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paste Job URLs</title>
+  <link rel="stylesheet" href="/public/css/styles.css">
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 32px; }
+    h1 { text-align: center; }
+    textarea { width: 100%; min-height: 120px; font-size: 1rem; padding: 12px; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 16px; }
+    button { background: #007bff; color: #fff; border: none; padding: 12px 32px; border-radius: 4px; font-size: 1rem; cursor: pointer; }
+    button:disabled { background: #aaa; }
+    .status { margin-top: 24px; font-size: 1rem; }
+    .success { color: #28a745; }
+    .error { color: #dc3545; }
+    .job-result { margin: 8px 0; padding: 8px; background: #f1f1f1; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Paste Job URLs</h1>
+    <p>Paste one or more job URLs below (one per line, or separated by spaces/commas):</p>
+    <textarea id="jobUrls" placeholder="https://remblu.com/job/..., https://corptocorp.org/job/...\nhttps://...\n..."></textarea>
+    <button id="processBtn">Process</button>
+    <div class="status" id="status"></div>
+    <div id="results"></div>
+  </div>
+  <script src="/public/js/paste-job-urls.js"></script>
+</body>
+</html> 

@@ -1,0 +1,213 @@
+[
+  {
+    "id": "job-1",
+    "title": "Oracle Cloud ERP Functional Consultant",
+    "company": "Bluewave Consulting",
+    "location": "Remote - US",
+    "experience": "6-10",
+    "skills": ["Oracle Cloud", "ERP", "Finance", "P2P"],
+    "workMode": "remote",
+    "rate": "USD 85-105/hr",
+    "summary": "Lead finance track implementations for Oracle Cloud ERP clients.",
+    "responsibilities": [
+      "Run finance workshops and map business processes",
+      "Configure P2P, O2C, and GL modules",
+      "Coordinate with technical team on integrations"
+    ],
+    "requirements": [
+      "5+ years Oracle ERP",
+      "Cloud ERP experience",
+      "Client-facing leadership"
+    ]
+  },
+  {
+    "id": "job-2",
+    "title": "OCI Cloud Architect",
+    "company": "Nimbus Tech",
+    "location": "Austin, TX",
+    "experience": "8-12",
+    "skills": ["OCI", "Networking", "Security", "Terraform"],
+    "workMode": "hybrid",
+    "rate": "USD 95-120/hr",
+    "summary": "Design and govern OCI landing zones for enterprise workloads.",
+    "responsibilities": [
+      "Define OCI architecture and security guardrails",
+      "Create Terraform modules and CI/CD patterns",
+      "Partner with app teams to migrate workloads"
+    ],
+    "requirements": [
+      "OCI Pro cert",
+      "Terraform expertise",
+      "Enterprise architecture background"
+    ]
+  },
+  {
+    "id": "job-3",
+    "title": "Oracle DBA (Exadata)",
+    "company": "DataForge",
+    "location": "Remote - North America",
+    "experience": "7-10",
+    "skills": ["Oracle DBA", "Exadata", "RMAN", "Performance Tuning"],
+    "workMode": "remote",
+    "rate": "USD 80-100/hr",
+    "summary": "Own Exadata performance tuning and HA/DR for mission-critical systems.",
+    "responsibilities": [
+      "Maintain and tune Exadata environments",
+      "Own backup/restore and DR drills",
+      "Optimize SQL and database performance"
+    ],
+    "requirements": [
+      "Hands-on Exadata",
+      "RMAN, Data Guard",
+      "Performance troubleshooting"
+    ]
+  },
+  {
+    "id": "job-4",
+    "title": "Oracle Integration Cloud (OIC) Developer",
+    "company": "Connectify",
+    "location": "Toronto, Canada",
+    "experience": "5-8",
+    "skills": ["OIC", "REST", "Integrations", "Oracle SaaS"],
+    "workMode": "hybrid",
+    "rate": "CAD 95-115/hr",
+    "summary": "Build and manage OIC integrations between Oracle SaaS and on-prem systems.",
+    "responsibilities": [
+      "Design and develop OIC integrations",
+      "Create monitoring and alerting",
+      "Collaborate with functional teams on requirements"
+    ],
+    "requirements": [
+      "3+ years OIC",
+      "Strong REST/SOAP knowledge",
+      "Production support mindset"
+    ]
+  },
+  {
+    "id": "job-5",
+    "title": "Oracle HCM Cloud Lead",
+    "company": "PeopleFirst",
+    "location": "New York, NY",
+    "experience": "6-10",
+    "skills": ["Oracle HCM", "Core HR", "Compensation", "Change Management"],
+    "workMode": "onsite",
+    "rate": "USD 90-110/hr",
+    "summary": "Lead HCM Cloud rollout with focus on Core HR and Compensation.",
+    "responsibilities": [
+      "Plan and deliver Core HR and Comp configuration",
+      "Advise clients on change management",
+      "Own testing and cutover"
+    ],
+    "requirements": [
+      "End-to-end HCM Cloud rollouts",
+      "Stakeholder management",
+      "Testing and data migration experience"
+    ]
+  },
+  {
+    "id": "job-6",
+    "title": "Oracle EPM Architect",
+    "company": "Finlytics",
+    "location": "Chicago, IL",
+    "experience": "8-12",
+    "skills": ["EPM", "FCCS", "Planning", "Data Management"],
+    "workMode": "hybrid",
+    "rate": "USD 100-130/hr",
+    "summary": "Architect EPM solutions covering FCCS, Planning, and Data Management.",
+    "responsibilities": [
+      "Define EPM target architecture",
+      "Lead FCCS/Planning design",
+      "Integrate with ERP and data platforms"
+    ],
+    "requirements": [
+      "Multiple FCCS/Planning go-lives",
+      "Data integration know-how",
+      "Executive communication"
+    ]
+  },
+  {
+    "id": "job-7",
+    "title": "Oracle Cloud Security Engineer",
+    "company": "ShieldOps",
+    "location": "Remote - Global",
+    "experience": "5-9",
+    "skills": ["OCI", "IDCS", "Security", "SIEM"],
+    "workMode": "remote",
+    "rate": "USD 85-105/hr",
+    "summary": "Implement identity, access, and logging controls across OCI tenants.",
+    "responsibilities": [
+      "Harden OCI tenancy security",
+      "Implement IDCS SSO and MFA",
+      "Integrate with SIEM for monitoring"
+    ],
+    "requirements": [
+      "OCI/IDCS expertise",
+      "Security operations experience",
+      "Scripting for automation"
+    ]
+  },
+  {
+    "id": "job-8",
+    "title": "Full-Stack Engineer (Oracle-integrations)",
+    "company": "StackMakers",
+    "location": "San Francisco, CA",
+    "experience": "4-7",
+    "skills": ["Node.js", "React", "OIC", "REST APIs"],
+    "workMode": "onsite",
+    "rate": "USD 120-150k",
+    "summary": "Build apps that integrate Oracle SaaS data into modern web experiences.",
+    "responsibilities": [
+      "Develop full-stack features with Node and React",
+      "Integrate Oracle APIs and OIC flows",
+      "Own CI/CD and code quality"
+    ],
+    "requirements": [
+      "Modern JS/TS stack",
+      "API integration experience",
+      "Testing mindset"
+    ]
+  },
+  {
+    "id": "job-9",
+    "title": "Oracle Analytics Cloud (OAC) Consultant",
+    "company": "InsightEdge",
+    "location": "Remote - EU",
+    "experience": "5-8",
+    "skills": ["OAC", "Data Modeling", "Dashboards", "SQL"],
+    "workMode": "remote",
+    "rate": "EUR 70-90/hr",
+    "summary": "Deliver analytics models and dashboards on OAC for finance and supply chain.",
+    "responsibilities": [
+      "Model data for OAC subject areas",
+      "Build dashboards and KPIs",
+      "Optimize performance and security"
+    ],
+    "requirements": [
+      "OAC project experience",
+      "SQL proficiency",
+      "Stakeholder engagement"
+    ]
+  },
+  {
+    "id": "job-10",
+    "title": "Oracle SCM Cloud Functional Consultant",
+    "company": "ChainFlow",
+    "location": "Denver, CO",
+    "experience": "6-9",
+    "skills": ["Oracle SCM", "Inventory", "Procurement", "OTM"],
+    "workMode": "hybrid",
+    "rate": "USD 95-115/hr",
+    "summary": "Guide clients through SCM Cloud implementations with focus on Inventory and OTM.",
+    "responsibilities": [
+      "Run SCM Cloud workshops",
+      "Configure inventory and procurement flows",
+      "Align OTM scenarios with logistics partners"
+    ],
+    "requirements": [
+      "Multiple SCM Cloud projects",
+      "OTM exposure",
+      "Excellent documentation skills"
+    ]
+  }
+]
+

@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 // ONLY Enhanced IT Contract Scraper is active.
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
@@ -16,10 +18,10 @@ const config = {
 
 // Constant search parameters - exactly what you requested
 const CONSTANT_SEARCH_PARAMS = {
-    query: 'PeopleSoft AND IT AND C2C',
+    query: '(PeopleSoft OR SAP) AND IT AND C2C AND Remote',
     location: 'remote',
     min_salary: 80,
-    description: 'High-value PeopleSoft IT C2C opportunities paying $80+ per hour'
+    description: 'High-value PeopleSoft or SAP IT C2C opportunities paying $80+ per hour, remote'
 };
 
 // Site configurations for comprehensive coverage
@@ -342,8 +344,69 @@ async function saveConstantSearchJob(job) {
     }
 }
 
+// Helper to intelligently build job search queries
+function buildJobSearchQuery({ manualSearch, profile, site, automated = false }) {
+    let query = '';
+    let location = 'Remote';
+    let rate = 80;
+    let isFullTime = false;
+
+    // If user has made a manual search, use those values
+    if (manualSearch && manualSearch.position) {
+        query = manualSearch.position;
+        if (manualSearch.skills) {
+            query += ' ' + manualSearch.skills;
+        }
+        if (manualSearch.rate) {
+            rate = manualSearch.rate;
+        }
+        if (manualSearch.location) {
+            location = manualSearch.location;
+        }
+        if (manualSearch.employment_type && manualSearch.employment_type.toLowerCase().includes('full')) {
+            isFullTime = true;
+        }
+    } else if (profile) {
+        // Fallback to profile data
+        if (profile.current_title) {
+            query = profile.current_title;
+        }
+        if (profile.skills) {
+            const skillsList = profile.skills.split(',').map(s => s.trim()).filter(s => s.length > 2).slice(0, 4);
+            if (skillsList.length > 0) {
+                query += ' ' + skillsList.join(' ');
+            }
+        }
+        if (profile.expected_salary) {
+            rate = profile.expected_salary;
+        }
+        // Default location is Remote
+    }
+
+    // Automated scraping: only SAP or PeopleSoft, and contract type
+    if (automated) {
+        const tech = Math.random() > 0.5 ? 'SAP' : 'PeopleSoft';
+        let contractType = 'contract';
+        if (site && site.toLowerCase().includes('dice')) {
+            contractType = 'c2c';
+        } else if (site && site.toLowerCase().includes('indeed')) {
+            contractType = 'Corp to Corp';
+        }
+        query = `${tech} ${contractType}`;
+        location = 'Remote';
+        rate = 80;
+    }
+
+    // Always append contract/C2C/freelance terms unless full-time is explicitly requested
+    if (!isFullTime) {
+        query = `${query} contract c2c freelance contractor`.trim();
+    }
+
+    return { query: query.trim(), location, rate, isFullTime };
+}
+
 // Enhanced job search with comprehensive API coverage and timeout handling
-async function searchJobs(query, location) {
+async function searchJobs(query, location, isFullTime = false) {
     logInfo(`Searching for: "${query}" in ${location}`);
     const allJobs = [];
     let totalApiCalls = 0;
@@ -353,7 +416,6 @@ async function searchJobs(query, location) {
         try {
             totalApiCalls++;
             logInfo('Calling JSearch API (Dice, Indeed, LinkedIn, Google Jobs)...');
-            
             const searchResult = await withRetry(async () => {
                 return await safeApiCall({
                     method: 'GET',
@@ -363,18 +425,18 @@ async function searchJobs(query, location) {
                         'X-RapidAPI-Host': 'jsearch.p.rapidapi.com'
                     },
                     params: {
-                        query: `${query} contract c2c freelance contractor`,
+                        query: query,
                         page: 1,
                         num_pages: 2,
                         date_posted: 'week',
-                        employment_types: 'CONTRACTOR'
+                        employment_types: isFullTime ? 'FULLTIME' : 'CONTRACTOR'
                     },
                     timeout: config.apiTimeout
                 });
             }, 'JSearch API call');
 
             if (searchResult.data?.data?.length > 0) {
-                const jobs = searchResult.data.data
+                let jobs = searchResult.data.data
                     .filter(job => job?.job_title && job?.employer_name)
                     .slice(0, 12)
                     .map(job => ({
@@ -387,7 +449,7 @@ async function searchJobs(query, location) {
                         salary: job.job_min_salary && job.job_max_salary ? 
                             `$${job.job_min_salary.toLocaleString()}-${job.job_max_salary.toLocaleString()}` : 
                             'Competitive',
-                        job_type: 'Contract',
+                        job_type: job.job_employment_type || (isFullTime ? 'Full-Time' : 'Contract'),
                         work_mode: job.job_is_remote ? 'Remote' : 'On-site',
                         description: job.job_description?.substring(0, 500) || 'No description available',
                         url: job.job_apply_link || job.job_google_link || '',
@@ -395,6 +457,10 @@ async function searchJobs(query, location) {
                         posted_date: job.job_posted_at_datetime_utc
                     }));
                 
+                // Filter out full-time/permanent jobs unless explicitly requested
+                if (!isFullTime) {
+                    jobs = jobs.filter(j => !j.job_type.toLowerCase().includes('full'));
+                }
                 allJobs.push(...jobs);
                 logSuccess(`JSearch: Found ${jobs.length} jobs`);
             } else {
@@ -422,7 +488,7 @@ async function searchJobs(query, location) {
                     params: {
                         app_id: process.env.ADZUNA_APP_ID,
                         app_key: process.env.ADZUNA_API_KEY,
-                        what: `${query} contract freelance contractor`,
+                        what: query,
                         where: location,
                         results_per_page: 10,
                         max_days_old: 14,
@@ -433,7 +499,7 @@ async function searchJobs(query, location) {
             }, 'Adzuna API call');
 
             if (searchResult.data?.results?.length > 0) {
-                const jobs = searchResult.data.results
+                let jobs = searchResult.data.results
                     .filter(job => job?.title && job?.company?.display_name)
                     .slice(0, 8)
                     .map(job => ({
@@ -444,7 +510,7 @@ async function searchJobs(query, location) {
                         salary: job.salary_min && job.salary_max ? 
                             `$${Math.round(job.salary_min).toLocaleString()}-${Math.round(job.salary_max).toLocaleString()}` : 
                             'Competitive',
-                        job_type: 'Contract',
+                        job_type: job.contract_time || (isFullTime ? 'Full-Time' : 'Contract'),
                         work_mode: job.location.display_name?.toLowerCase().includes('remote') ? 'Remote' : 'On-site',
                         description: job.description?.substring(0, 500) || 'No description available',
                         url: job.redirect_url || '',
@@ -452,6 +518,10 @@ async function searchJobs(query, location) {
                         posted_date: job.created
                     }));
                 
+                // Filter out full-time/permanent jobs unless explicitly requested
+                if (!isFullTime) {
+                    jobs = jobs.filter(j => !j.job_type.toLowerCase().includes('full'));
+                }
                 allJobs.push(...jobs);
                 logSuccess(`Adzuna: Found ${jobs.length} jobs`);
             } else {
@@ -464,6 +534,67 @@ async function searchJobs(query, location) {
         }
     } else {
         logWarning('Adzuna API credentials not configured');
+    }
+
+    // USA Jobs API
+    if (process.env.USAJOBS_API_KEY && process.env.USAJOBS_EMAIL) {
+        try {
+            totalApiCalls++;
+            logInfo('Calling USA Jobs API...');
+            const searchResult = await withRetry(async () => {
+                return await safeApiCall({
+                    method: 'GET',
+                    url: 'https://data.usajobs.gov/api/search',
+                    headers: {
+                        'Authorization-Key': process.env.USAJOBS_API_KEY,
+                        'User-Agent': process.env.USAJOBS_EMAIL
+                    },
+                    params: {
+                        Keyword: query,
+                        LocationName: location,
+                        RemoteIndicator: 'Yes',
+                        ResultsPerPage: 10
+                    },
+                    timeout: config.apiTimeout
+                });
+            }, 'USA Jobs API call');
+
+            if (searchResult.data?.SearchResult?.SearchResultItems?.length > 0) {
+                let jobs = searchResult.data.SearchResult.SearchResultItems
+                    .map(item => item.MatchedObjectDescriptor)
+                    .filter(job => job.PositionTitle && job.OrganizationName)
+                    .map(job => ({
+                        id: `usajobs_${job.PositionID}_${Date.now()}`,
+                        title: job.PositionTitle.trim(),
+                        company: job.OrganizationName.trim(),
+                        location: job.PositionLocationDisplay || location,
+                        salary: job.PositionRemuneration && job.PositionRemuneration.length > 0 ?
+                            `$${job.PositionRemuneration[0].MinimumRange}-${job.PositionRemuneration[0].MaximumRange}` :
+                            'Competitive',
+                        job_type: job.PositionOfferingType || (isFullTime ? 'Full-Time' : 'Contract'),
+                        work_mode: job.PositionLocationDisplay?.toLowerCase().includes('remote') ? 'Remote' : 'On-site',
+                        description: job.UserArea?.Details?.JobSummary?.substring(0, 500) || 'No description available',
+                        url: job.PositionURI || '',
+                        source: 'USA Jobs API',
+                        posted_date: job.PublicationStartDate
+                    }))
+                    .filter(job => job.work_mode === 'Remote');
+                
+                // Filter out full-time/permanent jobs unless explicitly requested
+                if (!isFullTime) {
+                    jobs = jobs.filter(j => !j.job_type.toLowerCase().includes('full'));
+                }
+                allJobs.push(...jobs);
+                logSuccess(`USA Jobs: Found ${jobs.length} jobs`);
+            } else {
+                logWarning('USA Jobs returned no results');
+            }
+            await smartDelay();
+        } catch (error) {
+            logError('USA Jobs API error', error);
+        }
+    } else {
+        logWarning('USA Jobs API credentials not configured');
     }
 
     logSuccess(`Total jobs found: ${allJobs.length} from ${totalApiCalls} API calls`);
@@ -545,7 +676,6 @@ async function searchPeopleSoftJobs() {
             logError('PeopleSoft constant search error', error);
         }
     }
-
     return allJobs;
 }
 
@@ -592,6 +722,24 @@ function calculateMatchScore(job, profile) {
     }
     
     return Math.min(score, 100);
+}
+
+async function getLatestUserJobSearch(user_id) {
+    if (!supabase) return null;
+    try {
+        const { data, error } = await supabase
+            .from('user_job_searches')
+            .select('*')
+            .eq('user_id', user_id)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error('Error fetching user job search:', error);
+        return null;
+    }
 }
 
 // Enhanced main scraper function with memory management
@@ -659,32 +807,16 @@ async function runSmartJobScraper(manualTrigger = false) {
             try {
                 const { current_title, skills, city, state, id: profile_id, email, first_name, last_name } = profile;
                 
-                const searchTerms = [];
-                if (current_title) {
-                    searchTerms.push(current_title);
-                }
+                const manualSearch = await getLatestUserJobSearch(profile.user_id);
+                const { query, location, rate, isFullTime } = buildJobSearchQuery({ manualSearch, profile, site: 'Dice', automated: false });
                 
-                if (skills) {
-                    const skillsList = skills.split(',')
-                        .map(s => s.trim())
-                        .filter(s => s.length > 2)
-                        .slice(0, 4);
-                    searchTerms.push(...skillsList);
-                }
-                
-                const searchQuery = searchTerms.join(' ').substring(0, 120);
-                if (!searchQuery.trim()) {
-                    logWarning(`Skipping ${email}: No valid search terms`);
-                    continue;
-                }
-
                 profilesProcessed++;
                 const userName = `${first_name || ''} ${last_name || ''}`.trim() || email;
                 const profileJobCount = await getTotalJobCount(profile_id);
                 
                 logInfo(`Processing Profile ${profilesProcessed}/${profiles.length}: ${userName}`);
                 logInfo(`Role: ${current_title || 'Not specified'}`);
-                logInfo(`Search Query: "${searchQuery}" | Location: "${city}, ${state}"`);
+                logInfo(`Search Query: "${query}" | Location: "${location}"`);
                 logInfo(`Current jobs for profile: ${profileJobCount}`);
                 
                 if (profileJobCount >= config.maxITJobs && !manualTrigger) {
@@ -692,39 +824,48 @@ async function runSmartJobScraper(manualTrigger = false) {
                     continue;
                 }
                 
-                const location = city && state ? `${city}, ${state}` : state || 'remote';
-                
                 const jobs = await withRetry(
-                    () => searchJobs(searchQuery, location),
+                    () => searchJobs(query, location, isFullTime),
                     `searching jobs for ${userName}`
                 );
                 
-                logInfo(`API returned ${jobs.length} jobs for query: "${searchQuery}"`);
+                logInfo(`API returned ${jobs.length} jobs for query: "${query}"`);
                 if (jobs.length > 0) {
                     logInfo(`First 5 job titles: ${jobs.slice(0,5).map(j => j.title).join('; ')}`);
                 } else {
-                    logWarning(`No jobs found for query: "${searchQuery}" using APIs: ${siteConfigs.primaryAPIs.filter(api => api.enabled()).map(api => api.name).join(', ')}`);
+                    logWarning(`No jobs found for query: "${query}" using APIs: ${siteConfigs.primaryAPIs.filter(api => api.enabled()).map(api => api.name).join(', ')}`);
                 }
                 
                 totalJobsFound += jobs.length;
 
                 if (jobs.length > 0) {
-                    // Use batch processing for memory safety
                     const jobsWithProfile = jobs.map(job => ({
                         ...job,
                         profile_id,
                         target_role: current_title,
                         matched_at: new Date().toISOString(),
                         match_score: calculateMatchScore(job, profile),
-                        search_query: searchQuery,
+                        search_query: query,
                         execution_id: executionId
                     }));
-                    // Only save jobs that meet match criteria
                     const jobsToSave = jobsWithProfile.filter(j => j.match_score >= 40 || manualTrigger);
-                    const batchResults = await processJobsInBatches(jobsToSave, config.batchSize);
-                    const successful = batchResults.filter(r => r.status === 'fulfilled' && r.value === true).length;
+                    if (jobsToSave.length === 0) {
+                        logWarning(`${userName}: No jobs met the match score threshold (40)`);
+                    }
+                    const batchResult = await processJobsInBatches(jobsToSave, saveJobToSupabase, config.batchSize);
+                    const successful = batchResult.results.filter(r => r.status === 'fulfilled' && r.value === true).length;
+                    const failed = batchResult.results.filter(r => r.status === 'rejected' || r.value === false).length;
+                    logSuccess(`${userName}: Found ${jobs.length} jobs, saved ${successful} new jobs (batch), ${failed} skipped/failed`);
+                    if (failed > 0) {
+                        batchResult.results.forEach((r, idx) => {
+                            if (r.status === 'rejected') {
+                                logWarning(`Job save failed: ${jobsToSave[idx]?.title} at ${jobsToSave[idx]?.company} - ${r.reason}`);
+                            } else if (r.value === false) {
+                                logWarning(`Job skipped (duplicate or missing fields): ${jobsToSave[idx]?.title} at ${jobsToSave[idx]?.company}`);
+                            }
+                        });
+                    }
                     totalJobsSaved += successful;
-                    logSuccess(`${userName}: Found ${jobs.length} jobs, saved ${successful} new jobs (batch)`);
                     processingResults.push({
                         profile: userName,
                         found: jobs.length,
@@ -911,4 +1052,16 @@ exports.handler = async (event, context) => {
             })
         };
     }
-}; 
+};
+
+if (require.main === module) {
+  runSmartJobScraper(true).then(result => {
+    if (result && result.total_jobs_found > 0) {
+      console.log('SCRAPER RESULT:', JSON.stringify(result, null, 2));
+    } else {
+      console.log('No real jobs found. The scraper ran successfully, but no jobs were returned from the APIs.');
+    }
+  }).catch(err => {
+    console.error('SCRAPER ERROR:', err);
+  });
+} 
