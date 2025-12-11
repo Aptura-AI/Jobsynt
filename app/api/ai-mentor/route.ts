@@ -41,45 +41,36 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const completion = await openai.chat.completions.create({
+    // Use OpenAI Responses API with saved prompt
+    const completion = await openai.responses.create({
       model: 'gpt-4o-mini',
       temperature: 0.3,
-      max_tokens: 2048,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: `You are Jobsynt AI, an expert career mentor. Use the attached jobs.json and candidates.json to provide real, accurate matches.
-
-KEY RULES:
-- Always respond in valid JSON (see format below)
-- Extract skills, experience, strengths from resume
-- Find top 3-5 real job matches from jobs.json
-- Flag ghost jobs (vague, old posting, "rockstar/ninja", unrealistic reqs)
-- Give encouraging, specific feedback
-- Suggest courses if gaps exist
-- End with next steps
-
-OUTPUT FORMAT (exact JSON):
-{
-  "analysis": { "strengths": string[], "skills": string[], "gaps": string[], "profileScore": number },
-  "matches": [{ "id": string, "title": string, "company": string, "fitScore": number, "reasons": string[], "isGhost": boolean }],
-  "guidance": { "advice": string, "courses": string[], "nextSteps": string[] },
-  "keywords": ["query1", "query2", "query3"]
-}
-
-IMPORTANT: After analysis, generate 3-5 precise keyword queries for job scanning (e.g., "React developer remote 2 years exp", "frontend engineer US salary 60k+", "ERP consultant cloud"). These will be used to scrape fresh jobs from the web.
-
-Jobs data: ${JSON.stringify(jobs)}
-Candidates data: ${JSON.stringify(candidates)}
-Resume text: """${resumeText || 'No resume provided'}"""
-User message: """${userMessage || 'Analyze my profile and find jobs'}"""
-`,
+      max_output_tokens: 4096,
+      text: {
+        format: {
+          type: 'json_object',
         },
-      ],
+      },
+      prompt: {
+        id: 'pmpt_693a19adbe988194a90c57840fb224b80cd9872f8d8138ea',
+        version: '1', // or latest if updated
+      },
+      input: resumeText
+        ? `Analyze my resume and find matching jobs:\n\n${resumeText}`
+        : userMessage || 'Give me career guidance',
     });
 
-    const raw = completion.choices[0].message.content || '{}';
+    // Extract response from Responses API format
+    // Responses API returns output array with content items
+    const outputItems = completion.output || [];
+    const textContent = outputItems
+      .filter((item: any) => item.type === 'message' && item.content)
+      .flatMap((item: any) => item.content)
+      .filter((content: any) => content.type === 'text')
+      .map((content: any) => content.text)
+      .join('');
+    
+    const raw = textContent || '{}';
     let result;
     try {
       result = JSON.parse(raw);
