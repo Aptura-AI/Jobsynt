@@ -11,7 +11,8 @@ type OAuthButtonProps = {
 
 const OAuthButton = ({ provider, className }: OAuthButtonProps) => {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || searchParams.get('next') || '/';
+  const next = searchParams.get('next');
+  const callbackUrl = next?.startsWith('/') ? next : '/dashboard';
 
   const handleClick = () => {
     signIn(provider, { callbackUrl });
