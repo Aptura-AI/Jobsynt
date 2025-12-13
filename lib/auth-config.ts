@@ -120,6 +120,13 @@ export const authOptions = {
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }: any) {
+      // Always redirect to dashboard after login
+      if (url.startsWith(baseUrl)) {
+        return '/dashboard';
+      }
+      return '/dashboard';
+    },
     async signIn({ user, account, profile, email, credentials }: any) {
       if (account?.provider === 'google' || account?.provider === 'linkedin') {
         // Auto-create user on first OAuth sign-in
@@ -145,6 +152,7 @@ export const authOptions = {
         token.name = user.name;
         token.role = (user as any).role || 'user';
         token.picture = user.image;
+        token.id = user.id;
       }
       return token;
     },
@@ -154,6 +162,7 @@ export const authOptions = {
         session.user.name = token.name as string;
         session.user.role = token.role as 'admin' | 'user';
         session.user.image = token.picture as string | undefined;
+        session.user.id = token.id as string;
       }
       return session;
     },
