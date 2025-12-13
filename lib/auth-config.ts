@@ -139,7 +139,7 @@ export const authOptions = {
 
       return true;
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account }: any) {
       if (user) {
         token.email = user.email;
         token.name = user.name;
@@ -148,7 +148,7 @@ export const authOptions = {
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: any) {
       if (session.user) {
         session.user.email = token.email as string;
         session.user.name = token.name as string;
