@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import OAuthButton from '@/components/OAuthButton';
 import Link from 'next/link';
 
-export default function LoginPage() {
+function LoginForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -86,6 +86,14 @@ export default function LoginPage() {
         </Link>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-md px-4 py-12">Loading...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import clsx from 'clsx';
 
 type OAuthButtonProps = {
@@ -9,9 +10,9 @@ type OAuthButtonProps = {
   className?: string;
 };
 
-const OAuthButton = ({ provider, className }: OAuthButtonProps) => {
+function OAuthButtonInner({ provider, className }: OAuthButtonProps) {
   const searchParams = useSearchParams();
-  const next = searchParams.get('next');
+  const next = searchParams?.get('next');
   const callbackUrl = next?.startsWith('/') ? next : '/dashboard';
 
   const handleClick = () => {
@@ -79,6 +80,16 @@ const OAuthButton = ({ provider, className }: OAuthButtonProps) => {
       {icon}
       <span>{label}</span>
     </button>
+  );
+}
+
+const OAuthButton = ({ provider, className }: OAuthButtonProps) => {
+  return (
+    <Suspense fallback={
+      <div className="flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-3 font-semibold bg-gray-100 animate-pulse h-12" />
+    }>
+      <OAuthButtonInner provider={provider} className={className} />
+    </Suspense>
   );
 };
 
