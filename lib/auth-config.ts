@@ -120,7 +120,7 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile, email, credentials }) {
+    async signIn({ user, account, profile, email, credentials }: any) {
       if (account?.provider === 'google' || account?.provider === 'linkedin') {
         // Auto-create user on first OAuth sign-in
         await createOrGetUser(
