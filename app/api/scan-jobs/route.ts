@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase, isSupabaseConfigured } from '@/utils/supabase';
-import { getServerSession } from '@/lib/auth';
+import { createClient } from '@supabase/supabase-js';
+import { supabase, isSupabaseConfigured } from '@/utils/supabase'; // still used for anon reads if needed
 import OpenAI from 'openai';
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const APIFY_TOKEN = process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -12,12 +14,18 @@ const openai = new OpenAI({
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession();
     const { keywords, skills, work_mode, contract_type, rate_expectation, profile_id } = await req.json();
 
     if (!APIFY_TOKEN) {
       return NextResponse.json({ error: 'Apify token not configured' }, { status: 500 });
     }
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json({ error: 'Supabase service key not configured' }, { status: 500 });
+    }
+
+    // Use service-role client for writes
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // Default keyword set (Oracle/PeopleSoft/SAP/Cloud Data Engineer) remote C2C/1099
     const defaultKeywords = [
@@ -100,45 +108,25 @@ export async function POST(req: NextRequest) {
       return index === self.findIndex((j) => j.title === job.title && j.company === job.company);
     });
 
-    if (!isSupabaseConfigured() || !session?.user?.email) {
-      return NextResponse.json({ 
-        newJobs: uniqueJobs.length,
-        message: 'Jobs scraped but not saved (database not configured)'
-      });
-    }
-
-    // Get user profile for matching
-    let profile;
+    // Optional: Get user profile for matching (if profile_id provided)
+    let profile: any = null;
     if (profile_id) {
-      const { data } = await supabase
+      const { data } = await supabaseAdmin
         .from('profiles')
         .select('*')
         .eq('id', profile_id)
         .maybeSingle();
       profile = data;
-    } else if (session?.user?.email) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', session.user.email)
-        .maybeSingle();
-      profile = data;
-    }
-
-    if (!profile) {
-      return NextResponse.json({ 
-        newJobs: uniqueJobs.length,
-        message: 'Profile not found - jobs scraped but not matched'
-      });
     }
 
     // Use AI to match and score jobs (80%+ matches)
     const matchedJobs = [];
-    for (const job of uniqueJobs.slice(0, 50)) { // Limit to 50 for AI processing
-      try {
-        const matchPrompt = `Rate this job match for a candidate with:
+    if (profile) {
+      for (const job of uniqueJobs.slice(0, 50)) { // Limit to 50 for AI processing
+        try {
+          const matchPrompt = `Rate this job match for a candidate with:
 Skills: ${profile.skills?.join(', ') || 'None'}
-Experience: ${profile.experience_years} years
+Experience: ${profile.experience_years || 0} years
 Work Mode Preference: ${profile.work_mode?.join(', ') || 'Any'}
 Contract Type Preference: ${profile.contract_type?.join(', ') || 'Any'}
 
@@ -148,33 +136,42 @@ Description: ${job.description?.substring(0, 500)}
 
 Return JSON: {"fitScore": 0-100, "matchReasons": ["reason1", "reason2"], "isGhost": false}`;
 
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          temperature: 0.1,
-          max_tokens: 200,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: 'You are a job matching expert. Rate job matches 0-100 based on skills, experience, and preferences.' },
-            { role: 'user', content: matchPrompt },
-          ],
-        });
-
-        const matchResult = JSON.parse(completion.choices[0]?.message?.content || '{}');
-        const fitScore = matchResult.fitScore || 0;
-
-        // Only save 80%+ matches
-        if (fitScore >= 80) {
-          matchedJobs.push({
-            ...job,
-            fit_score: fitScore,
-            match_reasons: matchResult.matchReasons || [],
-            is_ghost: matchResult.isGhost || false,
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            temperature: 0.1,
+            max_tokens: 200,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: 'You are a job matching expert. Rate job matches 0-100 based on skills, experience, and preferences.' },
+              { role: 'user', content: matchPrompt },
+            ],
           });
+
+          const matchResult = JSON.parse(completion.choices[0]?.message?.content || '{}');
+          const fitScore = matchResult.fitScore || 0;
+
+          // Only save 80%+ matches
+          if (fitScore >= 80) {
+            matchedJobs.push({
+              ...job,
+              fit_score: fitScore,
+              match_reasons: matchResult.matchReasons || [],
+              is_ghost: matchResult.isGhost || false,
+            });
+          }
+        } catch (aiError) {
+          console.error('AI matching error:', aiError);
+          // Skip this job if AI fails
         }
-      } catch (aiError) {
-        console.error('AI matching error:', aiError);
-        // Skip this job if AI fails
       }
+    } else {
+      // No profile: save all unique jobs without AI scoring
+      matchedJobs.push(...uniqueJobs.map((job) => ({
+        ...job,
+        fit_score: null,
+        match_reasons: [],
+        is_ghost: false,
+      })));
     }
 
     // Save to Supabase jobs table
@@ -188,10 +185,10 @@ Return JSON: {"fitScore": 0-100, "matchReasons": ["reason1", "reason2"], "isGhos
         summary: job.description?.substring(0, 500),
         url: job.url,
         source: 'indeed',
-        profile_id: profile.id,
-        user_id: profile.id, // For filtering
+        profile_id: profile?.id || null,
+        user_id: profile?.id || null, // For filtering
         fit_score: job.fit_score,
-        contract_type: profile.contract_type || [],
+        contract_type: profile?.contract_type || [],
         match_reasons: job.match_reasons,
         tier: 'free', // Default tier
         is_active: true,
@@ -200,7 +197,7 @@ Return JSON: {"fitScore": 0-100, "matchReasons": ["reason1", "reason2"], "isGhos
       // Insert in batches
       for (const job of jobsToSave) {
         try {
-          const { error } = await supabase
+          const { error } = await supabaseAdmin
             .from('jobs')
             .upsert(job, { onConflict: 'url' })
             .select();
