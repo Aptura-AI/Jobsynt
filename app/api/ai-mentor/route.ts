@@ -39,45 +39,65 @@ Be helpful, encouraging, and specific in your feedback.`;
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession();
-    const { resumeText, userMessage } = await req.json();
+    const { resumeText, userMessage, messages } = await req.json();
 
-    // If no resume text provided, try to get from Supabase
+    let profileCtx = '';
     let finalResumeText = resumeText;
-    if (!finalResumeText && session?.user?.email) {
+
+    // Fetch profile + resume from Supabase to give AI full context
+    if (session?.user?.email) {
       try {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('id')
+          .select('*')
           .eq('email', session.user.email)
           .maybeSingle();
 
         if (profile) {
-          const { data: resumes } = await supabase
+          profileCtx = `Profile:
+Name: ${profile.name || ''}
+Title: ${profile.title || ''}
+Location: ${profile.location || ''}
+Experience: ${profile.experience_years || 0} years
+Skills: ${(profile.skills || []).join(', ')}
+Contract Type: ${(profile.contract_type || []).join(', ')}
+Work Mode: ${(profile.work_mode || []).join(', ')}
+Availability: ${profile.availability || ''}
+Visa: ${profile.visa_status || ''}
+Rate Expectation: ${profile.rate_expectation || ''}`;
+
+          const { data: resumeRow } = await supabase
             .from('resumes')
             .select('extracted_text')
             .eq('profile_id', profile.id)
             .order('uploaded_at', { ascending: false })
             .limit(1)
             .maybeSingle();
-
-          if (resumes?.extracted_text) {
-            finalResumeText = resumes.extracted_text;
+          if (resumeRow?.extracted_text && !finalResumeText) {
+            finalResumeText = resumeRow.extracted_text;
           }
         }
       } catch (dbError) {
-        console.error('Error fetching resume from DB:', dbError);
+        console.error('Error fetching profile/resume from DB:', dbError);
       }
     }
 
     if (!finalResumeText && !userMessage) {
       return NextResponse.json({ 
-        error: 'Please provide a resume or ask a question' 
+        error: 'Please provide a question. (Resume not found in your profile yet.)' 
       }, { status: 400 });
     }
 
-    const userInput = finalResumeText
-      ? `Please analyze this resume and provide career guidance. Return your response as JSON.\n\nResume:\n${finalResumeText}`
-      : `${userMessage}\n\nPlease respond in JSON format.`;
+    const baseUserMessage = finalResumeText
+      ? `Analyze this resume, use the provided profile context, and respond in JSON.\n\n${profileCtx}\n\nResume:\n${finalResumeText}`
+      : `${profileCtx}\n\nQuestion: ${userMessage}\n\nRespond in JSON as per the schema.`;
+
+    const chatHistory = Array.isArray(messages) ? messages : [];
+    const openAIMessages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...chatHistory.map((m: any) => ({ role: m.role, content: m.content })),
+      { role: 'user', content: baseUserMessage },
+    ];
 
     console.log('Calling OpenAI API...');
     const completion = await openai.chat.completions.create({
@@ -85,10 +105,7 @@ export async function POST(req: NextRequest) {
       temperature: 0.3,
       max_tokens: 4096,
       response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userInput },
-      ],
+      messages: openAIMessages,
     });
 
     const raw = completion.choices[0]?.message?.content || '{}';

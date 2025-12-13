@@ -4,13 +4,15 @@ import { useState, useEffect } from 'react';
 import Button from './Button';
 import Input from './Input';
 
+type ChatMessage = { role: 'user' | 'assistant'; content: string };
+
 export default function AIMentorUpload() {
-  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [userMessage, setUserMessage] = useState('');
-  const [resumeFromDB, setResumeFromDB] = useState<string | null>(null);
+  const [resumeAvailable, setResumeAvailable] = useState(false);
   const [checkingResume, setCheckingResume] = useState(true);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   // Check if resume exists in Supabase
   useEffect(() => {
@@ -20,20 +22,7 @@ export default function AIMentorUpload() {
         if (res.ok) {
           const data = await res.json();
           if (data.resumes && data.resumes.length > 0) {
-            // Get the extracted text from the most recent resume
-            const latestResume = data.resumes[0];
-            if (latestResume.extracted_text) {
-              setResumeFromDB(latestResume.extracted_text);
-            } else if (latestResume.public_url) {
-              // If no extracted text, try to fetch from URL
-              try {
-                const textRes = await fetch(latestResume.public_url);
-                const text = await textRes.text();
-                setResumeFromDB(text);
-              } catch {
-                // If can't fetch, user will need to upload
-              }
-            }
+            setResumeAvailable(true);
           }
         }
       } catch (error) {
@@ -45,35 +34,23 @@ export default function AIMentorUpload() {
     checkResume();
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) setFile(e.target.files[0]);
-  };
-
   const handleSubmit = async () => {
+    if (!userMessage && !resumeAvailable) {
+      setResult({ error: 'Please upload a resume in your profile first or ask a question.' });
+      return;
+    }
+
     setLoading(true);
     setResult(null);
 
     try {
-      let resumeText = '';
-
-      // Use uploaded file if provided, otherwise use from DB
-      if (file) {
-        resumeText = await file.text();
-      } else if (resumeFromDB) {
-        resumeText = resumeFromDB;
-      } else {
-        setResult({ error: 'Please upload a resume or ask a question' });
-        setLoading(false);
-        return;
-      }
+      const history = messages.map((m) => ({ role: m.role, content: m.content }));
+      history.push({ role: 'user', content: userMessage || 'Analyze my profile and resume and suggest next steps.' });
 
       const res = await fetch('/api/ai-mentor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          resumeText: resumeText || undefined, 
-          userMessage: userMessage || undefined 
-        }),
+        body: JSON.stringify({ messages: history, userMessage }),
       });
 
       if (!res.ok) {
@@ -82,16 +59,18 @@ export default function AIMentorUpload() {
       }
 
       const data = await res.json();
-      
+
       if (!data || Object.keys(data).length === 0) {
         setResult({ error: 'AI returned an empty response. Please try again.' });
         return;
       }
 
+      setMessages((prev) => [...prev, { role: 'user', content: userMessage }, { role: 'assistant', content: JSON.stringify(data) }]);
       setResult(data);
+      setUserMessage('');
     } catch (error) {
       console.error('AI Mentor error:', error);
-      setResult({ error: (error as Error).message || 'Failed to analyze resume' });
+      setResult({ error: (error as Error).message || 'Failed to analyze profile' });
     } finally {
       setLoading(false);
     }
@@ -108,33 +87,17 @@ export default function AIMentorUpload() {
   return (
     <div className="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-6 shadow-lg">
       <h2 className="mb-4 text-2xl font-bold text-ink">AI Career Mentor</h2>
-      <p className="mb-6 text-sm text-muted">Get personalized career advice, job matches, and identify ghost jobs</p>
-
-      {resumeFromDB && (
-        <div className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-700">
-          ✓ Using your uploaded resume from profile
-        </div>
+      <p className="mb-2 text-sm text-muted">AI already knows your profile and resume.</p>
+      {!resumeAvailable && (
+        <p className="mb-4 text-sm text-red-600">No resume found. Please upload one in your profile for best results.</p>
       )}
 
       <div className="space-y-4">
-        {!resumeFromDB && (
-          <div>
-            <label className="mb-2 block text-sm font-medium text-ink">Resume (PDF or TXT)</label>
-            <input
-              type="file"
-              accept=".pdf,.txt"
-              onChange={handleFileChange}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none"
-            />
-            {file && <p className="mt-2 text-xs text-muted">Selected: {file.name}</p>}
-          </div>
-        )}
-
         <div>
           <label className="mb-2 block text-sm font-medium text-ink">Ask a question (optional)</label>
           <Input
             type="text"
-            placeholder="e.g., What skills should I focus on? What jobs match my profile?"
+            placeholder="e.g., What roles are the best match for me this week?"
             value={userMessage}
             onChange={(e) => setUserMessage(e.target.value)}
           />
@@ -142,10 +105,10 @@ export default function AIMentorUpload() {
 
         <Button 
           onClick={handleSubmit} 
-          disabled={(!file && !resumeFromDB && !userMessage) || loading} 
+          disabled={loading || (!userMessage && !resumeAvailable)} 
           className="w-full"
         >
-          {loading ? 'Analyzing with AI...' : 'Get My AI Career Plan'}
+          {loading ? 'Thinking...' : 'Ask AI Mentor'}
         </Button>
       </div>
 
