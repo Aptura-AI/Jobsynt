@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { supabase, isSupabaseConfigured } from '@/utils/supabase';
 import { readJSON, writeJSON } from '@/utils/fs';
 import { v4 as uuid } from 'uuid';
 
@@ -17,28 +18,129 @@ type Job = {
 };
 
 export async function GET() {
-  const jobs = await readJSON<Job[]>('jobs.json');
-  return NextResponse.json(jobs);
+  try {
+    // Try Supabase first
+    if (isSupabaseConfigured()) {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        // Transform to match expected format
+        const jobs = data.map((job: any) => ({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          experience: job.experience || '',
+          skills: job.skills || [],
+          workMode: job.work_mode || 'remote',
+          rate: job.rate,
+          summary: job.summary,
+          responsibilities: job.responsibilities || [],
+          requirements: job.requirements || [],
+        }));
+        return NextResponse.json(jobs);
+      }
+      
+      if (error) {
+        console.log('Supabase jobs error:', error.message);
+      }
+    }
+
+    // Fallback to JSON file
+    try {
+      const jobs = await readJSON<Job[]>('jobs.json');
+      return NextResponse.json(jobs);
+    } catch {
+      return NextResponse.json([]);
+    }
+  } catch (error: any) {
+    console.error('GET jobs error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
-  const payload = await req.json();
-  const jobs = await readJSON<Job[]>('jobs.json');
-  const job: Job = {
-    id: payload.id || `job-${uuid()}`,
-    title: payload.title,
-    company: payload.company,
-    location: payload.location,
-    experience: payload.experience,
-    skills: payload.skills || [],
-    workMode: payload.workMode || 'remote',
-    rate: payload.rate,
-    summary: payload.summary,
-    responsibilities: payload.responsibilities || [],
-    requirements: payload.requirements || [],
-  };
-  jobs.push(job);
-  await writeJSON('jobs.json', jobs);
-  return NextResponse.json(job, { status: 201 });
-}
+  try {
+    const payload = await req.json();
 
+    // Try Supabase first
+    if (isSupabaseConfigured()) {
+      const jobData = {
+        title: payload.title,
+        company: payload.company,
+        location: payload.location,
+        experience: payload.experience,
+        skills: payload.skills || [],
+        work_mode: payload.workMode || 'remote',
+        rate: payload.rate,
+        summary: payload.summary,
+        responsibilities: payload.responsibilities || [],
+        requirements: payload.requirements || [],
+        url: payload.url,
+        source: payload.source || 'manual',
+        is_active: true,
+      };
+
+      const { data, error } = await supabase
+        .from('jobs')
+        .insert(jobData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase insert error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      // Transform response
+      const job = {
+        id: data.id,
+        title: data.title,
+        company: data.company,
+        location: data.location,
+        experience: data.experience,
+        skills: data.skills,
+        workMode: data.work_mode,
+        rate: data.rate,
+        summary: data.summary,
+        responsibilities: data.responsibilities,
+        requirements: data.requirements,
+      };
+
+      return NextResponse.json(job, { status: 201 });
+    }
+
+    // Fallback to JSON file (local dev only)
+    try {
+      const jobs = await readJSON<Job[]>('jobs.json');
+      const job: Job = {
+        id: payload.id || `job-${uuid()}`,
+        title: payload.title,
+        company: payload.company,
+        location: payload.location,
+        experience: payload.experience,
+        skills: payload.skills || [],
+        workMode: payload.workMode || 'remote',
+        rate: payload.rate,
+        summary: payload.summary,
+        responsibilities: payload.responsibilities || [],
+        requirements: payload.requirements || [],
+      };
+      jobs.push(job);
+      await writeJSON('jobs.json', jobs);
+      return NextResponse.json(job, { status: 201 });
+    } catch (fsError: any) {
+      return NextResponse.json({ 
+        error: 'Database not configured properly',
+        details: fsError.message 
+      }, { status: 500 });
+    }
+  } catch (error: any) {
+    console.error('POST jobs error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

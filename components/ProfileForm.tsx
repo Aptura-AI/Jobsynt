@@ -58,9 +58,12 @@ export default function ProfileForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(state),
       });
-      if (!res.ok) throw new Error('Unable to save profile');
-      setMessage('Profile saved successfully!');
-      setState(initialState);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Unable to save profile');
+      }
+      setMessage(data.message || 'Profile saved successfully!');
+      // Don't reset form - keep the data visible
     } catch (err) {
       setMessage((err as Error).message);
     } finally {
