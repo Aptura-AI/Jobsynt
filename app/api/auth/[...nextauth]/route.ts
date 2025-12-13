@@ -4,7 +4,7 @@ import LinkedInProvider from 'next-auth/providers/linkedin';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { createClient } from '@supabase/supabase-js';
 import { readJSON, writeJSON } from '@/utils/fs';
-import { verifyPassword, hashPassword } from '@/utils/auth';
+import { verifyPassword } from '@/utils/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -55,7 +55,7 @@ async function createOrGetUser(email: string, name?: string, image?: string, pro
   };
 }
 
-export const authOptions = {
+const handler = NextAuth({
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
@@ -64,6 +64,7 @@ export const authOptions = {
     LinkedInProvider({
       clientId: process.env.LINKEDIN_CLIENT_ID || '',
       clientSecret: process.env.LINKEDIN_CLIENT_SECRET || '',
+      authorization: { params: { scope: 'openid profile email' } },
     }),
     CredentialsProvider({
       name: 'Email',
@@ -133,7 +134,7 @@ export const authOptions = {
       if (user) {
         token.email = user.email;
         token.name = user.name;
-        token.role = user.role || 'user';
+        token.role = (user as any).role || 'user';
         token.picture = user.image;
       }
       return token;
@@ -152,9 +153,6 @@ export const authOptions = {
     signIn: '/login',
   },
   secret: process.env.NEXTAUTH_SECRET,
-};
-
-const handler = NextAuth(authOptions);
+});
 
 export { handler as GET, handler as POST };
-
