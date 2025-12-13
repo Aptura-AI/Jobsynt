@@ -121,11 +121,12 @@ export const authOptions = {
   ],
   callbacks: {
     async redirect({ url, baseUrl }: any) {
-      // Always redirect to dashboard after login
+      // Redirect to candidates page after login so users can complete/view their profile
+      // The candidates page will redirect to dashboard if profile is already complete
       if (url.startsWith(baseUrl)) {
-        return '/dashboard';
+        return '/candidates';
       }
-      return '/dashboard';
+      return '/candidates';
     },
     async signIn({ user, account, profile, email, credentials }: any) {
       if (account?.provider === 'google' || account?.provider === 'linkedin') {

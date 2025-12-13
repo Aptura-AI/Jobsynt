@@ -3,6 +3,8 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
+  organization: process.env.OPENAI_ORG_ID || undefined,
+  project: process.env.OPENAI_PROJECT_ID || undefined,
 });
 
 export async function POST(req: NextRequest) {
@@ -109,6 +111,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('AI Mentor error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      status: error.status,
+      code: error.code,
+      type: error.type,
+    });
+    
+    // Provide more specific error messages
+    if (error.status === 404) {
+      return NextResponse.json({ 
+        error: `Prompt not found. Please verify: 1) OPENAI_API_KEY is from the correct account, 2) OPENAI_ORG_ID is set if using organizations, 3) OPENAI_PROJECT_ID is set if prompt is in a specific project. Original error: ${error.message}` 
+      }, { status: 404 });
+    }
+    
     return NextResponse.json({ error: error.message || 'AI service error' }, { status: 500 });
   }
 }
