@@ -136,8 +136,8 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
         <div>
           <label className="mb-1 block text-sm font-semibold text-ink">Skills</label>
           <TagInput
-            tags={formData.skills}
-            onChange={(tags) => handleChange('skills', tags)}
+            values={formData.skills}
+            onChange={(values) => handleChange('skills', values)}
             placeholder="Add skills (press Enter)"
           />
           <p className="mt-1 text-xs text-muted">Add your key skills separated by Enter</p>
