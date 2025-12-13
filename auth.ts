@@ -23,7 +23,7 @@ async function createOrGetUser(email: string, name?: string, image?: string, pro
   // We just need to handle JSON file fallback
   if (!supabaseUrl || !supabaseAnonKey) {
     // Fallback to JSON file storage
-    const users = await readJSON<User[]>('users.json').catch(() => []);
+    const users: User[] = (await readJSON<User[]>('users.json').catch(() => null)) || [];
     let user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
     
     if (!user) {
@@ -96,7 +96,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         // Fallback to JSON file storage
-        const users = await readJSON<User[]>('users.json').catch(() => []);
+        const users: User[] = (await readJSON<User[]>('users.json').catch(() => null)) || [];
         const user = users.find((u) => u.email.toLowerCase() === credentials.email.toLowerCase());
         
         if (!user || !user.passwordHash) {
