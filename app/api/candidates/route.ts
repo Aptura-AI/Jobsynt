@@ -2,57 +2,23 @@ import { NextResponse } from 'next/server';
 import { supabase, isSupabaseConfigured } from '@/utils/supabase';
 import { getServerSession } from '@/lib/auth';
 
-type Candidate = {
-  id: string;
-  name: string;
-  email?: string;
-  title: string;
-  location: string;
-  experience: number;
-  skills: string[];
-  visa?: string;
-  rate?: string;
-  availability?: string;
-  summary?: string;
-  projects?: string[];
-  status?: string;
-  notes?: string;
-  resumeUrl?: string;
-};
-
 export async function GET() {
   try {
-    if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from('candidates')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Supabase GET error:', error);
-        return NextResponse.json([]);
-      }
-
-      return NextResponse.json(data?.map((c: any) => ({
-        id: c.id,
-        name: c.name || '',
-        email: c.email,
-        title: c.title || '',
-        location: c.location || '',
-        experience: c.experience || 0,
-        skills: c.skills || [],
-        visa: c.visa,
-        rate: c.rate,
-        availability: c.availability,
-        summary: c.summary,
-        projects: c.projects || [],
-        status: c.status || 'Good',
-        notes: c.notes || '',
-        resumeUrl: c.resume_url || '',
-      })) || []);
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json([]);
     }
 
-    return NextResponse.json([]);
+    const { data, error } = await supabase
+      .from('candidates')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase GET error:', error);
+      return NextResponse.json([]);
+    }
+
+    return NextResponse.json(data || []);
   } catch (error: any) {
     console.error('GET candidates error:', error);
     return NextResponse.json([]);
@@ -61,7 +27,17 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const payload = await req.json();
+    // Parse JSON with error handling
+    let payload;
+    try {
+      const text = await req.text();
+      payload = JSON.parse(text);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
+
+    // Get session for email
     const session = await getServerSession();
     const email = payload.email || session?.user?.email;
 
@@ -71,95 +47,107 @@ export async function POST(req: Request) {
 
     if (!isSupabaseConfigured()) {
       return NextResponse.json({ 
-        error: 'Database not configured. Please contact support.' 
+        error: 'Database not configured. Please run the SQL schema in Supabase.' 
       }, { status: 500 });
     }
 
-    // First, upsert profile
-    const profileData = {
-      email,
-      name: payload.name,
-      title: payload.title,
-      location: payload.location,
-      experience_years: Number(payload.experience || 0),
-      skills: payload.skills || [],
-      visa_status: payload.visa,
-      rate_expectation: payload.rate,
-      availability: payload.availability,
-      summary: payload.summary,
-      projects: payload.projects?.filter((p: string) => p?.trim()) || [],
-      preferred_job_type: payload.preferredJobType || 'remote',
-    };
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .upsert(profileData, { onConflict: 'email' })
-      .select()
-      .single();
-
-    if (profileError) {
-      console.error('Profile upsert error:', profileError);
-      return NextResponse.json({ error: profileError.message }, { status: 500 });
-    }
-
-    // Also upsert candidate for talent pool
+    // Prepare candidate data - clean and sanitize
     const candidateData = {
-      profile_id: profile.id,
-      name: payload.name,
-      email,
-      title: payload.title,
-      location: payload.location,
-      experience: Number(payload.experience || 0),
-      skills: payload.skills || [],
-      visa: payload.visa,
-      rate: payload.rate,
-      availability: payload.availability,
-      summary: payload.summary,
-      projects: payload.projects?.filter((p: string) => p?.trim()) || [],
+      name: String(payload.name || '').trim(),
+      email: String(email).trim().toLowerCase(),
+      title: String(payload.title || '').trim(),
+      location: String(payload.location || '').trim(),
+      experience: Number(payload.experience) || 0,
+      skills: Array.isArray(payload.skills) ? payload.skills.filter(Boolean) : [],
+      visa: String(payload.visa || '').trim() || null,
+      rate: String(payload.rate || '').trim() || null,
+      availability: String(payload.availability || '').trim() || null,
+      summary: String(payload.summary || '').trim() || null,
+      projects: Array.isArray(payload.projects) 
+        ? payload.projects.filter((p: any) => p && String(p).trim()) 
+        : [],
       status: 'Good',
-      resume_url: payload.resumeUrl || '',
+      resume_url: String(payload.resumeUrl || '').trim() || null,
     };
 
     // Check if candidate exists
-    const { data: existing } = await supabase
+    const { data: existing, error: checkError } = await supabase
       .from('candidates')
       .select('id')
-      .eq('email', email)
+      .eq('email', candidateData.email)
       .maybeSingle();
 
-    let candidate;
+    if (checkError) {
+      console.error('Check existing error:', checkError);
+      // Table might not exist - provide helpful error
+      if (checkError.code === '42P01') {
+        return NextResponse.json({ 
+          error: 'Database table "candidates" not found. Please run the SQL schema in Supabase Dashboard.' 
+        }, { status: 500 });
+      }
+      return NextResponse.json({ error: checkError.message }, { status: 500 });
+    }
+
+    let result;
     if (existing) {
+      // Update existing
       const { data, error } = await supabase
         .from('candidates')
         .update(candidateData)
         .eq('id', existing.id)
         .select()
         .single();
+      
       if (error) {
-        console.error('Candidate update error:', error);
+        console.error('Update error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
-      candidate = data;
+      result = data;
     } else {
+      // Insert new
       const { data, error } = await supabase
         .from('candidates')
         .insert(candidateData)
         .select()
         .single();
+      
       if (error) {
-        console.error('Candidate insert error:', error);
+        console.error('Insert error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
-      candidate = data;
+      result = data;
+    }
+
+    // Also try to update profiles table (don't fail if it doesn't work)
+    try {
+      await supabase
+        .from('profiles')
+        .upsert({
+          email: candidateData.email,
+          name: candidateData.name,
+          title: candidateData.title,
+          location: candidateData.location,
+          experience_years: candidateData.experience,
+          skills: candidateData.skills,
+          visa_status: candidateData.visa,
+          rate_expectation: candidateData.rate,
+          availability: candidateData.availability,
+          summary: candidateData.summary,
+          projects: candidateData.projects,
+        }, { onConflict: 'email' });
+    } catch (profileError) {
+      console.log('Profile update skipped (table may not exist):', profileError);
     }
 
     return NextResponse.json({ 
-      ...candidate, 
+      ...result, 
       message: 'Profile saved successfully!' 
     }, { status: 201 });
 
   } catch (error: any) {
     console.error('POST candidates error:', error);
-    return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: error.message || 'An unexpected error occurred' 
+    }, { status: 500 });
   }
 }

@@ -5,6 +5,13 @@ import { getServerSession } from '@/lib/auth';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
+function getSupabase() {
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return null;
+  }
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
 // GET - Fetch user profile
 export async function GET(req: NextRequest) {
   try {
@@ -13,20 +20,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!supabaseUrl || !supabaseServiceKey) {
+    const supabase = getSupabase();
+    if (!supabase) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
     }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('email', session.user.email)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.error('Error fetching profile:', error);
+      // Table might not exist
+      if (error.code === '42P01') {
+        return NextResponse.json({ profile: null, error: 'Table not found' });
+      }
       return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
     }
 
@@ -37,7 +47,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST - Create user profile
+// POST - Create/Update user profile
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession();
@@ -45,55 +55,61 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
+    const supabase = getSupabase();
+    if (!supabase) {
+      return NextResponse.json({ 
+        error: 'Database not configured. Please run the SQL schema in Supabase.' 
+      }, { status: 500 });
     }
 
-    const body = await req.json();
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Check if profile already exists
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', session.user.email)
-      .single();
-
-    if (existingProfile) {
-      return NextResponse.json({ error: 'Profile already exists' }, { status: 400 });
+    // Parse body with error handling
+    let body;
+    try {
+      const text = await req.text();
+      body = JSON.parse(text);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      return NextResponse.json({ error: 'Invalid JSON in request' }, { status: 400 });
     }
 
-    // Create new profile
+    // Clean and prepare profile data
     const profileData = {
-      email: session.user.email,
-      name: body.name || session.user.name,
-      title: body.title || '',
-      location: body.location || '',
-      experience_years: body.experience_years || 0,
-      skills: body.skills || [],
-      preferred_job_type: body.preferred_job_type || 'remote',
-      visa_status: body.visa_status || '',
-      rate_expectation: body.rate_expectation || '',
-      availability: body.availability || 'immediate',
-      summary: body.summary || '',
-      image_url: session.user.image || '',
+      email: String(session.user.email).trim().toLowerCase(),
+      name: String(body.name || session.user.name || '').trim(),
+      title: String(body.title || '').trim(),
+      location: String(body.location || '').trim(),
+      experience_years: Number(body.experience_years) || 0,
+      skills: Array.isArray(body.skills) ? body.skills.filter(Boolean) : [],
+      preferred_job_type: String(body.preferred_job_type || 'remote').trim(),
+      visa_status: String(body.visa_status || '').trim() || null,
+      rate_expectation: String(body.rate_expectation || '').trim() || null,
+      availability: String(body.availability || 'immediate').trim(),
+      summary: String(body.summary || '').trim() || null,
+      image_url: session.user.image || null,
     };
 
+    // Use upsert to handle both create and update
     const { data: profile, error } = await supabase
       .from('profiles')
-      .insert(profileData)
+      .upsert(profileData, { onConflict: 'email' })
       .select()
       .single();
 
     if (error) {
-      console.error('Error creating profile:', error);
-      return NextResponse.json({ error: 'Failed to create profile', details: error.message }, { status: 500 });
+      console.error('Error saving profile:', error);
+      // Table might not exist
+      if (error.code === '42P01') {
+        return NextResponse.json({ 
+          error: 'Database table "profiles" not found. Please run the SQL schema in Supabase Dashboard.' 
+        }, { status: 500 });
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ profile, message: 'Profile created successfully' });
-  } catch (error) {
+    return NextResponse.json({ profile, message: 'Profile saved successfully' });
+  } catch (error: any) {
     console.error('Profile POST error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -105,12 +121,19 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!supabaseUrl || !supabaseServiceKey) {
+    const supabase = getSupabase();
+    if (!supabase) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
     }
 
-    const body = await req.json();
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Parse body with error handling
+    let body;
+    try {
+      const text = await req.text();
+      body = JSON.parse(text);
+    } catch (parseError) {
+      return NextResponse.json({ error: 'Invalid JSON in request' }, { status: 400 });
+    }
 
     const { data: profile, error } = await supabase
       .from('profiles')
@@ -125,7 +148,6 @@ export async function PUT(req: NextRequest) {
         rate_expectation: body.rate_expectation,
         availability: body.availability,
         summary: body.summary,
-        updated_at: new Date().toISOString(),
       })
       .eq('email', session.user.email)
       .select()
@@ -133,13 +155,12 @@ export async function PUT(req: NextRequest) {
 
     if (error) {
       console.error('Error updating profile:', error);
-      return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ profile, message: 'Profile updated successfully' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Profile PUT error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }
-
