@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
+import OAuthButton from '@/components/OAuthButton';
 import Link from 'next/link';
 
 export default function SignupPage() {
@@ -79,8 +80,21 @@ export default function SignupPage() {
       <h1 className="text-3xl font-bold text-ink">Sign up</h1>
       <p className="mt-2 text-muted">Create your Jobsynt account.</p>
 
+      {/* OAuth Buttons */}
+      <div className="mt-6 space-y-3">
+        <OAuthButton provider="google" />
+        <OAuthButton provider="linkedin" />
+      </div>
+
+      {/* Divider */}
+      <div className="my-6 flex items-center gap-4">
+        <div className="flex-1 border-t border-slate-200"></div>
+        <span className="text-sm text-muted">OR</span>
+        <div className="flex-1 border-t border-slate-200"></div>
+      </div>
+
       {/* Password Signup Form */}
-      <form className="mt-6 space-y-4" onSubmit={handlePasswordSignup}>
+      <form className="space-y-4" onSubmit={handlePasswordSignup}>
         <Input label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input label="Password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         <Button type="submit" loading={loading}>

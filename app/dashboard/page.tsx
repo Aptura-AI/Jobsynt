@@ -1,5 +1,6 @@
 import JobCard from '@/components/JobCard';
 import { getAuthTokenFromCookies, verifyToken } from '@/utils/auth';
+import { getServerSession } from 'next-auth/next';
 import { readJSON } from '@/utils/fs';
 import { redirect } from 'next/navigation';
 import DashboardClient from './DashboardClient';
@@ -37,9 +38,18 @@ async function getData() {
 }
 
 export default async function DashboardPage() {
+  // Check NextAuth session first
+  const nextAuthSession = await getServerSession();
+  const nextAuthRole = nextAuthSession?.user?.role;
+  
+  // Fallback to old JWT token system
   const token = getAuthTokenFromCookies();
-  const session = token ? verifyToken(token) : null;
-  if (!session || session.role !== 'admin') {
+  const jwtSession = token ? verifyToken(token) : null;
+  
+  const isAdmin = nextAuthRole === 'admin' || jwtSession?.role === 'admin';
+  const isAuthenticated = !!nextAuthSession || !!jwtSession;
+  
+  if (!isAuthenticated || !isAdmin) {
     redirect('/login');
   }
 
