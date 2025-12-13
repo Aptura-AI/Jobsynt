@@ -42,6 +42,19 @@ export async function GET() {
           responsibilities: job.responsibilities || [],
           requirements: job.requirements || [],
         }));
+
+        // If no jobs, trigger a background scrape with default keywords
+        if (jobs.length === 0 && (process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN)) {
+          const baseUrl = process.env.NEXT_PUBLIC_SITE_URL 
+            || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+            || 'http://localhost:3000';
+          fetch(`${baseUrl}/api/scan-jobs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keywords: [] }),
+          }).catch(console.error);
+        }
+
         return NextResponse.json(jobs);
       }
       

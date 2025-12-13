@@ -87,14 +87,13 @@ export default function AIMentorUpload() {
   return (
     <div className="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-6 shadow-lg">
       <h2 className="mb-4 text-2xl font-bold text-ink">AI Career Mentor</h2>
-      <p className="mb-2 text-sm text-muted">AI already knows your profile and resume.</p>
       {!resumeAvailable && (
-        <p className="mb-4 text-sm text-red-600">No resume found. Please upload one in your profile for best results.</p>
+        <p className="mb-4 text-sm text-red-600">No resume found in your profile. Upload one for better answers.</p>
       )}
 
       <div className="space-y-4">
         <div>
-          <label className="mb-2 block text-sm font-medium text-ink">Ask a question (optional)</label>
+          <label className="mb-2 block text-sm font-medium text-ink">Ask a career question</label>
           <Input
             type="text"
             placeholder="e.g., What roles are the best match for me this week?"

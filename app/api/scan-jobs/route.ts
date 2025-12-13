@@ -19,20 +19,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Apify token not configured' }, { status: 500 });
     }
 
-    // Use provided keywords or generate from skills
+    // Default keyword set (Oracle/PeopleSoft/SAP/Cloud Data Engineer) remote C2C/1099
+    const defaultKeywords = [
+      'Oracle consultant remote C2C 1099',
+      'PeopleSoft consultant remote C2C 1099',
+      'SAP consultant remote C2C 1099',
+      'Cloud data engineer remote C2C 1099',
+    ];
+
+    // Use provided keywords or generate from skills or fallback defaults
     let searchKeywords = keywords || [];
     if (!searchKeywords.length && skills && Array.isArray(skills) && skills.length > 0) {
       searchKeywords = skills.slice(0, 5); // Use top 5 skills
     }
-
     if (!searchKeywords.length) {
-      return NextResponse.json({ error: 'Keywords or skills required' }, { status: 400 });
+      searchKeywords = defaultKeywords;
     }
 
     let allJobs: any[] = [];
 
     // Scrape jobs from Apify
-    for (const keyword of searchKeywords.slice(0, 3)) { // Limit to 3 keywords
+    for (const keyword of searchKeywords.slice(0, 4)) { // Limit to 4 keywords (5 jobs each => ~20)
       try {
         const res = await fetch(`${APIFY_BASE}/acts/apify~indeed-jobs-scraper/runs`, {
           method: 'POST',
@@ -42,8 +49,8 @@ export async function POST(req: NextRequest) {
           },
           body: JSON.stringify({
             search: keyword,
-            location: 'US',
-            limit: 20,
+            location: 'Remote',
+            limit: 5,
           }),
         });
 
