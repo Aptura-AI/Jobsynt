@@ -55,8 +55,7 @@ async function createOrGetUser(email: string, name?: string, image?: string, pro
   };
 }
 
-// Create NextAuth config (can be used to export auth, signIn, signOut)
-export const { auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || '',

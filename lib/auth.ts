@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth-config';
+import { auth } from '@/auth';
 
 // Helper to get session in server components for NextAuth v5
 export async function getServerSession() {
