@@ -149,24 +149,22 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
             label="Preferred Job Type"
             value={formData.preferred_job_type}
             onChange={(e) => handleChange('preferred_job_type', e.target.value)}
-            options={[
-              { value: 'remote', label: 'Remote' },
-              { value: 'hybrid', label: 'Hybrid' },
-              { value: 'onsite', label: 'On-site' },
-              { value: 'any', label: 'Any' },
-            ]}
-          />
+          >
+            <option value="remote">Remote</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="onsite">On-site</option>
+            <option value="any">Any</option>
+          </Select>
           <Select
             label="Availability"
             value={formData.availability}
             onChange={(e) => handleChange('availability', e.target.value)}
-            options={[
-              { value: 'immediate', label: 'Immediate' },
-              { value: '2weeks', label: '2 Weeks Notice' },
-              { value: '1month', label: '1 Month Notice' },
-              { value: 'flexible', label: 'Flexible' },
-            ]}
-          />
+          >
+            <option value="immediate">Immediate</option>
+            <option value="2weeks">2 Weeks Notice</option>
+            <option value="1month">1 Month Notice</option>
+            <option value="flexible">Flexible</option>
+          </Select>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
