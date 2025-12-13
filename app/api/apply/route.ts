@@ -8,20 +8,16 @@ import { v4 as uuid } from 'uuid';
 type Application = {
   id: string;
   jobId?: string;
-  scrapedJobId?: string;  // Bug 1 fix: Added scrapedJobId field
+  scrapedJobId?: string;
   email: string;
   createdAt: string;
 };
 
 export async function POST(req: Request) {
   try {
-    // Check NextAuth session first
     const nextAuthSession = await getServerSession();
-    
-    // Fallback to JWT token
     const token = getAuthTokenFromCookies();
     const jwtSession = token ? verifyToken(token) : null;
-
     const email = nextAuthSession?.user?.email || jwtSession?.email;
 
     if (!email) {
@@ -35,39 +31,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Job ID required' }, { status: 400 });
     }
 
-    // Try Supabase first
     if (isSupabaseConfigured()) {
-      // Bug 2 fix: Use maybeSingle() instead of single() to handle empty results gracefully
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
         .eq('email', email)
-        .maybeSingle();  // Bug 2 fix: Won't throw if no rows found
+        .maybeSingle();
 
-      const applicationData = {
-        job_id: jobId || null,
-        scraped_job_id: scrapedJobId || null,
-        profile_id: profile?.id || null,
-        email: email,
-        status: 'pending',
-        applied_at: new Date().toISOString(),
-      };
-
-      // Check if already applied - handle both jobId and scrapedJobId
       let existingQuery = supabase
         .from('job_applications')
         .select('id')
         .eq('email', email);
       
-      // Bug 1 fix: Check both ID types for duplicates
-      if (jobId) {
-        existingQuery = existingQuery.eq('job_id', jobId);
-      }
-      if (scrapedJobId) {
-        existingQuery = existingQuery.eq('scraped_job_id', scrapedJobId);
-      }
+      if (jobId) existingQuery = existingQuery.eq('job_id', jobId);
+      if (scrapedJobId) existingQuery = existingQuery.eq('scraped_job_id', scrapedJobId);
 
-      // Bug 2 fix: Use maybeSingle() - returns null instead of throwing when no rows
       const { data: existing } = await existingQuery.maybeSingle();
 
       if (existing) {
@@ -76,7 +54,14 @@ export async function POST(req: Request) {
 
       const { data, error } = await supabase
         .from('job_applications')
-        .insert(applicationData)
+        .insert({
+          job_id: jobId || null,
+          scraped_job_id: scrapedJobId || null,
+          profile_id: profile?.id || null,
+          email,
+          status: 'pending',
+          applied_at: new Date().toISOString(),
+        })
         .select()
         .single();
 
@@ -95,11 +80,9 @@ export async function POST(req: Request) {
       }, { status: 201 });
     }
 
-    // Fallback to JSON file
     try {
       const applications = await readJSON<Application[]>('applications.json');
       
-      // Bug 1 fix: Check both jobId and scrapedJobId for duplicates
       const existing = applications.find(a => {
         if (a.email !== email) return false;
         if (jobId && a.jobId === jobId) return true;
@@ -111,25 +94,18 @@ export async function POST(req: Request) {
         return NextResponse.json({ message: 'Already applied to this job' }, { status: 400 });
       }
 
-      // Bug 1 fix: Store both jobId and scrapedJobId
       const application: Application = {
         id: `app-${uuid()}`,
-        jobId: jobId,
-        scrapedJobId: scrapedJobId,
-        email: email,
+        jobId,
+        scrapedJobId,
+        email,
         createdAt: new Date().toISOString(),
       };
       applications.push(application);
       await writeJSON('applications.json', applications);
-      return NextResponse.json({
-        ...application,
-        message: 'Application submitted successfully',
-      }, { status: 201 });
+      return NextResponse.json({ ...application, message: 'Application submitted successfully' }, { status: 201 });
     } catch (fsError: any) {
-      return NextResponse.json({ 
-        error: 'Database not configured',
-        details: fsError.message 
-      }, { status: 500 });
+      return NextResponse.json({ error: 'Database not configured', details: fsError.message }, { status: 500 });
     }
   } catch (error: any) {
     console.error('POST apply error:', error);
@@ -139,28 +115,19 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    // Check NextAuth session first
     const nextAuthSession = await getServerSession();
-    
-    // Fallback to JWT token
     const token = getAuthTokenFromCookies();
     const jwtSession = token ? verifyToken(token) : null;
-
     const email = nextAuthSession?.user?.email || jwtSession?.email;
 
     if (!email) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    // Try Supabase first
     if (isSupabaseConfigured()) {
       const { data, error } = await supabase
         .from('job_applications')
-        .select(`
-          *,
-          jobs:job_id (*),
-          scraped_jobs:scraped_job_id (*)
-        `)
+        .select('*, jobs:job_id (*), scraped_jobs:scraped_job_id (*)')
         .eq('email', email)
         .order('applied_at', { ascending: false });
 
@@ -168,15 +135,12 @@ export async function GET(req: Request) {
         console.error('Supabase error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
-
       return NextResponse.json(data || []);
     }
 
-    // Fallback to JSON file
     try {
       const applications = await readJSON<Application[]>('applications.json');
-      const userApplications = applications.filter(a => a.email === email);
-      return NextResponse.json(userApplications);
+      return NextResponse.json(applications.filter(a => a.email === email));
     } catch {
       return NextResponse.json([]);
     }
