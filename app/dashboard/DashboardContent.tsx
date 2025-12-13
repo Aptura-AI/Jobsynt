@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import JobCard from '@/components/JobCard';
-import DashboardTable from '@/components/DashboardTable';
-import SearchBar from '@/components/SearchBar';
+import AIMentorUpload from '@/components/AIMentorUpload';
 
 type Profile = {
   id: string;
@@ -172,6 +171,12 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
             </a>
           </div>
         )}
+      </div>
+
+      {/* AI Career Mentor */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-ink">AI Career Mentor</h2>
+        <AIMentorUpload />
       </div>
 
       {/* Job Recommendations */}
