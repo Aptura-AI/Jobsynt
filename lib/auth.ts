@@ -1,5 +1,5 @@
 import { getServerSession as nextAuthGetServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth-config';
 
 // Helper to get session in server components for NextAuth v4 with error handling
 export async function getServerSession() {
