@@ -8,7 +8,7 @@ import { v4 as uuid } from 'uuid';
 type Application = {
   id: string;
   jobId?: string;
-  scrapedJobId?: string;
+  scrapedJobId?: string;  // Bug 1 fix: Added scrapedJobId field
   email: string;
   createdAt: string;
 };
@@ -37,12 +37,12 @@ export async function POST(req: Request) {
 
     // Try Supabase first
     if (isSupabaseConfigured()) {
-      // Get user's profile
+      // Bug 2 fix: Use maybeSingle() instead of single() to handle empty results gracefully
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
         .eq('email', email)
-        .single();
+        .maybeSingle();  // Bug 2 fix: Won't throw if no rows found
 
       const applicationData = {
         job_id: jobId || null,
@@ -59,6 +59,7 @@ export async function POST(req: Request) {
         .select('id')
         .eq('email', email);
       
+      // Bug 1 fix: Check both ID types for duplicates
       if (jobId) {
         existingQuery = existingQuery.eq('job_id', jobId);
       }
@@ -66,7 +67,8 @@ export async function POST(req: Request) {
         existingQuery = existingQuery.eq('scraped_job_id', scrapedJobId);
       }
 
-      const { data: existing } = await existingQuery.single();
+      // Bug 2 fix: Use maybeSingle() - returns null instead of throwing when no rows
+      const { data: existing } = await existingQuery.maybeSingle();
 
       if (existing) {
         return NextResponse.json({ message: 'Already applied to this job' }, { status: 400 });
@@ -97,7 +99,7 @@ export async function POST(req: Request) {
     try {
       const applications = await readJSON<Application[]>('applications.json');
       
-      // Check if already applied - handle both jobId and scrapedJobId
+      // Bug 1 fix: Check both jobId and scrapedJobId for duplicates
       const existing = applications.find(a => {
         if (a.email !== email) return false;
         if (jobId && a.jobId === jobId) return true;
@@ -109,6 +111,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ message: 'Already applied to this job' }, { status: 400 });
       }
 
+      // Bug 1 fix: Store both jobId and scrapedJobId
       const application: Application = {
         id: `app-${uuid()}`,
         jobId: jobId,

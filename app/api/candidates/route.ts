@@ -131,12 +131,12 @@ export async function POST(req: Request) {
         resume_url: payload.resumeUrl || '',
       };
 
-      // Check if candidate exists
+      // Bug 2 fix: Use maybeSingle() to gracefully handle case when no candidate exists
       const { data: existingCandidate } = await supabase
         .from('candidates')
         .select('id')
         .eq('email', email)
-        .single();
+        .maybeSingle();  // Won't throw if no rows found
 
       let candidate;
       if (existingCandidate) {
@@ -146,7 +146,10 @@ export async function POST(req: Request) {
           .eq('id', existingCandidate.id)
           .select()
           .single();
-        if (error) throw error;
+        if (error) {
+          console.error('Candidate update error:', error);
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
         candidate = data;
       } else {
         const { data, error } = await supabase
@@ -154,7 +157,10 @@ export async function POST(req: Request) {
           .insert(candidateData)
           .select()
           .single();
-        if (error) throw error;
+        if (error) {
+          console.error('Candidate insert error:', error);
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
         candidate = data;
       }
 
