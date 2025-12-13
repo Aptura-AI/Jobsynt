@@ -7,7 +7,8 @@ import { v4 as uuid } from 'uuid';
 
 type Application = {
   id: string;
-  jobId: string;
+  jobId?: string;
+  scrapedJobId?: string;
   email: string;
   createdAt: string;
 };
@@ -52,13 +53,20 @@ export async function POST(req: Request) {
         applied_at: new Date().toISOString(),
       };
 
-      // Check if already applied
-      const { data: existing } = await supabase
+      // Check if already applied - handle both jobId and scrapedJobId
+      let existingQuery = supabase
         .from('job_applications')
         .select('id')
-        .eq('email', email)
-        .eq(jobId ? 'job_id' : 'scraped_job_id', jobId || scrapedJobId)
-        .single();
+        .eq('email', email);
+      
+      if (jobId) {
+        existingQuery = existingQuery.eq('job_id', jobId);
+      }
+      if (scrapedJobId) {
+        existingQuery = existingQuery.eq('scraped_job_id', scrapedJobId);
+      }
+
+      const { data: existing } = await existingQuery.single();
 
       if (existing) {
         return NextResponse.json({ message: 'Already applied to this job' }, { status: 400 });
@@ -78,6 +86,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         id: data.id,
         jobId: data.job_id,
+        scrapedJobId: data.scraped_job_id,
         email: data.email,
         createdAt: data.created_at,
         message: 'Application submitted successfully',
@@ -88,8 +97,14 @@ export async function POST(req: Request) {
     try {
       const applications = await readJSON<Application[]>('applications.json');
       
-      // Check if already applied
-      const existing = applications.find(a => a.jobId === jobId && a.email === email);
+      // Check if already applied - handle both jobId and scrapedJobId
+      const existing = applications.find(a => {
+        if (a.email !== email) return false;
+        if (jobId && a.jobId === jobId) return true;
+        if (scrapedJobId && a.scrapedJobId === scrapedJobId) return true;
+        return false;
+      });
+      
       if (existing) {
         return NextResponse.json({ message: 'Already applied to this job' }, { status: 400 });
       }
@@ -97,12 +112,16 @@ export async function POST(req: Request) {
       const application: Application = {
         id: `app-${uuid()}`,
         jobId: jobId,
+        scrapedJobId: scrapedJobId,
         email: email,
         createdAt: new Date().toISOString(),
       };
       applications.push(application);
       await writeJSON('applications.json', applications);
-      return NextResponse.json(application, { status: 201 });
+      return NextResponse.json({
+        ...application,
+        message: 'Application submitted successfully',
+      }, { status: 201 });
     } catch (fsError: any) {
       return NextResponse.json({ 
         error: 'Database not configured',
