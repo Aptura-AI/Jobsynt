@@ -16,6 +16,8 @@ type Profile = {
   preferred_job_type: string;
   summary: string;
   resume_url?: string;
+  contract_type?: string[];
+  work_mode?: string[];
 };
 
 type Job = {
@@ -23,11 +25,13 @@ type Job = {
   title: string;
   company: string;
   location: string;
-  experience: string;
-  skills: string[];
-  workMode: string;
+  experience?: string;
+  skills?: string[];
+  workMode?: string;
   rate?: string;
   summary?: string;
+  fit_score?: number;
+  match_reasons?: string[];
 };
 
 type DashboardContentProps = {
@@ -37,29 +41,22 @@ type DashboardContentProps = {
 };
 
 export default function DashboardContent({ profile, isAdmin, userEmail }: DashboardContentProps) {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [matchedJobs, setMatchedJobs] = useState<any[]>([]);
+  const [recommendedJobs, setRecommendedJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchRecommendedJobs();
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchRecommendedJobs = async () => {
     try {
-      // Fetch jobs
-      const jobsRes = await fetch('/api/jobs');
-      const jobsData = await jobsRes.json();
-      setJobs(jobsData || []);
-
-      // Fetch matched jobs for the user
-      const matchedRes = await fetch('/api/matched-jobs');
-      if (matchedRes.ok) {
-        const matchedData = await matchedRes.json();
-        setMatchedJobs(matchedData.jobs || []);
+      const res = await fetch('/api/matched-jobs');
+      if (res.ok) {
+        const data = await res.json();
+        setRecommendedJobs(data.jobs || []);
       }
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('Error fetching recommended jobs:', error);
     } finally {
       setLoading(false);
     }
@@ -70,7 +67,6 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
       <div className="mx-auto max-w-6xl px-4 py-10">
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-1/3 rounded bg-slate-200"></div>
-          <div className="h-4 w-1/2 rounded bg-slate-200"></div>
           <div className="grid gap-4 md:grid-cols-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-24 rounded-lg bg-slate-200"></div>
@@ -107,28 +103,24 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
           <p className="text-2xl font-bold text-ink">{profile.skills?.length || 0}</p>
         </div>
         <div className="card p-4">
-          <p className="text-sm text-muted">Matched Jobs</p>
-          <p className="text-2xl font-bold text-ink">{matchedJobs.length}</p>
+          <p className="text-sm text-muted">Recommended Jobs</p>
+          <p className="text-2xl font-bold text-ink">{recommendedJobs.length}</p>
         </div>
         <div className="card p-4">
-          <p className="text-sm text-muted">Available Jobs</p>
-          <p className="text-2xl font-bold text-ink">{jobs.length}</p>
+          <p className="text-sm text-muted">Match Score</p>
+          <p className="text-2xl font-bold text-ink">
+            {recommendedJobs.length > 0 
+              ? `${Math.round(recommendedJobs.reduce((sum, j) => sum + (j.fit_score || 0), 0) / recommendedJobs.length)}%`
+              : 'N/A'}
+          </p>
         </div>
       </div>
 
       {/* Profile Summary */}
       <div className="card p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-ink">{profile.name}</h2>
-            <p className="text-muted">{profile.title}</p>
-          </div>
-          <Link
-            href="/profile/edit"
-            className="text-sm font-semibold text-primary hover:underline"
-          >
-            Edit Profile
-          </Link>
+        <div>
+          <h2 className="text-xl font-bold text-ink">{profile.name}</h2>
+          <p className="text-muted">{profile.title}</p>
         </div>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <div>
@@ -140,8 +132,10 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
             <p className="font-semibold text-ink">{profile.experience_years} years</p>
           </div>
           <div>
-            <p className="text-xs text-muted">Preferred Job Type</p>
-            <p className="font-semibold text-ink capitalize">{profile.preferred_job_type}</p>
+            <p className="text-xs text-muted">Work Mode</p>
+            <p className="font-semibold text-ink capitalize">
+              {profile.work_mode?.join(', ') || profile.preferred_job_type || 'Any'}
+            </p>
           </div>
         </div>
         {profile.skills && profile.skills.length > 0 && (
@@ -179,24 +173,56 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
         <AIMentorUpload />
       </div>
 
-      {/* Job Recommendations */}
+      {/* Recommended Jobs */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-ink">Recommended Jobs</h2>
+          <h2 className="text-xl font-bold text-ink">Recommended Jobs (90%+ Match)</h2>
           <Link href="/jobs" className="text-sm font-semibold text-primary hover:underline">
             View All Jobs →
           </Link>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {jobs.slice(0, 6).map((job) => (
-            <JobCard key={job.id} job={job} />
-          ))}
-          {jobs.length === 0 && (
-            <div className="col-span-full rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-muted">
-              No jobs available at the moment. Check back later!
-            </div>
-          )}
-        </div>
+        {recommendedJobs.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {recommendedJobs.map((job) => (
+              <div key={job.id} className="card p-4">
+                <div className="mb-2 flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold text-ink">{job.title}</h3>
+                    <p className="text-sm text-muted">{job.company} • {job.location}</p>
+                  </div>
+                  {job.fit_score && (
+                    <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
+                      {job.fit_score}% match
+                    </span>
+                  )}
+                </div>
+                {job.rate && <p className="text-sm font-semibold text-ink">{job.rate}</p>}
+                {job.summary && <p className="mt-2 text-xs text-muted line-clamp-2">{job.summary}</p>}
+                {job.match_reasons && job.match_reasons.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold text-ink">Why it matches:</p>
+                    <ul className="ml-4 list-disc text-xs text-muted">
+                      {job.match_reasons.slice(0, 2).map((reason, idx) => (
+                        <li key={idx}>{reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <Link 
+                  href={`/jobs/${job.id}`}
+                  className="mt-3 block text-sm font-semibold text-primary hover:underline"
+                >
+                  View Details →
+                </Link>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-muted">
+            <p>No recommended jobs yet. We're scanning for matches based on your profile.</p>
+            <p className="mt-2 text-xs">Check back in a few minutes!</p>
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}
@@ -229,4 +255,3 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
     </div>
   );
 }
-

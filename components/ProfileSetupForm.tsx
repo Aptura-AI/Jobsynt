@@ -6,12 +6,26 @@ import Input from './Input';
 import Select from './Select';
 import Textarea from './Textarea';
 import TagInput from './TagInput';
+import MultiSelect from './MultiSelect';
 
 type ProfileSetupFormProps = {
   userEmail: string;
   userName: string;
   onComplete: () => void;
 };
+
+const contractTypeOptions = [
+  { value: 'Full-time', label: 'Full-time' },
+  { value: 'W2 Contract', label: 'W2 Contract' },
+  { value: 'C2C', label: 'C2C' },
+  { value: '1099', label: '1099' },
+];
+
+const workModeOptions = [
+  { value: 'Remote', label: 'Remote' },
+  { value: 'Hybrid', label: 'Hybrid' },
+  { value: 'Onsite', label: 'Onsite' },
+];
 
 export default function ProfileSetupForm({ userEmail, userName, onComplete }: ProfileSetupFormProps) {
   const [loading, setLoading] = useState(false);
@@ -24,7 +38,8 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
     location: '',
     experience_years: '',
     skills: [] as string[],
-    preferred_job_type: 'remote',
+    contract_type: [] as string[],
+    work_mode: [] as string[],
     visa_status: '',
     rate_expectation: '',
     availability: 'immediate',
@@ -60,22 +75,49 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
 
       if (!profileRes.ok) {
         const data = await profileRes.json();
-        throw new Error(data.message || 'Failed to create profile');
+        throw new Error(data.error || data.message || 'Failed to create profile');
       }
+
+      const profileData = await profileRes.json();
 
       // Upload resume if provided
       if (resumeFile) {
-        const formDataUpload = new FormData();
-        formDataUpload.append('file', resumeFile);
+        try {
+          const formDataUpload = new FormData();
+          formDataUpload.append('file', resumeFile);
 
-        const resumeRes = await fetch('/api/resume/upload', {
-          method: 'POST',
-          body: formDataUpload,
-        });
+          const resumeRes = await fetch('/api/resume/upload', {
+            method: 'POST',
+            body: formDataUpload,
+          });
 
-        if (!resumeRes.ok) {
-          console.error('Resume upload failed, but profile was created');
+          if (!resumeRes.ok) {
+            const errorData = await resumeRes.json().catch(() => ({}));
+            console.error('Resume upload failed:', errorData.error || 'Unknown error');
+            // Don't throw - profile was created successfully
+          }
+        } catch (resumeError) {
+          console.error('Resume upload error:', resumeError);
+          // Continue - profile was created
         }
+      }
+
+      // Auto-trigger job scraper with user skills and preferences
+      try {
+        await fetch('/api/scan-jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            skills: formData.skills,
+            work_mode: formData.work_mode,
+            contract_type: formData.contract_type,
+            rate_expectation: formData.rate_expectation,
+            profile_id: profileData.profile?.id,
+          }),
+        });
+      } catch (scraperError) {
+        console.error('Job scraper trigger failed:', scraperError);
+        // Don't block - continue to dashboard
       }
 
       onComplete();
@@ -106,7 +148,7 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
           />
           <Input
             label="Professional Title"
-            placeholder="e.g., Senior React Developer"
+            placeholder="e.g., Senior PeopleSoft Developer"
             required
             value={formData.title}
             onChange={(e) => handleChange('title', e.target.value)}
@@ -143,18 +185,25 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
           <p className="mt-1 text-xs text-muted">Add your key skills separated by Enter</p>
         </div>
 
-        {/* Job Preferences */}
+        {/* Job Preferences - Multi-select */}
         <div className="grid gap-4 md:grid-cols-2">
-          <Select
-            label="Preferred Job Type"
-            value={formData.preferred_job_type}
-            onChange={(e) => handleChange('preferred_job_type', e.target.value)}
-          >
-            <option value="remote">Remote</option>
-            <option value="hybrid">Hybrid</option>
-            <option value="onsite">On-site</option>
-            <option value="any">Any</option>
-          </Select>
+          <MultiSelect
+            label="Contract Type"
+            options={contractTypeOptions}
+            values={formData.contract_type}
+            onChange={(values) => handleChange('contract_type', values)}
+            placeholder="Select contract types"
+          />
+          <MultiSelect
+            label="Work Mode"
+            options={workModeOptions}
+            values={formData.work_mode}
+            onChange={(values) => handleChange('work_mode', values)}
+            placeholder="Select work modes"
+          />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
           <Select
             label="Availability"
             value={formData.availability}
@@ -165,6 +214,12 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
             <option value="1month">1 Month Notice</option>
             <option value="flexible">Flexible</option>
           </Select>
+          <Input
+            label="Rate Expectation (optional)"
+            placeholder="e.g., $80/hr or $150k/year"
+            value={formData.rate_expectation}
+            onChange={(e) => handleChange('rate_expectation', e.target.value)}
+          />
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -173,12 +228,6 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
             placeholder="e.g., US Citizen, H1B, etc."
             value={formData.visa_status}
             onChange={(e) => handleChange('visa_status', e.target.value)}
-          />
-          <Input
-            label="Rate Expectation (optional)"
-            placeholder="e.g., $80/hr or $150k/year"
-            value={formData.rate_expectation}
-            onChange={(e) => handleChange('rate_expectation', e.target.value)}
           />
         </div>
 
@@ -220,4 +269,3 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
     </div>
   );
 }
-

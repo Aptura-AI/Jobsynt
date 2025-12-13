@@ -17,7 +17,7 @@ async function getUserProfile(email: string) {
     .from('profiles')
     .select('*')
     .eq('email', email)
-    .single();
+    .maybeSingle();
 
   if (error && error.code !== 'PGRST116') {
     console.error('Error fetching profile:', error);

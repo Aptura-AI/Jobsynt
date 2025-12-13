@@ -33,7 +33,6 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       console.error('Error fetching profile:', error);
-      // Table might not exist
       if (error.code === '42P01') {
         return NextResponse.json({ profile: null, error: 'Table not found' });
       }
@@ -41,7 +40,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ profile: profile || null });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Profile GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
@@ -80,6 +79,8 @@ export async function POST(req: NextRequest) {
       location: String(body.location || '').trim(),
       experience_years: Number(body.experience_years) || 0,
       skills: Array.isArray(body.skills) ? body.skills.filter(Boolean) : [],
+      contract_type: Array.isArray(body.contract_type) ? body.contract_type : [],
+      work_mode: Array.isArray(body.work_mode) ? body.work_mode : [],
       preferred_job_type: String(body.preferred_job_type || 'remote').trim(),
       visa_status: String(body.visa_status || '').trim() || null,
       rate_expectation: String(body.rate_expectation || '').trim() || null,
@@ -97,7 +98,6 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('Error saving profile:', error);
-      // Table might not exist
       if (error.code === '42P01') {
         return NextResponse.json({ 
           error: 'Database table "profiles" not found. Please run the SQL schema in Supabase Dashboard.' 
@@ -126,7 +126,6 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
     }
 
-    // Parse body with error handling
     let body;
     try {
       const text = await req.text();
@@ -143,6 +142,8 @@ export async function PUT(req: NextRequest) {
         location: body.location,
         experience_years: body.experience_years,
         skills: body.skills,
+        contract_type: body.contract_type,
+        work_mode: body.work_mode,
         preferred_job_type: body.preferred_job_type,
         visa_status: body.visa_status,
         rate_expectation: body.rate_expectation,

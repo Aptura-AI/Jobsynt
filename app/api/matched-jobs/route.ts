@@ -1,64 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase, isSupabaseConfigured } from '@/utils/supabase';
 import { getServerSession } from '@/lib/auth';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession();
     if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!supabaseUrl || !supabaseServiceKey) {
       return NextResponse.json({ jobs: [] });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ jobs: [] });
+    }
 
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, tier')
       .eq('email', session.user.email)
-      .single();
+      .maybeSingle();
 
     if (!profile) {
       return NextResponse.json({ jobs: [] });
     }
 
-    // Get matched jobs for the user
-    const { data: matchedJobs, error } = await supabase
-      .from('matched_jobs')
-      .select(`
-        *,
-        scraped_jobs (
-          id,
-          title,
-          company,
-          location,
-          salary,
-          description,
-          url,
-          posted_date,
-          source
-        )
-      `)
+    // Determine job limit based on tier
+    const tier = profile.tier || 'free';
+    const jobLimit = tier === 'free' ? 2 : tier === 'premium' ? 5 : 10;
+
+    // Get recommended jobs (90%+ match, sorted by fit_score)
+    const { data: jobs, error } = await supabase
+      .from('jobs')
+      .select('*')
       .eq('profile_id', profile.id)
+      .gte('fit_score', 90)
+      .eq('is_active', true)
       .order('fit_score', { ascending: false })
-      .limit(20);
+      .limit(jobLimit);
 
     if (error) {
       console.error('Error fetching matched jobs:', error);
       return NextResponse.json({ jobs: [] });
     }
 
-    return NextResponse.json({ jobs: matchedJobs || [] });
-  } catch (error) {
+    return NextResponse.json({ jobs: jobs || [] });
+  } catch (error: any) {
     console.error('Matched jobs error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ jobs: [] });
   }
 }
-
