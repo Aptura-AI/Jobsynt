@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 
 const APIFY_BASE = 'https://api.apify.com/v2';
 const APIFY_TOKEN = process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN;
+const DEBUG_APIFY = process.env.DEBUG_APIFY === 'true';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
@@ -45,9 +46,10 @@ export async function POST(req: NextRequest) {
     }
 
     let allJobs: any[] = [];
+    const scrapeDiagnostics: any[] = [];
 
     // Scrape jobs from Apify
-    for (const keyword of searchKeywords.slice(0, 4)) { // Limit to 4 keywords (5 jobs each => ~20)
+    for (const keyword of searchKeywords.slice(0, 4)) { // Limit to 4 keywords (5-10 jobs each => ~20-40)
       try {
         const res = await fetch(`${APIFY_BASE}/acts/apify~indeed-jobs-scraper/runs`, {
           method: 'POST',
@@ -58,19 +60,23 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({
             search: keyword,
             location: 'Remote',
-            limit: 5,
+            limit: 10,
           }),
         });
 
         if (!res.ok) {
           console.error(`Apify error for keyword "${keyword}"`);
+          scrapeDiagnostics.push({ keyword, error: `actor_run_failed_${res.status}` });
           continue;
         }
 
         const run = await res.json();
         const datasetId = run.data?.defaultDatasetId;
 
-        if (!datasetId) continue;
+        if (!datasetId) {
+          scrapeDiagnostics.push({ keyword, error: 'no_dataset_id' });
+          continue;
+        }
 
         // Poll for results
         for (let attempts = 0; attempts < 10; attempts++) {
@@ -93,12 +99,17 @@ export async function POST(req: NextRequest) {
                 postedDate: job.postedDate || new Date().toISOString().split('T')[0],
                 source: 'indeed',
               })));
+              scrapeDiagnostics.push({ keyword, datasetId, items: data.length });
               break;
             }
+          }
+          if (attempts === 9) {
+            scrapeDiagnostics.push({ keyword, datasetId, items: 0, note: 'empty_dataset' });
           }
         }
       } catch (error) {
         console.error(`Error processing keyword "${keyword}":`, error);
+        scrapeDiagnostics.push({ keyword, error: 'exception', details: (error as Error).message });
         continue;
       }
     }
@@ -213,7 +224,8 @@ Return JSON: {"fitScore": 0-100, "matchReasons": ["reason1", "reason2"], "isGhos
       newJobs: savedCount,
       totalScraped: uniqueJobs.length,
       matched: matchedJobs.length,
-      message: `Scraped ${uniqueJobs.length} jobs, matched ${matchedJobs.length} (80%+), saved ${savedCount} to database`,
+      message: `Scraped ${uniqueJobs.length} jobs, matched ${matchedJobs.length} (80%+ if profiled), saved ${savedCount} to database`,
+      diagnostics: DEBUG_APIFY ? scrapeDiagnostics : undefined,
     });
   } catch (error: any) {
     console.error('Job scanning error:', error);
