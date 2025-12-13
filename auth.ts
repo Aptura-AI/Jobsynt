@@ -72,17 +72,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials): Promise<any> {
+        // Add explicit typing and null checks
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
+
+        const email = credentials.email as string;
+        const password = credentials.password as string;
 
         // Try Supabase first
         if (supabaseUrl && supabaseAnonKey) {
           const supabase = createClient(supabaseUrl, supabaseAnonKey);
           const { data, error } = await supabase.auth.signInWithPassword({
-            email: credentials.email,
-            password: credentials.password,
+            email,
+            password,
           });
 
           if (!error && data.user) {
@@ -97,13 +101,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // Fallback to JSON file storage
         const users: User[] = (await readJSON<User[]>('users.json').catch(() => null)) || [];
-        const user = users.find((u) => u.email.toLowerCase() === credentials.email.toLowerCase());
+        const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
         
         if (!user || !user.passwordHash) {
           return null;
         }
 
-        const valid = await verifyPassword(credentials.password, user.passwordHash);
+        const valid = await verifyPassword(password, user.passwordHash);
         if (!valid) {
           return null;
         }
