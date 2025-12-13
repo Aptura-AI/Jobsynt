@@ -3,8 +3,7 @@ import { getAuthTokenFromCookies, verifyToken } from '@/utils/auth';
 import { readJSON } from '@/utils/fs';
 import { redirect } from 'next/navigation';
 import DashboardClient from './DashboardClient';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getServerSession } from '@/lib/auth';
 
 type Candidate = {
   id: string;
@@ -40,7 +39,7 @@ async function getData() {
 
 export default async function DashboardPage() {
   // Check NextAuth session first
-  const nextAuthSession = await getServerSession(authOptions);
+  const nextAuthSession = await getServerSession();
   const nextAuthRole = nextAuthSession?.user?.role;
   
   // Fallback to old JWT token system
@@ -103,4 +102,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-
