@@ -120,7 +120,7 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account, profile, email, credentials }) {
       if (account?.provider === 'google' || account?.provider === 'linkedin') {
         // Auto-create user on first OAuth sign-in
         await createOrGetUser(
@@ -129,7 +129,14 @@ export const authOptions = {
           user.image || profile?.picture,
           account.provider
         );
+        return true;
       }
+
+      if (account?.provider === 'credentials') {
+        // Credentials login — already validated in authorize
+        return true;
+      }
+
       return true;
     },
     async jwt({ token, user, account }) {
