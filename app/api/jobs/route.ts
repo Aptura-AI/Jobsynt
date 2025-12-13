@@ -25,7 +25,8 @@ export async function GET() {
         .from('jobs')
         .select('*')
         .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(20);
 
       if (!error && data) {
         // Transform to match expected format
@@ -61,15 +62,11 @@ export async function GET() {
       if (error) {
         console.log('Supabase jobs error:', error.message);
       }
+      return NextResponse.json([]); // DB configured but no jobs
     }
 
-    // Fallback to JSON file
-    try {
-      const jobs = await readJSON<Job[]>('jobs.json');
-      return NextResponse.json(jobs);
-    } catch {
-      return NextResponse.json([]);
-    }
+    // If Supabase not configured, return empty (no fake/sample jobs)
+    return NextResponse.json([]);
   } catch (error: any) {
     console.error('GET jobs error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
