@@ -10,11 +10,13 @@ declare module 'next-auth' {
       image?: string;
       role: 'admin' | 'user';
     };
+    admin_master?: boolean;
   }
 
   interface User {
     id?: string;
     role?: 'admin' | 'user';
+    admin_master?: boolean;
   }
 }
 
@@ -22,6 +24,7 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id?: string;
     role?: 'admin' | 'user';
+    admin_master?: boolean;
   }
 }
 

@@ -82,9 +82,10 @@ Rate Expectation: ${profile.rate_expectation || ''}`;
       }
     }
 
+    // If no resume and no message, allow questions without resume
     if (!finalResumeText && !userMessage) {
       return NextResponse.json({ 
-        error: 'Please provide a question. (Resume not found in your profile yet.)' 
+        error: 'Please provide a question or upload a resume.' 
       }, { status: 400 });
     }
 
@@ -128,22 +129,7 @@ Rate Expectation: ${profile.rate_expectation || ''}`;
       }, { status: 500 });
     }
 
-    // If keywords exist, trigger job scanning (async, don't block response)
-    const keywords = result.keywords || [];
-    if (keywords.length > 0 && (process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN)) {
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL 
-        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-        || 'http://localhost:3000';
-      
-      // Fire and forget - don't await
-      fetch(`${baseUrl}/api/scan-jobs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keywords }),
-      }).catch(console.error);
-      
-      result.scanning = true;
-    }
+    // No automatic scraping - jobs are manually uploaded
 
     return NextResponse.json(result);
   } catch (error: any) {

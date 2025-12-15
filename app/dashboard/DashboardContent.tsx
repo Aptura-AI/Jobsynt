@@ -176,14 +176,14 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
       {/* Recommended Jobs */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-ink">Recommended Jobs (90%+ Match)</h2>
+          <h2 className="text-xl font-bold text-ink">Matched Jobs (90%+ Match)</h2>
           <Link href="/jobs" className="text-sm font-semibold text-primary hover:underline">
             View All Jobs →
           </Link>
         </div>
         {recommendedJobs.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {recommendedJobs.map((job) => (
+            {recommendedJobs.map((job: any) => (
               <div key={job.id} className="card p-4">
                 <div className="mb-2 flex items-start justify-between">
                   <div>
@@ -196,30 +196,58 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
                     </span>
                   )}
                 </div>
-                {job.rate && <p className="text-sm font-semibold text-ink">{job.rate}</p>}
-                {job.summary && <p className="mt-2 text-xs text-muted line-clamp-2">{job.summary}</p>}
+                {job.salary && <p className="text-sm font-semibold text-ink">{job.salary}</p>}
+                {job.description && <p className="mt-2 text-xs text-muted line-clamp-2">{job.description}</p>}
                 {job.match_reasons && job.match_reasons.length > 0 && (
                   <div className="mt-2">
                     <p className="text-xs font-semibold text-ink">Why it matches:</p>
                     <ul className="ml-4 list-disc text-xs text-muted">
-                      {job.match_reasons.slice(0, 2).map((reason, idx) => (
+                      {job.match_reasons.slice(0, 2).map((reason: string, idx: number) => (
                         <li key={idx}>{reason}</li>
                       ))}
                     </ul>
                   </div>
                 )}
-                <Link 
-                  href={`/jobs/${job.id}`}
-                  className="mt-3 block text-sm font-semibold text-primary hover:underline"
-                >
-                  View Details →
-                </Link>
+                <div className="mt-3 flex items-center justify-between">
+                  {job.url && (
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-primary hover:underline"
+                    >
+                      View Job →
+                    </a>
+                  )}
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={job.applied || false}
+                      onChange={async (e) => {
+                        try {
+                          const res = await fetch('/api/job-applications', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ job_id: job.id, applied: e.target.checked }),
+                          });
+                          if (res.ok) {
+                            fetchRecommendedJobs();
+                          }
+                        } catch (error) {
+                          console.error('Error updating application:', error);
+                        }
+                      }}
+                      className="rounded"
+                    />
+                    <span className="text-muted">I have applied</span>
+                  </label>
+                </div>
               </div>
             ))}
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-muted">
-            <p>No recommended jobs yet. We're scanning for matches based on your profile.</p>
+            <p>No matched jobs yet. AI agent is matching jobs to your profile.</p>
             <p className="mt-2 text-xs">Check back in a few minutes!</p>
           </div>
         )}

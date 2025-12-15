@@ -8,6 +8,7 @@ const TOKEN_NAME = 'jobsynth_token';
 export type SessionToken = {
   email: string;
   role: 'admin' | 'user';
+  admin_master?: boolean;
 };
 
 export async function hashPassword(password: string): Promise<string> {

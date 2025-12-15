@@ -102,22 +102,20 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
         }
       }
 
-      // Auto-trigger job scraper with user skills and preferences
-      try {
-        await fetch('/api/scan-jobs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            skills: formData.skills,
-            work_mode: formData.work_mode,
-            contract_type: formData.contract_type,
-            rate_expectation: formData.rate_expectation,
-            profile_id: profileData.profile?.id,
-          }),
-        });
-      } catch (scraperError) {
-        console.error('Job scraper trigger failed:', scraperError);
-        // Don't block - continue to dashboard
+      // Trigger AI matching for this profile
+      if (profileData.profile?.id) {
+        try {
+          await fetch('/api/ai-match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              profile_id: profileData.profile.id,
+            }),
+          });
+        } catch (matchError) {
+          console.error('AI matching trigger failed:', matchError);
+          // Non-blocking - matching will happen on schedule
+        }
       }
 
       onComplete();

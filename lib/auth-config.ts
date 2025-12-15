@@ -79,6 +79,17 @@ export const authOptions = {
         const email = credentials.email as string;
         const password = credentials.password as string;
 
+        // Master admin login (fixed credentials)
+        if (email.toLowerCase() === 'info@jobsynt.com' && password === 'Jobsynt@2026') {
+          return {
+            id: 'admin-master',
+            email: 'info@jobsynt.com',
+            name: 'Jobsynt Admin',
+            role: 'admin',
+            admin_master: true,
+          };
+        }
+
         // Try Supabase first
         if (supabaseUrl && supabaseAnonKey) {
           const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -153,6 +164,7 @@ export const authOptions = {
         token.role = (user as any).role || 'user';
         token.picture = user.image;
         token.id = user.id;
+        token.admin_master = (user as any).admin_master || false;
       }
       return token;
     },
@@ -163,6 +175,7 @@ export const authOptions = {
         session.user.role = token.role as 'admin' | 'user';
         session.user.image = token.picture as string | undefined;
         session.user.id = token.id as string;
+        (session as any).admin_master = token.admin_master || false;
       }
       return session;
     },

@@ -18,6 +18,21 @@ export async function POST(req: Request) {
     const payload = await req.json();
     const { email, password } = payload;
 
+    // Master admin login (fixed credentials)
+    if (email.toLowerCase() === 'info@jobsynt.com' && password === 'Jobsynt@2026') {
+      const token = signToken({
+        email: 'info@jobsynt.com',
+        role: 'admin',
+        admin_master: true,
+      });
+      setAuthCookie(token);
+      return NextResponse.json({
+        email: 'info@jobsynt.com',
+        role: 'admin',
+        admin_master: true,
+      });
+    }
+
     // Try Supabase first if configured
     if (supabaseUrl && supabaseAnonKey) {
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
