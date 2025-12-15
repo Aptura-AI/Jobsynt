@@ -84,7 +84,7 @@ export default function HomePage() {
               </div>
             </div>
             <div className="text-center">
-              <Link href="/company">
+              <Link href="/company/register">
                 <Button className="px-8 py-3 text-lg">Post a Job for Free</Button>
               </Link>
             </div>
