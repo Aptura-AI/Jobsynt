@@ -9,6 +9,7 @@ export type SessionToken = {
   email: string;
   role: 'admin' | 'user';
   admin_master?: boolean;
+  company_id?: string;
 };
 
 export async function hashPassword(password: string): Promise<string> {
