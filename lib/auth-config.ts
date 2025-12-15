@@ -4,6 +4,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import { createClient } from '@supabase/supabase-js';
 import { readJSON, writeJSON } from '@/utils/fs';
 import { verifyPassword } from '@/utils/auth';
+import { getPostAuthRedirect, ensureProfileExists, isAdminUser } from '@/lib/auth-routing';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -131,22 +132,37 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async redirect({ url, baseUrl }: any) {
-      // Redirect to dashboard after login - dashboard shows profile setup if needed
-      if (url.startsWith(baseUrl)) {
-        return '/dashboard';
+    async redirect({ url, baseUrl, token }: any) {
+      // Use centralized routing logic
+      if (token?.email) {
+        try {
+          const redirectPath = await getPostAuthRedirect(token.email, token.id);
+          return redirectPath;
+        } catch (error) {
+          console.error('Redirect error:', error);
+          // Fallback to dashboard on error
+          return '/dashboard';
+        }
       }
+      // Default fallback
       return '/dashboard';
     },
-    async signIn({ user, account, profile, email, credentials }: any) {
+    async signIn({ user, account, profile }: any) {
       if (account?.provider === 'google' || account?.provider === 'linkedin') {
-        // Auto-create user on first OAuth sign-in
-        await createOrGetUser(
-          user.email!,
-          user.name || profile?.name,
-          user.image || profile?.picture,
-          account.provider
-        );
+        // For OAuth, ensure profile exists in Supabase
+        if (supabaseUrl && supabaseAnonKey && user.email && user.id) {
+          try {
+            await ensureProfileExists(
+              user.id,
+              user.email,
+              user.name || profile?.name,
+              user.image || profile?.picture
+            );
+          } catch (error) {
+            console.error('Error ensuring profile exists:', error);
+            // Continue anyway - profile creation is non-blocking
+          }
+        }
         return true;
       }
 

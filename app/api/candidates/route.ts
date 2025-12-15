@@ -119,6 +119,10 @@ export async function POST(req: Request) {
     }
 
     // Also try to update profiles table (don't fail if it doesn't work)
+    // Mark onboarding_complete if required fields are present
+    const hasRequiredFields = candidateData.name && candidateData.title && 
+                              candidateData.location && candidateData.skills.length > 0;
+    
     try {
       await supabase
         .from('profiles')
@@ -134,6 +138,7 @@ export async function POST(req: Request) {
           availability: candidateData.availability,
           summary: candidateData.summary,
           projects: candidateData.projects,
+          onboarding_complete: hasRequiredFields, // Mark complete when required fields are saved
         }, { onConflict: 'email' });
     } catch (profileError) {
       console.log('Profile update skipped (table may not exist):', profileError);

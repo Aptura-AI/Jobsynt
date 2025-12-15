@@ -72,13 +72,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Clean and prepare profile data
+    const name = String(body.name || session.user.name || '').trim();
+    const title = String(body.title || '').trim();
+    const location = String(body.location || '').trim();
+    const skills = Array.isArray(body.skills) ? body.skills.filter(Boolean) : [];
+    
+    // Determine if onboarding is complete (has required fields)
+    const hasRequiredFields = name && title && location && skills.length > 0;
+    
     const profileData = {
       email: String(session.user.email).trim().toLowerCase(),
-      name: String(body.name || session.user.name || '').trim(),
-      title: String(body.title || '').trim(),
-      location: String(body.location || '').trim(),
+      name,
+      title,
+      location,
       experience_years: Number(body.experience_years) || 0,
-      skills: Array.isArray(body.skills) ? body.skills.filter(Boolean) : [],
+      skills,
       contract_type: Array.isArray(body.contract_type) ? body.contract_type : [],
       work_mode: Array.isArray(body.work_mode) ? body.work_mode : [],
       preferred_job_type: String(body.preferred_job_type || 'remote').trim(),
@@ -87,6 +95,7 @@ export async function POST(req: NextRequest) {
       availability: String(body.availability || 'immediate').trim(),
       summary: String(body.summary || '').trim() || null,
       image_url: session.user.image || null,
+      onboarding_complete: hasRequiredFields, // Mark complete if required fields are present
     };
 
     // Use upsert to handle both create and update

@@ -21,11 +21,15 @@ export async function POST(req: Request) {
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     // Sign up user with Supabase (this will send email verification)
+    // Redirect to /candidates for onboarding after verification
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.jobsynt.com'}/auth/callback`,
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.jobsynt.com'}/auth/callback?type=signup`,
+        data: {
+          role: 'candidate', // Default role for new signups
+        },
       },
     });
 
