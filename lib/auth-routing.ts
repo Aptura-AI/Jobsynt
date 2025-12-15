@@ -8,7 +8,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 export type UserRole = 'admin' | 'candidate' | 'company';
 
@@ -20,21 +20,56 @@ export interface UserOnboardingStatus {
 }
 
 /**
- * Determines if a user is an admin
+ * Profile type for database queries
+ * All fields that might be accessed must be included
  */
-export function isAdminUser(email: string, role?: string): boolean {
-  return email.toLowerCase() === 'info@jobsynt.com' || role === 'admin';
+interface ProfileRow {
+  id: string;
+  user_id: string | null;
+  email: string;
+  name: string | null;
+  image_url: string | null;
+  role: UserRole | null;
+  onboarding_complete: boolean | null;
+}
+
+/**
+ * Gets Supabase admin client (with service role key)
+ */
+function getSupabaseAdminClient() {
+  if (!supabaseUrl || !supabaseServiceKey) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('⚠️  Supabase admin client not configured');
+    }
+    return null;
+  }
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+/**
+ * Determines if a user is an admin
+ * SINGLE SOURCE OF TRUTH: Only checks profiles.role === 'admin'
+ * Email hardcoding is NOT used for runtime checks
+ */
+export function isAdminUser(role: string | undefined | null): boolean {
+  return role === 'admin';
 }
 
 /**
  * Fetches user onboarding status from Supabase
+ * SINGLE SOURCE OF TRUTH: Reads role from profiles.role column
  */
 export async function getUserOnboardingStatus(
   email: string,
   userId?: string
 ): Promise<UserOnboardingStatus> {
-  if (!supabaseUrl || !supabaseServiceKey) {
-    // Fallback: assume first-time if we can't check
+  const supabase = getSupabaseAdminClient();
+  
+  if (!supabase) {
+    // Fallback: assume first-time candidate if we can't check
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('⚠️  Cannot fetch user status - Supabase not configured');
+    }
     return {
       isFirstTime: true,
       onboardingComplete: false,
@@ -43,9 +78,7 @@ export async function getUserOnboardingStatus(
     };
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-  // Try to find profile by email or user_id
+  // Try to find profile by user_id (preferred) or email
   let query = supabase.from('profiles').select('onboarding_complete, role, email, user_id');
   
   if (userId) {
@@ -57,17 +90,25 @@ export async function getUserOnboardingStatus(
   const { data: profile, error } = await query.maybeSingle();
 
   if (error || !profile) {
-    // No profile found = first-time user
+    // No profile found = first-time user (default to candidate)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`📊 No profile found for ${email} - treating as first-time candidate`);
+    }
     return {
       isFirstTime: true,
       onboardingComplete: false,
-      role: isAdminUser(email) ? 'admin' : 'candidate',
+      role: 'candidate', // Default role, never assume admin
       email,
     };
   }
 
   const onboardingComplete = profile.onboarding_complete === true;
-  const role = (profile.role as UserRole) || (isAdminUser(email) ? 'admin' : 'candidate');
+  // SINGLE SOURCE OF TRUTH: role comes ONLY from database
+  const role = (profile.role as UserRole) || 'candidate';
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`📊 User status: ${email} → role=${role}, onboarding_complete=${onboardingComplete}`);
+  }
 
   return {
     isFirstTime: !onboardingComplete,
@@ -80,11 +121,10 @@ export async function getUserOnboardingStatus(
 /**
  * Determines the post-auth redirect URL based on user status
  * 
- * Routing Rules:
- * 1. Admin users → /admin (or /dashboard if admin dashboard)
- * 2. First-time candidates → /candidates (onboarding)
- * 3. Returning candidates → /dashboard (or /candidate-dashboard)
- * 4. Companies → /company
+ * EXACT ROUTING RULES:
+ * 1. IF role === 'admin' → /admin (always, no exceptions)
+ * 2. ELSE IF onboarding_complete === false → /candidates
+ * 3. ELSE → /dashboard
  */
 export async function getPostAuthRedirect(
   email: string,
@@ -93,70 +133,184 @@ export async function getPostAuthRedirect(
 ): Promise<string> {
   const status = await getUserOnboardingStatus(email, userId);
 
-  // Admin users always go to admin dashboard
-  if (status.role === 'admin' || isAdminUser(email)) {
+  // Rule 1: Admin users ALWAYS go to /admin (no exceptions)
+  if (status.role === 'admin') {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔀 Redirect decision: ${email} (admin) → /admin`);
+    }
     return '/admin';
   }
 
-  // Company users go to company dashboard
+  // Rule 2: Company users go to company dashboard
   if (status.role === 'company') {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔀 Redirect decision: ${email} (company) → /company`);
+    }
     return '/company';
   }
 
-  // First-time candidates must complete onboarding
-  if (status.isFirstTime || !status.onboardingComplete) {
+  // Rule 3: First-time users (onboarding_complete === false) → /candidates
+  if (!status.onboardingComplete) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔀 Redirect decision: ${email} (onboarding incomplete) → /candidates`);
+    }
     return '/candidates';
   }
 
-  // Returning candidates go to their dashboard
+  // Rule 4: Returning candidates → /dashboard
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`🔀 Redirect decision: ${email} (onboarding complete) → /dashboard`);
+  }
   return '/dashboard';
 }
 
 /**
  * Creates or updates a profile in Supabase after OAuth signup
+ * Ensures profile exists with correct defaults:
+ * - role defaults to 'candidate' (unless already set in DB)
+ * - onboarding_complete defaults to false
+ * - Admin role is determined from database, not email
+ * 
+ * HARDENED: Full type safety, defensive checks, handles all edge cases
  */
 export async function ensureProfileExists(
   userId: string,
   email: string,
   name?: string,
   image?: string
-): Promise<void> {
-  if (!supabaseUrl || !supabaseServiceKey) {
-    return;
+): Promise<ProfileRow | null> {
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('⚠️  Cannot ensure profile - Supabase not configured');
+    }
+    return null;
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  // Validate inputs
+  if (!userId || !email) {
+    console.error('ensureProfileExists: userId and email are required');
+    return null;
+  }
 
-  // Check if profile exists
-  const { data: existing } = await supabase
+  const normalizedEmail = email.toLowerCase().trim();
+  if (!normalizedEmail || !normalizedEmail.includes('@')) {
+    console.error('ensureProfileExists: Invalid email format');
+    return null;
+  }
+
+  // Check if profile exists by user_id (preferred) or email
+  // Select ALL fields we might need to avoid TypeScript errors
+  const { data: existing, error: fetchError } = await supabase
     .from('profiles')
-    .select('id')
-    .eq('user_id', userId)
+    .select('id, user_id, email, name, image_url, role, onboarding_complete')
+    .or(`user_id.eq.${userId},email.eq.${normalizedEmail}`)
     .maybeSingle();
 
-  if (!existing) {
-    // Create new profile with onboarding_complete = false
-    const role = isAdminUser(email) ? 'admin' : 'candidate';
-    const onboardingComplete = isAdminUser(email); // Admin skips onboarding
+  if (fetchError && fetchError.code !== 'PGRST116') {
+    // PGRST116 means no rows found, which is expected for new users
+    console.error('Error fetching profile:', fetchError);
+    return null;
+  }
 
-    await supabase.from('profiles').insert({
+  // Type guard: existing is properly typed as ProfileRow | null
+  // Supabase returns the selected fields, so we can safely type it
+  const existingProfile: ProfileRow | null = (existing as ProfileRow | null) || null;
+
+  if (!existingProfile) {
+    // Create new profile with safe defaults
+    // For new signups, default to 'candidate' - admin must be set via migration/backfill
+    // Check if this email is the admin email (but don't hardcode role check)
+    const isAdminEmail = normalizedEmail === 'info@jobsynt.com';
+    
+    // Verify admin exists in DB before assigning admin role
+    let role: UserRole = 'candidate';
+    if (isAdminEmail) {
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('email', 'info@jobsynt.com')
+        .eq('role', 'admin')
+        .maybeSingle();
+      
+      // Only set admin if admin profile already exists in DB
+      if (adminProfile && (adminProfile as { role: string }).role === 'admin') {
+        role = 'admin';
+      }
+    }
+    
+    const onboardingComplete = role === 'admin'; // Admin skips onboarding
+
+    const newProfile: Partial<ProfileRow> = {
       user_id: userId,
-      email: email.toLowerCase(),
-      name: name || email.split('@')[0],
-      image_url: image,
+      email: normalizedEmail,
+      name: name?.trim() || normalizedEmail.split('@')[0],
+      image_url: image?.trim() || null,
       role,
       onboarding_complete: onboardingComplete,
-    });
-  } else {
-    // Update existing profile if needed
-    await supabase
+    };
+
+    const { data: inserted, error: insertError } = await supabase
       .from('profiles')
-      .update({
-        email: email.toLowerCase(),
-        name: name || existing.name,
-        image_url: image || existing.image_url,
-      })
-      .eq('user_id', userId);
+      .insert(newProfile)
+      .select('id, user_id, email, name, image_url, role, onboarding_complete')
+      .single();
+
+    if (insertError) {
+      console.error('Error creating profile:', insertError);
+      return null;
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ Created profile for ${normalizedEmail} with role=${role}`);
+    }
+
+    return (inserted as ProfileRow | null);
+  } else {
+    // Update existing profile - link user_id if missing, preserve role from DB
+    const updateData: Partial<ProfileRow> = {
+      email: normalizedEmail,
+    };
+
+    // Only update fields that are provided and different
+    if (name && name.trim() !== existingProfile.name) {
+      updateData.name = name.trim();
+    }
+    if (image && image.trim() !== existingProfile.image_url) {
+      updateData.image_url = image.trim();
+    }
+    if (!existingProfile.user_id) {
+      updateData.user_id = userId;
+    }
+    // DO NOT override role or onboarding_complete - they come from database only
+
+    // Only update if there are changes
+    if (Object.keys(updateData).length > 1) { // More than just email
+      const { data: updated, error: updateError } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', existingProfile.id)
+        .select('id, user_id, email, name, image_url, role, onboarding_complete')
+        .single();
+
+      if (updateError) {
+        console.error('Error updating profile:', updateError);
+        return existingProfile; // Return existing on error
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ Updated profile for ${normalizedEmail} (preserved role=${updated?.role || existingProfile.role})`);
+      }
+
+      return (updated as ProfileRow | null) || existingProfile;
+    }
+
+    // No changes needed
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`ℹ️  Profile for ${normalizedEmail} already exists (no updates needed)`);
+    }
+
+    return existingProfile;
   }
 }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { signToken, setAuthCookie } from '@/utils/auth';
-import { getPostAuthRedirect, ensureProfileExists } from '@/lib/auth-routing';
+import { getPostAuthRedirect, ensureProfileExists, getUserOnboardingStatus } from '@/lib/auth-routing';
 
 // Support both NEXT_PUBLIC_ and non-prefixed versions
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
@@ -15,6 +15,8 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
  * - Email verification redirects
  * - OAuth callbacks (Google, LinkedIn)
  * - Post-auth routing based on onboarding status
+ * 
+ * HARDENED: Ensures profile exists with correct defaults
  */
 export async function GET(req: Request) {
   const requestUrl = new URL(req.url);
@@ -33,7 +35,9 @@ export async function GET(req: Request) {
     const email = user.email!;
     const userId = user.id;
 
-    // Ensure profile exists (for OAuth users or first-time email users)
+    // HARDENED: Ensure profile exists with correct defaults
+    // - role defaults to 'candidate' (unless already admin in DB)
+    // - onboarding_complete defaults to false
     if (supabaseServiceKey) {
       await ensureProfileExists(
         userId,
@@ -43,15 +47,23 @@ export async function GET(req: Request) {
       );
     }
 
-    // Create JWT token for our app
+    // Get role from database (single source of truth)
+    const status = await getUserOnboardingStatus(email, userId);
+
+    // Create JWT token with role from database
     const token = signToken({
       email,
-      role: user.user_metadata?.role || 'user',
+      role: status.role === 'admin' ? 'admin' : status.role === 'company' ? 'company' : 'user',
     });
     setAuthCookie(token);
 
     // Determine redirect based on onboarding status
+    // Admin users NEVER go to /candidates
     const redirectPath = await getPostAuthRedirect(email, userId);
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔀 Auth callback redirect: ${email} → ${redirectPath}`);
+    }
     
     return NextResponse.redirect(`${requestUrl.origin}${redirectPath}`);
   }

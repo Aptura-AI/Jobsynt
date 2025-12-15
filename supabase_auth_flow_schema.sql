@@ -34,3 +34,4 @@ BEGIN
   RAISE NOTICE '📊 Updated: info@jobsynt.com set as admin with onboarding_complete = true';
 END $$;
 
+

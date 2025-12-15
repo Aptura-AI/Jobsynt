@@ -4,7 +4,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import { createClient } from '@supabase/supabase-js';
 import { readJSON, writeJSON } from '@/utils/fs';
 import { verifyPassword } from '@/utils/auth';
-import { getPostAuthRedirect, ensureProfileExists, isAdminUser } from '@/lib/auth-routing';
+import { getPostAuthRedirect, ensureProfileExists, getUserOnboardingStatus } from '@/lib/auth-routing';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -177,10 +177,22 @@ export const authOptions = {
       if (user) {
         token.email = user.email;
         token.name = user.name;
-        token.role = (user as any).role || 'user';
         token.picture = user.image;
         token.id = user.id;
         token.admin_master = (user as any).admin_master || false;
+        
+        // SINGLE SOURCE OF TRUTH: Fetch role from database
+        // This ensures role comes from profiles.role, not hardcoded values
+        try {
+          const status = await getUserOnboardingStatus(user.email, user.id);
+          token.role = status.role === 'admin' ? 'admin' : status.role === 'company' ? 'company' : 'user';
+        } catch (error) {
+          // Fallback to user.role if database check fails
+          token.role = (user as any).role || 'user';
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️  Could not fetch role from database, using fallback:', error);
+          }
+        }
       }
       return token;
     },

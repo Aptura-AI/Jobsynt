@@ -1,15 +1,20 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { getPostAuthRedirect } from '@/lib/auth-routing';
+import { getPostAuthRedirect, getUserOnboardingStatus, isAdminUser } from '@/lib/auth-routing';
 
 /**
  * Middleware for centralized post-auth routing
  * 
- * Handles:
- * - Redirecting authenticated users based on onboarding status
- * - Protecting admin routes
- * - Redirecting first-time users to onboarding
+ * ENFORCES:
+ * - /admin → admin only (role === 'admin')
+ * - /candidates → non-admin AND onboarding_complete === false
+ * - /dashboard → non-admin AND onboarding_complete === true
+ * 
+ * Prevents:
+ * - Admin seeing candidate pages
+ * - Candidates seeing admin
+ * - Candidates skipping onboarding
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -50,55 +55,83 @@ export async function middleware(request: NextRequest) {
   const email = token.email as string;
   const userId = token.id as string;
 
-  // Admin routes - only allow admin users
+  // Get user status from database (single source of truth)
+  let userStatus;
+  try {
+    userStatus = await getUserOnboardingStatus(email, userId);
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Middleware: Error fetching user status:', error);
+    }
+    // On error, allow access (fail open) to prevent blocking users
+    return NextResponse.next();
+  }
+
+  const userRole = userStatus.role;
+  const isAdmin = isAdminUser(userRole);
+
+  // ENFORCEMENT 1: /admin → admin only
   if (pathname.startsWith('/admin')) {
-    const isAdmin = email?.toLowerCase() === 'info@jobsynt.com' || 
-                    token.role === 'admin' || 
-                    (token as any).admin_master === true;
-    
     if (!isAdmin) {
+      // Non-admin trying to access admin route - redirect to their correct dashboard
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🚫 Blocked non-admin access to /admin: ${email} (role=${userRole})`);
+      }
+      try {
+        const redirectPath = await getPostAuthRedirect(email, userId);
+        return NextResponse.redirect(new URL(redirectPath, request.url));
+      } catch {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
+    }
+    // Admin accessing /admin - allow
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ Admin access granted to /admin: ${email}`);
+    }
+    return NextResponse.next();
+  }
+
+  // ENFORCEMENT 2: Admin users must NOT see candidate pages
+  if (isAdmin && (pathname.startsWith('/candidates') || pathname.startsWith('/dashboard'))) {
+    // Admin trying to access candidate pages - redirect to /admin
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🚫 Redirected admin from candidate page to /admin: ${email}`);
+    }
+    return NextResponse.redirect(new URL('/admin', request.url));
+  }
+
+  // ENFORCEMENT 3: /candidates → non-admin AND onboarding_complete === false
+  if (pathname.startsWith('/candidates')) {
+    if (userStatus.onboardingComplete) {
+      // Onboarding complete - redirect to dashboard
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🚫 Redirected from /candidates (onboarding complete): ${email}`);
+      }
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
+    // Onboarding incomplete - allow access
+    return NextResponse.next();
+  }
+
+  // ENFORCEMENT 4: /dashboard → non-admin AND onboarding_complete === true
+  if (pathname.startsWith('/dashboard')) {
+    if (!userStatus.onboardingComplete) {
+      // Onboarding incomplete - redirect to candidates
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🚫 Redirected from /dashboard (onboarding incomplete): ${email}`);
+      }
+      return NextResponse.redirect(new URL('/candidates', request.url));
+    }
+    // Onboarding complete - allow access
     return NextResponse.next();
   }
 
   // Company routes - only allow company users
   if (pathname.startsWith('/company') && pathname !== '/company/register' && pathname !== '/company/login') {
-    // Check if user is a company (this would need to be in token or checked from DB)
-    // For now, allow if they have company_id in token
-    if (!(token as any).company_id) {
+    if (userRole !== 'company' && !(token as any).company_id) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     return NextResponse.next();
-  }
-
-  // Dashboard/candidate routes - check onboarding status
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/candidates')) {
-    try {
-      const redirectPath = await getPostAuthRedirect(email, userId, pathname);
-      
-      // If user is on wrong path, redirect them
-      if (pathname.startsWith('/candidates')) {
-        // If onboarding complete, redirect to dashboard
-        const status = await import('@/lib/auth-routing').then(m => 
-          m.getUserOnboardingStatus(email, userId)
-        );
-        if (status.onboardingComplete && !pathname.includes('/candidates')) {
-          return NextResponse.redirect(new URL('/dashboard', request.url));
-        }
-      } else if (pathname.startsWith('/dashboard')) {
-        // If not onboarding complete, redirect to candidates
-        const status = await import('@/lib/auth-routing').then(m => 
-          m.getUserOnboardingStatus(email, userId)
-        );
-        if (!status.onboardingComplete && !isAdmin) {
-          return NextResponse.redirect(new URL('/candidates', request.url));
-        }
-      }
-    } catch (error) {
-      console.error('Middleware routing error:', error);
-      // On error, allow access (fail open)
-    }
   }
 
   return NextResponse.next();
