@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Button from '@/components/Button';
 
 export default function HomePage() {
+  // C2C/1099 Niche Platform - Candidate-First
   return (
     <>
       {/* For Candidates - Main Focus */}
