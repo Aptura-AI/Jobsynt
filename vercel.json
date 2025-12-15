@@ -1,13 +1,9 @@
 {
-  "crons": []
-  // Cron jobs removed: Hobby plan only allows 2 cron jobs, max 1 execution per day each
-  // AI matching is triggered on-demand when candidates view their dashboard
-  // To enable scheduled matching (11 AM, 4 PM), upgrade to Pro plan and uncomment:
-  // "crons": [
-  //   {
-  //     "path": "/api/cron/ai-match",
-  //     "schedule": "0 11,16 * * *"
-  //   }
-  // ]
+  "crons": [
+    {
+      "path": "/api/cron/ai-match",
+      "schedule": "0 11 * * *"
+    }
+  ]
 }
 
