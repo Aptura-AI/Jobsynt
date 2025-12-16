@@ -37,6 +37,7 @@ export default function AdminDashboardClient() {
     failedJobs?: Array<{ title: string; company: string; status: 'success' | 'error'; message: string }>;
   } | null>(null);
   const [showUploadDetails, setShowUploadDetails] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     fetchCandidates();
@@ -83,6 +84,10 @@ export default function AdminDashboardClient() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploading(true);
+    setUploadStatus(null);
+    setShowUploadDetails(false);
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -104,6 +109,12 @@ export default function AdminDashboardClient() {
         });
         setShowUploadDetails(true);
         // Don't auto-hide - let user review the results
+        
+        // Refresh if jobs were successfully added
+        if (data.success > 0) {
+          // Optionally refresh job list if there's a job list component
+          console.log(`✅ ${data.success} jobs successfully uploaded`);
+        }
       } else {
         setUploadStatus({
           success: 0,
@@ -121,10 +132,11 @@ export default function AdminDashboardClient() {
         failedJobs: [{ title: 'Upload Error', company: '', status: 'error' as const, message: (error as Error).message }],
       });
       setShowUploadDetails(true);
+    } finally {
+      setUploading(false);
+      // Reset file input
+      e.target.value = '';
     }
-    
-    // Reset file input
-    e.target.value = '';
   };
 
   if (loading) {
@@ -153,8 +165,14 @@ export default function AdminDashboardClient() {
             type="file"
             accept=".xlsx,.csv"
             onChange={handleExcelUpload}
-            className="block w-full text-sm text-muted file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90"
+            disabled={uploading}
+            className="block w-full text-sm text-muted file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
           />
+          {uploading && (
+            <div className="mt-2 text-sm text-blue-600">
+              ⏳ Uploading and processing jobs... Please wait...
+            </div>
+          )}
           <p className="text-xs text-muted">
             Expected columns (case-insensitive, variations accepted):<br/>
             <strong>Required:</strong> Job Title, Company, Job Link (URL)<br/>
