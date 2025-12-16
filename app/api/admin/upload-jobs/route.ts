@@ -122,13 +122,25 @@ export async function POST(req: NextRequest) {
       return normalized;
     }).filter(row => Object.keys(row).length > 0); // Remove completely empty rows
 
-    let success = 0;
-    const errors: string[] = [];
+    const results: Array<{
+      title: string;
+      company: string;
+      status: 'success' | 'error';
+      message: string;
+    }> = [];
 
     for (const row of normalizedRows) {
+      const jobTitle = String(row.title || '').trim();
+      const jobCompany = String(row.company || '').trim();
+      
       try {
-        if (!row.title || !row.company) {
-          errors.push(`Skipped row: Missing title or company`);
+        if (!jobTitle || !jobCompany) {
+          results.push({
+            title: jobTitle || 'Unknown',
+            company: jobCompany || 'Unknown',
+            status: 'error',
+            message: 'Missing required field: Title or Company',
+          });
           continue;
         }
 
@@ -136,13 +148,23 @@ export async function POST(req: NextRequest) {
         
         // Validate URL if provided (URL is required for deduplication)
         if (urlValue && (typeof urlValue !== 'string' || !urlValue.startsWith('http'))) {
-          errors.push(`Skipped row "${row.title}": Invalid URL format`);
+          results.push({
+            title: jobTitle,
+            company: jobCompany,
+            status: 'error',
+            message: `Invalid URL format: "${urlValue}" (must start with http)`,
+          });
           continue;
         }
 
         // Never insert a job without a valid URL (required for deduplication)
         if (!urlValue) {
-          errors.push(`Skipped row "${row.title}": Missing required URL`);
+          results.push({
+            title: jobTitle,
+            company: jobCompany,
+            status: 'error',
+            message: 'Missing required field: Job Link/URL',
+          });
           continue;
         }
 
@@ -183,7 +205,8 @@ export async function POST(req: NextRequest) {
           
           job_type = typeMap[normalizedType] || DEFAULT_JOB_TYPE;
           if (!isValidJobType(job_type)) {
-            errors.push(`Row "${row.title}": Invalid job_type "${jobTypeValue}", using default "${DEFAULT_JOB_TYPE}"`);
+            // Log warning but continue (using default)
+            console.warn(`Row "${jobTitle}": Invalid job_type "${jobTypeValue}", using default "${DEFAULT_JOB_TYPE}"`);
             job_type = DEFAULT_JOB_TYPE;
           }
         } else {
@@ -192,8 +215,8 @@ export async function POST(req: NextRequest) {
         }
 
         const jobData = {
-          title: String(row.title || '').trim(),
-          company: String(row.company || '').trim(),
+          title: jobTitle,
+          company: jobCompany,
           location: String(row.location || '').trim() || 'Remote',
           url: urlValue, // Required for deduplication (unique index)
           job_type, // Required for job type filtering
@@ -208,30 +231,69 @@ export async function POST(req: NextRequest) {
 
         // Use upsert with onConflict: 'url' for automatic deduplication
         // The database has a unique index on scraped_jobs.url
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('scraped_jobs')
-          .upsert(jobData, { onConflict: 'url' });
+          .upsert(jobData, { onConflict: 'url' })
+          .select('id, title')
+          .single();
 
         if (error) {
           // Handle unique constraint violations gracefully
           if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
-            // This shouldn't happen with upsert, but log it if it does
-            errors.push(`Skipped duplicate "${row.title}": URL already exists`);
+            results.push({
+              title: jobTitle,
+              company: jobCompany,
+              status: 'error',
+              message: `Duplicate: Job with this URL already exists in database`,
+            });
+          } else if (error.code === '42501' || error.message.includes('row-level security') || error.message.includes('RLS')) {
+            results.push({
+              title: jobTitle,
+              company: jobCompany,
+              status: 'error',
+              message: `Permission error: ${error.message}. Please check service role key configuration.`,
+            });
           } else {
-            errors.push(`Error upserting "${row.title}": ${error.message}`);
+            results.push({
+              title: jobTitle,
+              company: jobCompany,
+              status: 'error',
+              message: `Database error: ${error.message}`,
+            });
           }
         } else {
-          success++;
+          results.push({
+            title: jobTitle,
+            company: jobCompany,
+            status: 'success',
+            message: data ? 'Successfully added/updated' : 'Processed successfully',
+          });
         }
       } catch (err: any) {
-        errors.push(`Error processing row: ${err.message}`);
+        results.push({
+          title: jobTitle || 'Unknown',
+          company: jobCompany || 'Unknown',
+          status: 'error',
+          message: `Processing error: ${err.message || 'Unknown error'}`,
+        });
       }
     }
 
+    const successCount = results.filter(r => r.status === 'success').length;
+    const errorCount = results.filter(r => r.status === 'error').length;
+    const successfulJobs = results.filter(r => r.status === 'success');
+    const failedJobs = results.filter(r => r.status === 'error');
+
+    // Log summary for debugging
+    console.log(`📊 Job Upload Summary: ${successCount} successful, ${errorCount} failed out of ${normalizedRows.length} total rows`);
+
     return NextResponse.json({
-      success,
-      errors: errors.slice(0, 50), // Limit errors
-      total: rows.length,
+      success: successCount,
+      errors: failedJobs.map(job => `${job.title} at ${job.company}: ${job.message}`),
+      total: normalizedRows.length,
+      results, // Detailed results for UI display
+      successfulJobs,
+      failedJobs,
     });
   } catch (error: any) {
     console.error('Upload error:', error);

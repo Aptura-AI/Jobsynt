@@ -28,7 +28,15 @@ export default function AdminDashboardClient() {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<{ success: number; errors: string[] } | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<{
+    success: number;
+    errors: string[];
+    total: number;
+    results?: Array<{ title: string; company: string; status: 'success' | 'error'; message: string }>;
+    successfulJobs?: Array<{ title: string; company: string; status: 'success' | 'error'; message: string }>;
+    failedJobs?: Array<{ title: string; company: string; status: 'success' | 'error'; message: string }>;
+  } | null>(null);
+  const [showUploadDetails, setShowUploadDetails] = useState(false);
 
   useEffect(() => {
     fetchCandidates();
@@ -86,14 +94,37 @@ export default function AdminDashboardClient() {
 
       const data = await res.json();
       if (res.ok) {
-        setUploadStatus({ success: data.success || 0, errors: data.errors || [] });
-        setTimeout(() => setUploadStatus(null), 5000);
+        setUploadStatus({
+          success: data.success || 0,
+          errors: data.errors || [],
+          total: data.total || 0,
+          results: data.results || [],
+          successfulJobs: data.successfulJobs || [],
+          failedJobs: data.failedJobs || [],
+        });
+        setShowUploadDetails(true);
+        // Don't auto-hide - let user review the results
       } else {
-        alert('Upload failed: ' + (data.error || 'Unknown error'));
+        setUploadStatus({
+          success: 0,
+          errors: [data.error || 'Unknown error'],
+          total: 0,
+          failedJobs: [{ title: 'Upload Failed', company: '', status: 'error' as const, message: data.error || 'Unknown error' }],
+        });
+        setShowUploadDetails(true);
       }
     } catch (error) {
-      alert('Upload error: ' + (error as Error).message);
+      setUploadStatus({
+        success: 0,
+        errors: [(error as Error).message],
+        total: 0,
+        failedJobs: [{ title: 'Upload Error', company: '', status: 'error' as const, message: (error as Error).message }],
+      });
+      setShowUploadDetails(true);
     }
+    
+    // Reset file input
+    e.target.value = '';
   };
 
   if (loading) {
@@ -131,17 +162,73 @@ export default function AdminDashboardClient() {
             <em>Note: Use the upload button above, not Supabase's direct CSV import</em>
           </p>
           {uploadStatus && (
-            <div className={`p-3 rounded ${uploadStatus.errors.length > 0 ? 'bg-yellow-50' : 'bg-green-50'}`}>
-              <p className="text-sm font-semibold">
-                {uploadStatus.success} jobs uploaded successfully
-                {uploadStatus.errors.length > 0 && `, ${uploadStatus.errors.length} errors`}
-              </p>
-              {uploadStatus.errors.length > 0 && (
-                <ul className="mt-2 text-xs text-red-600 list-disc list-inside">
-                  {uploadStatus.errors.slice(0, 5).map((err, i) => (
-                    <li key={i}>{err}</li>
-                  ))}
-                </ul>
+            <div className={`p-4 rounded-lg border-2 ${uploadStatus.errors.length > 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">
+                    Upload Complete: <span className="text-green-600">{uploadStatus.success}</span> successful,{' '}
+                    <span className="text-red-600">{uploadStatus.errors.length}</span> failed out of{' '}
+                    <span className="text-blue-600">{uploadStatus.total}</span> total
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowUploadDetails(!showUploadDetails)}
+                    className="text-xs px-3 py-1 bg-primary text-white rounded hover:bg-primary/90"
+                  >
+                    {showUploadDetails ? 'Hide Details' : 'Show Details'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUploadStatus(null);
+                      setShowUploadDetails(false);
+                    }}
+                    className="text-xs px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+
+              {showUploadDetails && (
+                <div className="mt-4 space-y-4 max-h-96 overflow-y-auto">
+                  {uploadStatus.successfulJobs && uploadStatus.successfulJobs.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-green-700 mb-2">
+                        ✅ Successfully Added ({uploadStatus.successfulJobs.length})
+                      </h4>
+                      <div className="bg-white rounded border border-green-200 p-2 max-h-48 overflow-y-auto">
+                        <ul className="text-xs space-y-1">
+                          {uploadStatus.successfulJobs.map((job, i) => (
+                            <li key={i} className="text-green-700">
+                              <span className="font-medium">{job.title}</span> at <span className="font-medium">{job.company}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {uploadStatus.failedJobs && uploadStatus.failedJobs.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-red-700 mb-2">
+                        ❌ Failed to Add ({uploadStatus.failedJobs.length})
+                      </h4>
+                      <div className="bg-white rounded border border-red-200 p-2 max-h-48 overflow-y-auto">
+                        <ul className="text-xs space-y-2">
+                          {uploadStatus.failedJobs.map((job, i) => (
+                            <li key={i} className="text-red-700">
+                              <div className="font-medium">
+                                {job.title} {job.company && `at ${job.company}`}
+                              </div>
+                              <div className="text-red-600 text-xs mt-0.5 ml-2">Reason: {job.message}</div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
