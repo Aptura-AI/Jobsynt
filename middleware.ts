@@ -80,6 +80,12 @@ export async function middleware(request: NextRequest) {
 
   const email = token.email as string;
   const userId = token.id as string;
+  
+  // Verify token has role embedded (from JWT callback)
+  const tokenRole = token.role as string | undefined;
+  if (process.env.NODE_ENV === 'development' && tokenRole) {
+    console.log('[MIDDLEWARE] Token role:', tokenRole);
+  }
 
   // Get user status from database (single source of truth)
   let userStatus;
@@ -89,12 +95,27 @@ export async function middleware(request: NextRequest) {
     if (process.env.NODE_ENV === 'development') {
       console.error('Middleware: Error fetching user status:', error);
     }
+    // On error, use token role as fallback if available
+    if (tokenRole && tokenRole === 'admin') {
+      // If token says admin but DB query failed, still allow admin access
+      if (pathname.startsWith('/admin')) {
+        return NextResponse.next();
+      }
+      if (pathname === '/') {
+        return NextResponse.redirect(new URL('/admin', request.url));
+      }
+    }
     // On error, allow access (fail open) to prevent blocking users
     return NextResponse.next();
   }
 
   const userRole = userStatus.role;
   const isAdmin = isAdminUser(userRole);
+  
+  // Verify token role matches database role (for debugging)
+  if (process.env.NODE_ENV === 'development' && tokenRole && tokenRole !== userRole) {
+    console.warn(`[MIDDLEWARE] Role mismatch: token=${tokenRole}, db=${userRole} - using DB role`);
+  }
 
   // ENFORCEMENT 1: /admin → admin only
   if (pathname.startsWith('/admin')) {

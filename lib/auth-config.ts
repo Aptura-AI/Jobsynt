@@ -133,21 +133,12 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async redirect({ url, baseUrl, token }: any) {
-      // Use centralized routing logic
-      if (token?.email) {
-        try {
-          const redirectPath = await getPostAuthRedirect(token.email, token.id);
-          return redirectPath;
-        } catch (error) {
-          console.error('Redirect error:', error);
-          // Fallback to dashboard on error
-          return '/dashboard';
-        }
-      }
-      // Default fallback
-      return '/dashboard';
-    },
+    // REMOVED redirect callback - routing is handled by:
+    // 1. app/auth/callback/route.ts (for Supabase auth)
+    // 2. middleware.ts (for all routes)
+    // 3. app/api/login/route.ts (for direct login)
+    // NextAuth redirect callback was causing conflicts with our centralized routing
+    // async redirect() { ... } - REMOVED
     async signIn({ user, account, profile }: any) {
       if (account?.provider === 'google' || account?.provider === 'linkedin') {
         // For OAuth, ensure profile exists in Supabase

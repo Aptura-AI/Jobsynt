@@ -43,15 +43,18 @@ export async function POST(req: Request) {
       });
 
       if (!error && data.user) {
-        // Default to candidate, role will be fetched from database in auth flow
+        // Fetch role from database (single source of truth)
+        const { getUserOnboardingStatus } = await import('@/lib/auth-routing');
+        const status = await getUserOnboardingStatus(data.user.email!, data.user.id);
+        
         const token = signToken({
           email: data.user.email!,
-          role: 'candidate', // Default, actual role comes from profiles table
+          role: status.role, // Use role from database
         });
         setAuthCookie(token);
         return NextResponse.json({
           email: data.user.email,
-          role: 'candidate', // Default, actual role comes from profiles table
+          role: status.role, // Return actual role from database
         });
       }
     }

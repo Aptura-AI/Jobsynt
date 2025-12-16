@@ -31,10 +31,17 @@ function LoginForm() {
         setMessageType('error');
         setMessage(data.message || 'Invalid credentials');
       } else {
-        // Safe redirect: validate route and prevent open redirect attacks
+        // Role-aware redirect: admins go to /admin, others to their dashboard
         const next = searchParams.get('next');
-        const redirectTo = next?.startsWith('/') ? next : '/';
-        router.push(redirectTo);
+        if (next?.startsWith('/')) {
+          router.push(next);
+        } else if (data.role === 'admin') {
+          router.push('/admin');
+        } else {
+          // For other roles, let middleware handle the redirect
+          // This ensures onboarding status is checked
+          router.push('/dashboard');
+        }
       }
     } catch (err) {
       setMessageType('error');
