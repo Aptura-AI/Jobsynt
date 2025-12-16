@@ -44,6 +44,7 @@ export async function POST(req: Request & { url?: string }) {
         const redirectPath = status.role === 'admin' ? '/admin' : '/dashboard';
         
         // Create response with redirect
+        const requestUrl = new URL(req.url);
         const response = NextResponse.redirect(new URL(redirectPath, requestUrl.origin));
         
         // Set cookie on the redirect response
