@@ -89,11 +89,25 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        const urlValue = String(row.job_link || row.url || '').trim();
+        
+        // Validate URL if provided (URL is required for deduplication)
+        if (urlValue && (typeof urlValue !== 'string' || !urlValue.startsWith('http'))) {
+          errors.push(`Skipped row "${row.title}": Invalid URL format`);
+          continue;
+        }
+
+        // Never insert a job without a valid URL (required for deduplication)
+        if (!urlValue) {
+          errors.push(`Skipped row "${row.title}": Missing required URL`);
+          continue;
+        }
+
         const jobData = {
           title: String(row.title || '').trim(),
           company: String(row.company || '').trim(),
           location: String(row.location || '').trim() || 'Remote',
-          url: String(row.job_link || row.url || '').trim() || null,
+          url: urlValue, // Required for deduplication (unique index)
           description: String(row.key_requirements || row.description || '').trim() || null,
           salary: String(row.pay_rate || row.rate || '').trim() || null,
           posted_date: row.posted_date ? new Date(row.posted_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
@@ -103,12 +117,20 @@ export async function POST(req: NextRequest) {
           is_real: true,
         };
 
+        // Use upsert with onConflict: 'url' for automatic deduplication
+        // The database has a unique index on scraped_jobs.url
         const { error } = await supabase
           .from('scraped_jobs')
           .upsert(jobData, { onConflict: 'url' });
 
         if (error) {
-          errors.push(`Error inserting "${row.title}": ${error.message}`);
+          // Handle unique constraint violations gracefully
+          if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
+            // This shouldn't happen with upsert, but log it if it does
+            errors.push(`Skipped duplicate "${row.title}": URL already exists`);
+          } else {
+            errors.push(`Error upserting "${row.title}": ${error.message}`);
+          }
         } else {
           success++;
         }

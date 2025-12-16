@@ -79,26 +79,16 @@ const getSourceJobId = (url: string) => {
 };
 
 // =========================
-// Deduplication checks
+// URL Validation
 // =========================
-async function isDuplicate(sourceJobId: string | null, title: string, company: string, location: string, jobUrl: string) {
-  const keys = [];
-  if (sourceJobId) keys.push(`source_job_id.eq.${sourceJobId}`);
-  const hashKey = hashString(`${title}|${company}|${location}`);
-  keys.push(`hash.eq.${hashKey}`);
-  keys.push(`job_url.eq.${jobUrl}`);
-
-  const { data, error } = await supabase
-    .from('scraped_jobs')
-    .select('id')
-    .or(keys.join(','))
-    .limit(1);
-
-  if (error) {
-    console.error('Dedup check error:', error.message);
+function isValidUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
     return false;
   }
-  return (data || []).length > 0;
 }
 
 // =========================
@@ -156,7 +146,8 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
     employment_type,
     skills,
     description,
-    job_url: jobUrl,
+    url: jobUrl, // Use 'url' column for deduplication (unique index)
+    job_url: jobUrl, // Keep for backward compatibility if needed
     scraped_at: new Date().toISOString(),
     hash: dedupHash,
   };
@@ -195,17 +186,27 @@ async function main() {
       const job = await scrapeJobDetail(detailPage, link);
       await detailPage.close();
 
-      const duplicate = await isDuplicate(job.source_job_id, job.title, job.company, job.location, job.job_url);
-      if (duplicate) {
-        console.log(`Skipped duplicate job: ${job.title}`);
+      // Validate URL before insert/upsert
+      if (!isValidUrl(job.url)) {
+        console.log(`Skipped job with invalid URL: ${job.title} (${job.url})`);
         continue;
       }
 
-      const { error } = await supabase.from('scraped_jobs').insert(job);
+      // Use upsert with onConflict: 'url' for automatic deduplication
+      // The database has a unique index on scraped_jobs.url
+      const { error } = await supabase
+        .from('scraped_jobs')
+        .upsert(job, { onConflict: 'url' });
+      
       if (error) {
-        console.error(`Insert failed for ${job.title}:`, error.message);
+        // Handle unique constraint violations gracefully
+        if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
+          console.log(`Skipped duplicate job (URL already exists): ${job.title}`);
+        } else {
+          console.error(`Upsert failed for ${job.title}:`, error.message);
+        }
       } else {
-        console.log(`Inserted job: ${job.title}`);
+        console.log(`Saved job: ${job.title} (${job.url})`);
       }
     } catch (err) {
       console.error(`Error scraping ${link}:`, (err as Error).message);
