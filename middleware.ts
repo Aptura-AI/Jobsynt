@@ -9,11 +9,6 @@ import { decodeToken } from '@/utils/auth';
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Root path is always public (index page)
-  if (pathname === '/') {
-    return NextResponse.next();
-  }
-
   // Public routes - always allowed
   const publicRoutes = [
     '/login',
