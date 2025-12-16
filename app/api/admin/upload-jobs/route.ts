@@ -60,39 +60,67 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No data found in file' }, { status: 400 });
     }
 
-    // Normalize column names (case-insensitive)
+    // Log first row for debugging (in development)
+    if (process.env.NODE_ENV === 'development' && rows.length > 0) {
+      console.log('First row keys:', Object.keys(rows[0]));
+      console.log('First row sample:', rows[0]);
+    }
+
+    // Normalize column names (case-insensitive, handles variations and empty columns)
     const normalizeKey = (key: string) => {
+      if (!key || typeof key !== 'string') return null;
       const lower = key.toLowerCase().trim();
+      
+      // Skip empty columns or columns that are just numbers/underscores (Excel artifacts)
+      if (!lower || /^_?\d+$/.test(lower) || lower === '') {
+        return null;
+      }
+      
       const mapping: Record<string, string> = {
         'job title': 'title',
         'title': 'title',
+        'jobtitle': 'title',
         'company': 'company',
         'location': 'location',
         'job type': 'job_type',
         'type': 'job_type',
+        'jobtype': 'job_type',
         'pay rate': 'pay_rate',
         'rate': 'pay_rate',
+        'payrate': 'pay_rate',
+        'salary': 'pay_rate',
         'posted date': 'posted_date',
         'date': 'posted_date',
+        'posteddate': 'posted_date',
+        'posted': 'posted_date',
         'source': 'source',
         'job link': 'job_link',
         'link': 'job_link',
         'url': 'job_link',
+        'joblink': 'job_link',
+        'job url': 'job_link',
         'key requirements': 'key_requirements',
         'requirements': 'key_requirements',
         'description': 'key_requirements',
+        'keyrequirements': 'key_requirements',
+        'req': 'key_requirements',
       };
-      return mapping[lower] || lower;
+      return mapping[lower] || null;
     };
 
-    const normalizedRows = rows.map(row => {
+    const normalizedRows = rows.map((row, index) => {
       const normalized: any = {};
       for (const [key, value] of Object.entries(row)) {
         const normKey = normalizeKey(key);
-        normalized[normKey] = value;
+        if (normKey) {
+          // Only include non-empty values
+          if (value !== null && value !== undefined && value !== '') {
+            normalized[normKey] = value;
+          }
+        }
       }
       return normalized;
-    });
+    }).filter(row => Object.keys(row).length > 0); // Remove completely empty rows
 
     let success = 0;
     const errors: string[] = [];
@@ -125,19 +153,37 @@ export async function POST(req: NextRequest) {
         if (jobTypeValue && isValidJobType(jobTypeValue)) {
           job_type = jobTypeValue as JobType;
         } else if (jobTypeValue) {
+          // Handle combined types like "Full-time C2C" - prioritize C2C/1099 over full-time
+          let normalizedType = jobTypeValue;
+          
+          // Check for C2C or 1099 first (higher priority for contract roles)
+          if (normalizedType.includes('c2c') || normalizedType.includes('corp to corp') || normalizedType.includes('corp-to-corp')) {
+            normalizedType = 'c2c';
+          } else if (normalizedType.includes('1099')) {
+            normalizedType = '1099';
+          } else if (normalizedType.includes('w2') || normalizedType.includes('w-2')) {
+            normalizedType = 'w2-contract';
+          } else if (normalizedType.includes('fulltime') || normalizedType.includes('full time') || normalizedType.includes('full-time')) {
+            normalizedType = 'full-time';
+          }
+          
           // Try to map common variations
           const typeMap: Record<string, JobType> = {
             'fulltime': 'full-time',
             'full time': 'full-time',
+            'full-time': 'full-time',
             'w2': 'w2-contract',
             'w-2': 'w2-contract',
             'contract': 'w2-contract',
             'corp to corp': 'c2c',
             'corp-to-corp': 'c2c',
+            'c2c': 'c2c',
+            '1099': '1099',
           };
-          job_type = typeMap[jobTypeValue] || DEFAULT_JOB_TYPE;
+          
+          job_type = typeMap[normalizedType] || DEFAULT_JOB_TYPE;
           if (!isValidJobType(job_type)) {
-            errors.push(`Skipped row "${row.title}": Invalid job_type "${jobTypeValue}", using default`);
+            errors.push(`Row "${row.title}": Invalid job_type "${jobTypeValue}", using default "${DEFAULT_JOB_TYPE}"`);
             job_type = DEFAULT_JOB_TYPE;
           }
         } else {

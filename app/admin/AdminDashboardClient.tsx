@@ -125,7 +125,10 @@ export default function AdminDashboardClient() {
             className="block w-full text-sm text-muted file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90"
           />
           <p className="text-xs text-muted">
-            Expected columns: Job Title, Company, Location, Job Type, Pay Rate, Posted Date, Source, Job Link, Key Requirements
+            Expected columns (case-insensitive, variations accepted):<br/>
+            <strong>Required:</strong> Job Title, Company, Job Link (URL)<br/>
+            <strong>Optional:</strong> Location, Job Type, Pay Rate, Posted Date, Source, Key Requirements/Description<br/>
+            <em>Note: Use the upload button above, not Supabase's direct CSV import</em>
           </p>
           {uploadStatus && (
             <div className={`p-3 rounded ${uploadStatus.errors.length > 0 ? 'bg-yellow-50' : 'bg-green-50'}`}>
