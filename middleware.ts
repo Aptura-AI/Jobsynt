@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifyToken } from '@/utils/auth';
+import { decodeToken } from '@/utils/auth';
 import { getPostAuthRedirect, getUserOnboardingStatus, isAdminUser } from '@/lib/auth-routing';
 
 /**
@@ -36,7 +36,26 @@ export async function middleware(request: NextRequest) {
 
   // Get jobsynth_token from cookies
   const rawToken = request.cookies.get('jobsynth_token')?.value;
-  const token = rawToken ? verifyToken(rawToken) : null;
+  if (!rawToken) {
+    // No token - redirect to login if accessing protected route
+    if (!isPublicRoute && pathname !== '/') {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('callbackUrl', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return NextResponse.next();
+  }
+  
+  const token = decodeToken(rawToken);
+  if (!token || !token.role) {
+    // Invalid token - redirect to login if accessing protected route
+    if (!isPublicRoute && pathname !== '/') {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('callbackUrl', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return NextResponse.next();
+  }
 
   // Handle root path separately - redirect admins to /admin
   if (pathname === '/') {

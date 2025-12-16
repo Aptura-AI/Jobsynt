@@ -35,6 +35,27 @@ export function verifyToken(token: string): SessionToken | null {
   }
 }
 
+/**
+ * Decode JWT token without signature verification
+ * Safe for Edge runtime (middleware)
+ * DO NOT use for security-critical operations - use verifyToken() in API routes
+ */
+export function decodeToken(token: string): SessionToken | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return null;
+    }
+    const payload = parts[1];
+    const decoded = JSON.parse(
+      atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+    );
+    return decoded as SessionToken;
+  } catch {
+    return null;
+  }
+}
+
 export function getAuthTokenFromCookies(): string | undefined {
   const store = cookies();
   return store.get(TOKEN_NAME)?.value;
