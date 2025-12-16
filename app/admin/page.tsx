@@ -1,16 +1,25 @@
 import { redirect } from 'next/navigation';
-import { getServerSession } from '@/lib/auth';
+import { cookies } from 'next/headers';
+import { decodeToken } from '@/utils/auth';
 import AdminDashboardClient from './AdminDashboardClient';
 
 export default async function AdminPage() {
-  const session = await getServerSession();
+  // Get token from cookies (custom JWT, not NextAuth)
+  const cookieStore = cookies();
+  const rawToken = cookieStore.get('jobsynth_token')?.value;
   
-  if (!session?.user?.email) {
-    redirect('/login?next=/admin');
+  if (!rawToken) {
+    redirect('/login');
   }
 
-  // Check if user is admin using role from database (single source of truth)
-  const isAdmin = session.user.role === 'admin';
+  const token = decodeToken(rawToken);
+  
+  if (!token || !token.email) {
+    redirect('/login');
+  }
+
+  // Check if user is admin using role from token
+  const isAdmin = token.role === 'admin';
 
   if (!isAdmin) {
     // Non-admin trying to access admin page - redirect to their dashboard
