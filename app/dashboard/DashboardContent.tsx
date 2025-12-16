@@ -271,14 +271,6 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
           <p className="font-semibold text-ink">Update Profile</p>
           <p className="text-sm text-muted">Keep your info current</p>
         </Link>
-        <Link
-          href="/talent-pool"
-          className="card p-4 hover:shadow-md transition-shadow text-center"
-        >
-          <div className="text-2xl mb-2">👥</div>
-          <p className="font-semibold text-ink">Talent Pool</p>
-          <p className="text-sm text-muted">Explore other professionals</p>
-        </Link>
       </div>
     </div>
   );

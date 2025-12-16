@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
-import { ALLOWED_JOB_TYPES } from '@/lib/job-types';
-import { get30DaysAgoDate } from '@/lib/job-filters';
+import { fetchAndMatchJobs } from '@/lib/matching/getEligibleJobs';
+import { reviewJobWithAI } from '@/lib/matching/aiJobReview';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,89 +27,86 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Get all active jobs from scraped_jobs
-    // Filter out jobs older than 30 days
-    const thirtyDaysAgo = get30DaysAgoDate();
-    let jobsQuery = supabase
-      .from('scraped_jobs')
-      .select('*')
-      .eq('is_active', true)
-      .gte('posted_date', thirtyDaysAgo); // Only jobs from last 30 days
-    
-    // Apply job type filtering if candidate has preferences
-    if (Array.isArray(profile.preferred_job_types) && profile.preferred_job_types.length > 0) {
-      // Only match jobs where job_type matches one of the preferred types
-      jobsQuery = jobsQuery.in('job_type', profile.preferred_job_types);
-    }
-    
-    const { data: jobs, error: jobsError } = await jobsQuery.limit(100);
+    // STEP 1: Use deterministic matching to get eligible jobs (score ≥70)
+    const matchingResult = await fetchAndMatchJobs(supabase, profile, {
+      minScore: 70,
+      limit: 100,
+      logFiltering: true,
+    });
 
-    if (jobsError) {
-      return NextResponse.json({ error: jobsError.message }, { status: 500 });
+    if (matchingResult.eligible.length === 0) {
+      return NextResponse.json({
+        matched: 0,
+        message: 'No eligible jobs found (all jobs filtered or scored below 70%)',
+        stats: matchingResult.stats,
+      });
     }
 
-    if (!jobs || jobs.length === 0) {
-      return NextResponse.json({ matched: 0, message: 'No jobs to match' });
-    }
-
-    // Match jobs using AI
+    // STEP 2: Pass only eligible jobs to AI for final review
+    // AI must not re-score or filter - these jobs are already validated
     let matchedCount = 0;
-    for (const job of jobs.slice(0, 50)) { // Limit to 50 for AI processing
+    const aiProcessedJobs: Array<{ jobId: string; matchScore: number; aiConfirmed: boolean }> = [];
+
+    for (const eligibleJob of matchingResult.eligible.slice(0, 50)) { // Limit to 50 for AI processing
       try {
-        const matchPrompt = `Rate this job match for a candidate with:
-Skills: ${(profile.skills || []).join(', ') || 'None'}
-Experience: ${profile.experience_years || 0} years
-Work Mode Preference: ${(profile.work_mode || []).join(', ') || 'Any'}
-Contract Type Preference: ${(profile.contract_type || []).join(', ') || 'Any'}
-Location: ${profile.location || 'Any'}
-Rate Expectation: ${profile.rate_expectation || 'Not specified'}
+        // Review job with AI (using Responses API or fallback)
+        const aiReview = await reviewJobWithAI(eligibleJob, profile);
 
-Job Title: ${job.title}
-Company: ${job.company}
-Location: ${job.location}
-Description: ${(job.description || '').substring(0, 500)}
-Salary: ${job.salary || 'Not specified'}
+        if (aiReview.confirmed) {
+          // Save matched job to database
+          const matchReasons = [
+            `Deterministic score: ${eligibleJob.match_score}%`,
+            `Skills: ${eligibleJob.score_breakdown.skills}pts`,
+            `Experience: ${eligibleJob.score_breakdown.experience}pts`,
+            `Pay: ${eligibleJob.score_breakdown.pay}pts`,
+            ...(aiReview.advice || []).slice(0, 3), // Include top 3 AI advice items
+          ];
 
-Return JSON: {"fitScore": 0-100, "matchReasons": ["reason1", "reason2"]}`;
-
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          temperature: 0.1,
-          max_tokens: 200,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: 'You are a job matching expert. Rate job matches 0-100 based on skills, experience, preferences, and contract type (C2C/1099 focus).' },
-            { role: 'user', content: matchPrompt },
-          ],
-        });
-
-        const matchResult = JSON.parse(completion.choices[0]?.message?.content || '{}');
-        const fitScore = matchResult.fitScore || 0;
-
-        // Only save 90%+ matches
-        if (fitScore >= 90) {
           const { error: updateError } = await supabase
             .from('scraped_jobs')
             .update({
               profile_id: profile.id,
-              fit_score: fitScore,
-              match_reasons: matchResult.matchReasons || [],
+              fit_score: eligibleJob.match_score,
+              match_reasons: matchReasons,
             })
-            .eq('id', job.id);
+            .eq('id', eligibleJob.id);
 
           if (!updateError) {
             matchedCount++;
+            aiProcessedJobs.push({
+              jobId: String(eligibleJob.id),
+              matchScore: eligibleJob.match_score,
+              aiConfirmed: true,
+            });
           }
+        } else {
+          // AI did not confirm (rare, but possible)
+          aiProcessedJobs.push({
+            jobId: String(eligibleJob.id),
+            matchScore: eligibleJob.match_score,
+            aiConfirmed: false,
+          });
         }
-      } catch (aiError) {
-        console.error('AI matching error for job:', job.id, aiError);
-        // Continue with next job
+      } catch (aiError: any) {
+        console.error('AI processing error for job:', eligibleJob.id, aiError);
+        // Continue with next job - don't fail entire batch
       }
     }
 
     return NextResponse.json({
       matched: matchedCount,
-      message: `Matched ${matchedCount} jobs (90%+ fit)`,
+      message: `Matched ${matchedCount} jobs (passed hard filters + scoring ≥70% + AI confirmation)`,
+      stats: {
+        ...matchingResult.stats,
+        aiProcessed: aiProcessedJobs.length,
+      },
+      breakdown: {
+        totalJobs: matchingResult.stats.total,
+        hardFiltered: matchingResult.stats.filteredOut,
+        lowScore: matchingResult.stats.lowScoreRejected,
+        eligibleForAI: matchingResult.eligible.length,
+        aiConfirmed: matchedCount,
+      },
     });
   } catch (error: any) {
     console.error('AI match error:', error);

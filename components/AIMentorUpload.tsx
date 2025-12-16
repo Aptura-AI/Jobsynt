@@ -61,11 +61,31 @@ export default function AIMentorUpload() {
       const data = await res.json();
 
       if (!data || Object.keys(data).length === 0) {
+        setMessages((prev) => [...prev, { role: 'user', content: userMessage }, { role: 'assistant', content: 'I apologize, but I received an empty response. Please try asking your question again.' }]);
         setResult({ error: 'AI returned an empty response. Please try again.' });
         return;
       }
 
-      setMessages((prev) => [...prev, { role: 'user', content: userMessage }, { role: 'assistant', content: JSON.stringify(data) }]);
+      // Format AI response as readable text
+      let aiResponse = '';
+      if (data.summary) aiResponse += `Summary: ${data.summary}\n\n`;
+      if (data.strengths && data.strengths.length > 0) {
+        aiResponse += `Strengths:\n${data.strengths.map((s: string) => `• ${s}`).join('\n')}\n\n`;
+      }
+      if (data.careerTips && data.careerTips.length > 0) {
+        aiResponse += `Career Tips:\n${data.careerTips.map((t: string) => `• ${t}`).join('\n')}\n\n`;
+      }
+      if (data.nextSteps && data.nextSteps.length > 0) {
+        aiResponse += `Next Steps:\n${data.nextSteps.map((s: string) => `• ${s}`).join('\n')}\n\n`;
+      }
+      if (data.matchedJobs && data.matchedJobs.length > 0) {
+        aiResponse += `Top Job Matches:\n${data.matchedJobs.slice(0, 3).map((j: any) => `• ${j.title} at ${j.company} (${j.fitScore || 'N/A'}% match)`).join('\n')}`;
+      }
+      if (!aiResponse) {
+        aiResponse = JSON.stringify(data, null, 2);
+      }
+
+      setMessages((prev) => [...prev, { role: 'user', content: userMessage }, { role: 'assistant', content: aiResponse }]);
       setResult(data);
       setUserMessage('');
     } catch (error) {
@@ -87,8 +107,27 @@ export default function AIMentorUpload() {
   return (
     <div className="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-6 shadow-lg">
       <h2 className="mb-4 text-2xl font-bold text-ink">AI Career Mentor</h2>
-      {!resumeAvailable && (
-        <p className="mb-4 text-sm text-red-600">No resume found in your profile. Upload one for better answers.</p>
+
+      {/* Chat Messages */}
+      {messages.length > 0 && (
+        <div className="mb-4 max-h-96 space-y-3 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
+          {messages.map((msg, idx) => (
+            <div
+              key={idx}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                  msg.role === 'user'
+                    ? 'bg-primary text-white'
+                    : 'bg-white text-ink border border-slate-200'
+                }`}
+              >
+                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="space-y-4">
@@ -99,19 +138,26 @@ export default function AIMentorUpload() {
             placeholder="e.g., What roles are the best match for me this week?"
             value={userMessage}
             onChange={(e) => setUserMessage(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
           />
         </div>
 
         <Button 
           onClick={handleSubmit} 
-          disabled={loading || (!userMessage && !resumeAvailable)} 
+          disabled={loading || !userMessage.trim()} 
           className="w-full"
         >
-          {loading ? 'Thinking...' : 'Ask AI Mentor'}
+          {loading ? 'Thinking...' : 'Send Message'}
         </Button>
       </div>
 
-      {result && (
+      {/* Old result format - hidden, messages are now in chat */}
+      {false && result && !result.error && (
         <div className="mt-8 rounded-lg border border-slate-200 bg-gradient-to-br from-purple-50 to-blue-50 p-6">
           <h3 className="mb-4 text-xl font-bold text-ink">AI Mentor Report</h3>
           {result.error ? (

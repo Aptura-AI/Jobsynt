@@ -73,14 +73,14 @@ export async function GET(req: NextRequest) {
     for (const profile of profiles) {
       try {
         // Get matched jobs for this profile
-        // Jobs are matched when profile_id is set and fit_score >= 90
+        // Jobs are matched when profile_id is set and fit_score >= 70 (new matching system threshold)
         // Filter out jobs older than 30 days
         const thirtyDaysAgo = get30DaysAgoDate();
         let jobsQuery = supabase
           .from('scraped_jobs')
           .select('id, title, company, location, job_type, description, url')
           .eq('profile_id', profile.id)
-          .gte('fit_score', 90)
+          .gte('fit_score', 70) // Updated to match new matching system threshold
           .eq('is_active', true)
           .gte('posted_date', thirtyDaysAgo); // Only jobs from last 30 days
 

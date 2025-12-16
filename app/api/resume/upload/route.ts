@@ -98,7 +98,13 @@ export async function POST(req: NextRequest) {
     const buffer = new Uint8Array(arrayBuffer);
 
     // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    // Use service role key for admin access to storage
+    const supabaseAdmin = createClient(
+      supabaseUrl,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseServiceKey
+    );
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('resumes')
       .upload(filePath, buffer, {
         contentType: file.type,
@@ -107,11 +113,18 @@ export async function POST(req: NextRequest) {
 
     if (uploadError) {
       console.error('Upload error:', uploadError);
+      // If bucket doesn't exist, try to create it (this requires admin access)
+      if (uploadError.message.includes('Bucket') || uploadError.message.includes('not found')) {
+        return NextResponse.json({ 
+          error: 'Resume storage not configured. Please contact support or run the resumes table migration.',
+          details: uploadError.message 
+        }, { status: 500 });
+      }
       return NextResponse.json({ error: 'Failed to upload resume', details: uploadError.message }, { status: 500 });
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
+    // Get public URL (use admin client)
+    const { data: urlData } = supabaseAdmin.storage
       .from('resumes')
       .getPublicUrl(filePath);
 

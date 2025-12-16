@@ -34,6 +34,8 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
 
   const [formData, setFormData] = useState({
     name: userName || '',
+    email: userEmail || '', // Pre-fill email from OAuth
+    phone: '', // Mobile number to be collected
     title: '',
     location: '',
     experience_years: '',
@@ -68,7 +70,8 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          email: userEmail,
+          email: formData.email || userEmail, // Use formData.email (from OAuth) or fallback
+          phone: formData.phone, // Include mobile number
           experience_years: parseInt(formData.experience_years) || 0,
         }),
       });
@@ -143,6 +146,24 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
             required
             value={formData.name}
             onChange={(e) => handleChange('name', e.target.value)}
+          />
+          <Input
+            label="Email"
+            type="email"
+            required
+            value={formData.email}
+            disabled
+            className="bg-gray-50"
+          />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Input
+            label="Mobile Number"
+            type="tel"
+            placeholder="+1 (555) 123-4567"
+            value={formData.phone}
+            onChange={(e) => handleChange('phone', e.target.value)}
           />
           <Input
             label="Professional Title"

@@ -174,6 +174,7 @@ export async function PUT(req: NextRequest) {
       .from('profiles')
       .update({
         name: body.name,
+        phone: body.phone || null, // Include phone number
         title: body.title,
         location: body.location,
         experience_years: body.experience_years,

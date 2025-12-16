@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Button from './Button';
 import Input from './Input';
 import Textarea from './Textarea';
@@ -44,6 +44,43 @@ export default function ProfileForm() {
   const [state, setState] = useState<FormState>(initialState);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Load existing profile data on mount
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const res = await fetch('/api/profile');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.profile) {
+            setState({
+              name: data.profile.name || '',
+              email: data.profile.email || '',
+              phone: data.profile.phone || '',
+              title: data.profile.title || '',
+              location: data.profile.location || '',
+              experience: data.profile.experience_years || 0,
+              skills: Array.isArray(data.profile.skills) ? data.profile.skills : [],
+              preferred_job_types: Array.isArray(data.profile.preferred_job_types) 
+                ? data.profile.preferred_job_types 
+                : [],
+              visa: data.profile.visa_status || '',
+              rate: data.profile.rate_expectation || '',
+              availability: data.profile.availability || 'immediate',
+              summary: data.profile.summary || '',
+              projects: [], // Projects not stored in profile currently
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+    loadProfile();
+  }, []);
 
   const updateProject = (idx: number, value: string) => {
     setState((prev) => {
@@ -58,10 +95,14 @@ export default function ProfileForm() {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/candidates', {
-        method: 'POST',
+      // Use PUT to update existing profile, POST for new
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state),
+        body: JSON.stringify({
+          ...state,
+          experience_years: state.experience,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -76,11 +117,22 @@ export default function ProfileForm() {
     }
   };
 
+  if (loadingProfile) {
+    return (
+      <div className="card p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 w-1/3 rounded bg-slate-200"></div>
+          <div className="h-10 rounded bg-slate-200"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form className="card p-6" onSubmit={handleSubmit}>
       <div className="grid gap-4 md:grid-cols-2">
         <Input label="Name" required value={state.name} onChange={(e) => setState({ ...state, name: e.target.value })} />
-        <Input label="Email" type="email" required value={state.email} onChange={(e) => setState({ ...state, email: e.target.value })} />
+        <Input label="Email" type="email" required value={state.email} disabled className="bg-gray-50" />
         <Input label="Phone Number" type="tel" value={state.phone} onChange={(e) => setState({ ...state, phone: e.target.value })} placeholder="+1 (555) 123-4567" />
         <Input label="Title" required value={state.title} onChange={(e) => setState({ ...state, title: e.target.value })} />
         <Input label="Location" required value={state.location} onChange={(e) => setState({ ...state, location: e.target.value })} />
