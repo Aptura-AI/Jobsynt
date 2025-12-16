@@ -9,6 +9,94 @@ import { ALLOWED_JOB_TYPES, isValidJobType, DEFAULT_JOB_TYPE, type JobType } fro
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+/**
+ * Parse date from various formats (dd/mm/yyyy, mm/dd/yyyy, yyyy-mm-dd, relative dates, etc.)
+ * Returns date in YYYY-MM-DD format for database storage
+ * Handles relative dates like "Today", "Yesterday", "2 days ago", etc.
+ */
+function parseDate(dateValue: any): string | null {
+  if (!dateValue) return null;
+  
+  const dateStr = String(dateValue).trim().toLowerCase();
+  if (!dateStr) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Handle relative dates
+  if (dateStr === 'today' || dateStr === 'todays') {
+    return today.toISOString().split('T')[0];
+  }
+  
+  if (dateStr === 'yesterday') {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toISOString().split('T')[0];
+  }
+
+  // Handle "X days ago" format
+  const daysAgoMatch = dateStr.match(/^(\d+)\s*(day|days)\s*ago$/);
+  if (daysAgoMatch) {
+    const daysAgo = parseInt(daysAgoMatch[1]);
+    const pastDate = new Date(today);
+    pastDate.setDate(pastDate.getDate() - daysAgo);
+    return pastDate.toISOString().split('T')[0];
+  }
+
+  // Try dd/mm/yyyy format first (most common in Excel)
+  const ddMMyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (ddMMyyyyMatch) {
+    const [, day, month, year] = ddMMyyyyMatch;
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD
+    }
+  }
+
+  // Try mm/dd/yyyy format (US format)
+  const mmDDyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mmDDyyyyMatch) {
+    const [, month, day, year] = mmDDyyyyMatch;
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  }
+
+  // Try yyyy-mm-dd format (ISO format)
+  const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    return dateStr; // Already in correct format
+  }
+
+  // Try JavaScript Date parsing as fallback
+  const parsed = new Date(dateStr);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0];
+  }
+
+  return null;
+}
+
+/**
+ * Check if a date is older than 30 days
+ */
+function isOlderThan30Days(dateStr: string | null): boolean {
+  if (!dateStr) return false;
+  
+  const jobDate = new Date(dateStr);
+  if (isNaN(jobDate.getTime())) return false;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  jobDate.setHours(0, 0, 0, 0);
+  
+  const diffTime = today.getTime() - jobDate.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  return diffDays > 30;
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Use custom JWT token authentication (same as admin page)
@@ -214,6 +302,20 @@ export async function POST(req: NextRequest) {
           job_type = DEFAULT_JOB_TYPE;
         }
 
+        // Parse and validate posted date
+        const parsedDate = parseDate(row.posted_date) || new Date().toISOString().split('T')[0];
+        
+        // Reject jobs older than 30 days
+        if (isOlderThan30Days(parsedDate)) {
+          results.push({
+            title: jobTitle,
+            company: jobCompany,
+            status: 'error',
+            message: `Job is older than 30 days (posted: ${parsedDate}). Jobs older than 30 days are not accepted.`,
+          });
+          continue;
+        }
+
         const jobData = {
           title: jobTitle,
           company: jobCompany,
@@ -222,7 +324,7 @@ export async function POST(req: NextRequest) {
           job_type, // Required for job type filtering
           description: String(row.key_requirements || row.description || '').trim() || null,
           salary: String(row.pay_rate || row.rate || '').trim() || null,
-          posted_date: row.posted_date ? new Date(row.posted_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          posted_date: parsedDate,
           source: String(row.source || 'manual').trim(),
           profile_id: null,
           is_constant_search: false,
