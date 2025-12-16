@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyPassword, signToken, setAuthCookie } from '@/utils/auth';
+import type { UserRole } from '@/lib/auth-routing';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -33,9 +34,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
+    // Company login - role must be 'company'
+    const role: UserRole = 'company';
     const token = signToken({
       email: company.email,
-      role: 'user',
+      role,
       company_id: company.id,
     });
     setAuthCookie(token);
