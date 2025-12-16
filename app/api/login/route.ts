@@ -21,9 +21,18 @@ export async function POST(req: Request) {
 
     // Master admin login (fixed credentials)
     if (email.toLowerCase() === 'info@jobsynt.com' && password === 'Jobsynt@2026') {
+      // Fetch userId from Supabase if available
+      let userId: string | undefined;
+      if (supabaseUrl && supabaseAnonKey) {
+        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+        const { data: user } = await supabase.auth.getUserByEmail('info@jobsynt.com');
+        userId = user.user?.id;
+      }
+      
       const token = signToken({
         email: 'info@jobsynt.com',
         role: 'admin',
+        userId,
         admin_master: true,
       });
       setAuthCookie(token);
@@ -50,6 +59,7 @@ export async function POST(req: Request) {
         const token = signToken({
           email: data.user.email!,
           role: status.role, // Use role from database
+          userId: data.user.id,
         });
         setAuthCookie(token);
         return NextResponse.json({
@@ -73,7 +83,19 @@ export async function POST(req: Request) {
     // user.role is already typed as UserRole, use it directly
     const role: UserRole = user.role;
     
-    const token = signToken({ email: user.email, role });
+    // For JSON fallback, try to get userId from Supabase if available
+    let userId: string | undefined;
+    if (supabaseUrl && supabaseAnonKey) {
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      const { data: supabaseUser } = await supabase.auth.getUserByEmail(user.email);
+      userId = supabaseUser.user?.id;
+    }
+    
+    const token = signToken({ 
+      email: user.email, 
+      role,
+      userId,
+    });
     setAuthCookie(token);
     return NextResponse.json({ email: user.email, role });
   } catch (error) {

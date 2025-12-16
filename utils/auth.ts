@@ -9,6 +9,7 @@ const TOKEN_NAME = 'jobsynth_token';
 export type SessionToken = {
   email: string;
   role: UserRole;
+  userId?: string;
   admin_master?: boolean;
   company_id?: string;
 };

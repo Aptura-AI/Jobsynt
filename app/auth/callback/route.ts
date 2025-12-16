@@ -57,6 +57,7 @@ export async function GET(req: Request) {
     const token = signToken({
       email,
       role,
+      userId,
     });
     setAuthCookie(token);
 

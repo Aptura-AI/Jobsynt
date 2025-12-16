@@ -32,9 +32,9 @@ function LoginForm() {
         setMessage(data.message || 'Invalid credentials');
       } else {
         // Role-aware redirect: admins go to /admin, others to their dashboard
-        const next = searchParams.get('next');
-        if (next?.startsWith('/')) {
-          router.push(next);
+        const callbackUrl = searchParams.get('callbackUrl');
+        if (callbackUrl?.startsWith('/')) {
+          router.push(callbackUrl);
         } else if (data?.role === 'admin') {
           // Verify role exists and is string before checking
           router.push('/admin');

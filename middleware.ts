@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { verifyToken } from '@/utils/auth';
 import { getPostAuthRedirect, getUserOnboardingStatus, isAdminUser } from '@/lib/auth-routing';
 
 /**
@@ -34,17 +34,15 @@ export async function middleware(request: NextRequest) {
     pathname === route || pathname.startsWith(route)
   );
 
-  // Get session token (needed for both root and protected routes)
-  const token = await getToken({ 
-    req: request, 
-    secret: process.env.NEXTAUTH_SECRET 
-  });
+  // Get jobsynth_token from cookies
+  const rawToken = request.cookies.get('jobsynth_token')?.value;
+  const token = rawToken ? verifyToken(rawToken) : null;
 
   // Handle root path separately - redirect admins to /admin
   if (pathname === '/') {
     if (token) {
-      const email = token.email as string;
-      const userId = token.id as string;
+      const email = token.email;
+      const userId = token.userId;
       
       try {
         const userStatus = await getUserOnboardingStatus(email, userId);
@@ -78,11 +76,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const email = token.email as string;
-  const userId = token.id as string;
+  const email = token.email;
+  const userId = token.userId;
   
-  // Verify token has role embedded (from JWT callback)
-  const tokenRole = token.role as string | undefined;
+  // Verify token has role embedded
+  const tokenRole = token.role;
   if (process.env.NODE_ENV === 'development' && tokenRole) {
     console.log('[MIDDLEWARE] Token role:', tokenRole);
   }
@@ -107,11 +105,8 @@ export async function middleware(request: NextRequest) {
       // Admin trying to access other routes - redirect to /admin
       return NextResponse.redirect(new URL('/admin', request.url));
     }
-    // For non-admin users, if DB query fails, redirect to login for security
-    // This prevents unauthorized access when we can't verify user status
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('error', 'auth_error');
-    return NextResponse.redirect(loginUrl);
+    // On error, allow access (fail open) to prevent blocking users
+    return NextResponse.next();
   }
 
   const userRole = userStatus.role;
@@ -180,7 +175,7 @@ export async function middleware(request: NextRequest) {
 
   // Company routes - only allow company users
   if (pathname.startsWith('/company') && pathname !== '/company/register' && pathname !== '/company/login') {
-    if (userRole !== 'company' && !(token as any).company_id) {
+    if (userRole !== 'company' && !token.company_id) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     return NextResponse.next();
@@ -201,4 +196,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
-

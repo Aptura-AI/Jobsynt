@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
     const token = signToken({
       email: company.email,
       role,
+      userId: company.id, // Use company.id as userId
       company_id: company.id,
     });
     setAuthCookie(token);
