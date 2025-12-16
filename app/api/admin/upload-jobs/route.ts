@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { cookies } from 'next/headers';
+import { verifyToken } from '@/utils/auth';
 import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
@@ -10,11 +11,23 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession();
-    const isMasterAdmin = (session as any)?.admin_master === true || 
-      (session?.user?.email?.toLowerCase() === 'info@jobsynt.com' && session?.user?.role === 'admin');
+    // Use custom JWT token authentication (same as admin page)
+    const cookieStore = cookies();
+    const rawToken = cookieStore.get('jobsynth_token')?.value;
+    
+    if (!rawToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    if (!isMasterAdmin) {
+    // Verify JWT signature (safe in Node runtime - API routes)
+    const token = verifyToken(rawToken);
+    
+    if (!token || !token.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if user is admin
+    if (token.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
