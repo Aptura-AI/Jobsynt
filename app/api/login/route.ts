@@ -45,6 +45,15 @@ export async function POST(req: Request) {
           role: status.role, // Return actual role from database
         });
       }
+      
+      // If Supabase auth failed, log the error for debugging
+      if (error) {
+        console.error('Supabase auth error:', error.message);
+        // Return specific error message
+        return NextResponse.json({ 
+          message: error.message || 'Invalid credentials. User may not exist in Supabase.' 
+        }, { status: 401 });
+      }
     }
 
     // Fallback to JSON file storage (for backward compatibility)
