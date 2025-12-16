@@ -67,9 +67,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Invalid credentials' }, { status: 401 });
     }
     
-    // Map old 'user' role to 'candidate' for backward compatibility
-    // Ensure role is a valid UserRole type
-    const role: UserRole = user.role === 'user' ? 'candidate' : (user.role as UserRole);
+    // user.role is already typed as UserRole, use it directly
+    const role: UserRole = user.role;
     
     const token = signToken({ email: user.email, role });
     setAuthCookie(token);
