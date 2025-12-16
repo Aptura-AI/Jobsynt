@@ -1,13 +1,14 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
+import type { UserRole } from '@/lib/auth-routing';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'jobsynth-dev-secret';
 const TOKEN_NAME = 'jobsynth_token';
 
 export type SessionToken = {
   email: string;
-  role: 'admin' | 'user';
+  role: UserRole;
   admin_master?: boolean;
   company_id?: string;
 };

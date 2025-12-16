@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { signToken, setAuthCookie } from '@/utils/auth';
-import { getPostAuthRedirect, ensureProfileExists, getUserOnboardingStatus } from '@/lib/auth-routing';
+import { getPostAuthRedirect, ensureProfileExists, getUserOnboardingStatus, type UserRole } from '@/lib/auth-routing';
 
 // Support both NEXT_PUBLIC_ and non-prefixed versions
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
@@ -51,9 +51,12 @@ export async function GET(req: Request) {
     const status = await getUserOnboardingStatus(email, userId);
 
     // Create JWT token with role from database
+    // status.role is already UserRole type ('admin' | 'candidate' | 'company')
+    // Ensure type safety by using the role directly (no cast needed)
+    const role: UserRole = status.role;
     const token = signToken({
       email,
-      role: status.role === 'admin' ? 'admin' : status.role === 'company' ? 'company' : 'user',
+      role,
     });
     setAuthCookie(token);
 
