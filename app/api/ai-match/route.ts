@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
+import { ALLOWED_JOB_TYPES } from '@/lib/job-types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -28,11 +29,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Get all active jobs from scraped_jobs
-    const { data: jobs, error: jobsError } = await supabase
+    // Filter by preferred_job_types if specified
+    let jobsQuery = supabase
       .from('scraped_jobs')
       .select('*')
-      .eq('is_active', true)
-      .limit(100);
+      .eq('is_active', true);
+    
+    // Apply job type filtering if candidate has preferences
+    if (Array.isArray(profile.preferred_job_types) && profile.preferred_job_types.length > 0) {
+      // Only match jobs where job_type matches one of the preferred types
+      jobsQuery = jobsQuery.in('job_type', profile.preferred_job_types);
+    }
+    
+    const { data: jobs, error: jobsError } = await jobsQuery.limit(100);
 
     if (jobsError) {
       return NextResponse.json({ error: jobsError.message }, { status: 500 });

@@ -6,6 +6,7 @@ import Input from './Input';
 import Textarea from './Textarea';
 import TagInput from './TagInput';
 import ResumeUpload from './ResumeUpload';
+import { ALLOWED_JOB_TYPES, JOB_TYPE_LABELS, type JobType } from '@/lib/job-types';
 
 type FormState = {
   name: string;
@@ -14,6 +15,7 @@ type FormState = {
   location: string;
   experience: number;
   skills: string[];
+  preferred_job_types: JobType[];
   visa: string;
   rate: string;
   availability: string;
@@ -28,6 +30,7 @@ const initialState: FormState = {
   location: '',
   experience: 0,
   skills: [],
+  preferred_job_types: [],
   visa: '',
   rate: '',
   availability: '',
@@ -93,6 +96,37 @@ export default function ProfileForm() {
 
       <div className="mt-4">
         <TagInput label="Skills" values={state.skills} onChange={(skills) => setState({ ...state, skills })} />
+      </div>
+
+      <div className="mt-4">
+        <label className="mb-2 block text-sm font-medium text-ink">
+          Preferred Job Types <span className="text-muted text-xs">(Select one or more, leave empty to see all jobs)</span>
+        </label>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {ALLOWED_JOB_TYPES.map((jobType) => (
+            <label key={jobType} className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={state.preferred_job_types.includes(jobType)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setState({
+                      ...state,
+                      preferred_job_types: [...state.preferred_job_types, jobType],
+                    });
+                  } else {
+                    setState({
+                      ...state,
+                      preferred_job_types: state.preferred_job_types.filter((t) => t !== jobType),
+                    });
+                  }
+                }}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-ink">{JOB_TYPE_LABELS[jobType]}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="mt-4">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getServerSession } from '@/lib/auth';
+import { ALLOWED_JOB_TYPES, isValidJobType } from '@/lib/job-types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -77,6 +78,20 @@ export async function POST(req: NextRequest) {
     const location = String(body.location || '').trim();
     const skills = Array.isArray(body.skills) ? body.skills.filter(Boolean) : [];
     
+    // Validate and process preferred_job_types
+    let preferred_job_types: string[] = [];
+    if (Array.isArray(body.preferred_job_types)) {
+      // Filter and validate each job type
+      preferred_job_types = body.preferred_job_types
+        .filter((type: any) => type && typeof type === 'string')
+        .map((type: string) => type.trim().toLowerCase())
+        .filter((type: string) => isValidJobType(type));
+      
+      // Remove duplicates
+      preferred_job_types = Array.from(new Set(preferred_job_types));
+    }
+    // If empty array, it means "show all jobs" (no filtering)
+    
     // Determine if onboarding is complete (has required fields)
     const hasRequiredFields = name && title && location && skills.length > 0;
     
@@ -89,7 +104,8 @@ export async function POST(req: NextRequest) {
       skills,
       contract_type: Array.isArray(body.contract_type) ? body.contract_type : [],
       work_mode: Array.isArray(body.work_mode) ? body.work_mode : [],
-      preferred_job_type: String(body.preferred_job_type || 'remote').trim(),
+      preferred_job_types, // JSONB array of job types
+      preferred_job_type: String(body.preferred_job_type || 'remote').trim(), // Keep for backward compatibility
       visa_status: String(body.visa_status || '').trim() || null,
       rate_expectation: String(body.rate_expectation || '').trim() || null,
       availability: String(body.availability || 'immediate').trim(),
@@ -143,6 +159,16 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON in request' }, { status: 400 });
     }
 
+    // Validate and process preferred_job_types for PUT
+    let preferred_job_types: string[] = [];
+    if (Array.isArray(body.preferred_job_types)) {
+      preferred_job_types = body.preferred_job_types
+        .filter((type: any) => type && typeof type === 'string')
+        .map((type: string) => type.trim().toLowerCase())
+        .filter((type: string) => isValidJobType(type));
+      preferred_job_types = Array.from(new Set(preferred_job_types));
+    }
+
     const { data: profile, error } = await supabase
       .from('profiles')
       .update({
@@ -153,6 +179,7 @@ export async function PUT(req: NextRequest) {
         skills: body.skills,
         contract_type: body.contract_type,
         work_mode: body.work_mode,
+        preferred_job_types, // JSONB array
         preferred_job_type: body.preferred_job_type,
         visa_status: body.visa_status,
         rate_expectation: body.rate_expectation,

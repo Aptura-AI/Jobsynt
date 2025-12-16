@@ -3,6 +3,7 @@ import { getServerSession } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import { ALLOWED_JOB_TYPES, isValidJobType, DEFAULT_JOB_TYPE, type JobType } from '@/lib/job-types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -63,6 +64,8 @@ export async function POST(req: NextRequest) {
         'job link': 'job_link',
         'link': 'job_link',
         'url': 'job_link',
+        'job type': 'job_type',
+        'type': 'job_type',
         'key requirements': 'key_requirements',
         'requirements': 'key_requirements',
         'description': 'key_requirements',
@@ -103,11 +106,39 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        // Validate and normalize job_type
+        const jobTypeValue = String(row.job_type || '').trim().toLowerCase();
+        let job_type: JobType;
+        
+        if (jobTypeValue && isValidJobType(jobTypeValue)) {
+          job_type = jobTypeValue as JobType;
+        } else if (jobTypeValue) {
+          // Try to map common variations
+          const typeMap: Record<string, JobType> = {
+            'fulltime': 'full-time',
+            'full time': 'full-time',
+            'w2': 'w2-contract',
+            'w-2': 'w2-contract',
+            'contract': 'w2-contract',
+            'corp to corp': 'c2c',
+            'corp-to-corp': 'c2c',
+          };
+          job_type = typeMap[jobTypeValue] || DEFAULT_JOB_TYPE;
+          if (!isValidJobType(job_type)) {
+            errors.push(`Skipped row "${row.title}": Invalid job_type "${jobTypeValue}", using default`);
+            job_type = DEFAULT_JOB_TYPE;
+          }
+        } else {
+          // No job_type provided - use default
+          job_type = DEFAULT_JOB_TYPE;
+        }
+
         const jobData = {
           title: String(row.title || '').trim(),
           company: String(row.company || '').trim(),
           location: String(row.location || '').trim() || 'Remote',
           url: urlValue, // Required for deduplication (unique index)
+          job_type, // Required for job type filtering
           description: String(row.key_requirements || row.description || '').trim() || null,
           salary: String(row.pay_rate || row.rate || '').trim() || null,
           posted_date: row.posted_date ? new Date(row.posted_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],

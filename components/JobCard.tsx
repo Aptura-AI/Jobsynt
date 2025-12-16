@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { JOB_TYPE_LABELS, type JobType } from '@/lib/job-types';
 
 export type Job = {
   id: string;
@@ -10,9 +11,15 @@ export type Job = {
   workMode: string;
   rate?: string;
   summary?: string;
+  job_type?: JobType | string | null;
 };
 
 export default function JobCard({ job }: { job: Job }) {
+  // Get job type label for display
+  const jobTypeLabel = job.job_type && JOB_TYPE_LABELS[job.job_type as JobType] 
+    ? JOB_TYPE_LABELS[job.job_type as JobType] 
+    : null;
+
   return (
     <div className="card p-5">
       <div className="flex items-start justify-between gap-2">
@@ -20,6 +27,7 @@ export default function JobCard({ job }: { job: Job }) {
           <h3 className="text-lg font-semibold text-ink">{job.title}</h3>
           <p className="text-sm text-muted">
             {job.company} • {job.location} • {job.workMode}
+            {jobTypeLabel && ` • ${jobTypeLabel}`}
           </p>
         </div>
         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-primary">{job.experience} yrs</span>

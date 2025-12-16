@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase, isSupabaseConfigured } from '@/utils/supabase';
 import { getServerSession } from '@/lib/auth';
+import { ALLOWED_JOB_TYPES, isValidJobType } from '@/lib/job-types';
 
 export async function GET() {
   try {
@@ -118,6 +119,16 @@ export async function POST(req: Request) {
       result = data;
     }
 
+    // Validate and process preferred_job_types from payload
+    let preferred_job_types: string[] = [];
+    if (Array.isArray(payload.preferred_job_types)) {
+      preferred_job_types = payload.preferred_job_types
+        .filter((type: any) => type && typeof type === 'string')
+        .map((type: string) => type.trim().toLowerCase())
+        .filter((type: string) => isValidJobType(type));
+      preferred_job_types = Array.from(new Set(preferred_job_types));
+    }
+
     // Also try to update profiles table (don't fail if it doesn't work)
     // Mark onboarding_complete if required fields are present
     const hasRequiredFields = candidateData.name && candidateData.title && 
@@ -133,6 +144,7 @@ export async function POST(req: Request) {
           location: candidateData.location,
           experience_years: candidateData.experience,
           skills: candidateData.skills,
+          preferred_job_types, // JSONB array
           visa_status: candidateData.visa,
           rate_expectation: candidateData.rate,
           availability: candidateData.availability,

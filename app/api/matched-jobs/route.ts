@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, isSupabaseConfigured } from '@/utils/supabase';
 import { getServerSession } from '@/lib/auth';
+import { ALLOWED_JOB_TYPES } from '@/lib/job-types';
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,10 +14,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ jobs: [] });
     }
 
-    // Get user profile
+    // Get user profile with preferred_job_types
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, tier')
+      .select('id, tier, preferred_job_types')
       .eq('email', session.user.email)
       .maybeSingle();
 
@@ -24,13 +25,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ jobs: [] });
     }
 
-    // Get matched jobs from scraped_jobs (90%+ match preferred)
-    const { data: jobs, error } = await supabase
+    // Build query for matched jobs
+    let query = supabase
       .from('scraped_jobs')
       .select('*, job_applications!left(id)')
       .eq('profile_id', profile.id)
       .gte('fit_score', 90)
-      .eq('is_active', true)
+      .eq('is_active', true);
+
+    // Filter by preferred_job_types if specified
+    // Empty array means "show all jobs" (no filtering)
+    if (Array.isArray(profile.preferred_job_types) && profile.preferred_job_types.length > 0) {
+      // Only show jobs where job_type matches one of the preferred types
+      query = query.in('job_type', profile.preferred_job_types);
+    }
+
+    const { data: jobs, error } = await query
       .order('fit_score', { ascending: false })
       .limit(20);
 
@@ -39,7 +49,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ jobs: [] });
     }
 
-    // Transform to include applied status
+    // Transform to include applied status and job_type
     const transformedJobs = (jobs || []).map((job: any) => ({
       id: job.id,
       title: job.title,
@@ -48,6 +58,7 @@ export async function GET(req: NextRequest) {
       url: job.url,
       description: job.description,
       salary: job.salary,
+      job_type: job.job_type || null,
       fit_score: job.fit_score,
       match_reasons: job.match_reasons,
       applied: job.job_applications && job.job_applications.length > 0,

@@ -12,6 +12,7 @@ import 'dotenv/config';
 import { chromium, Page } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { inferJobTypeFromDescription, DEFAULT_JOB_TYPE, type JobType } from '@/lib/job-types';
 
 // =========================
 // Manual configuration
@@ -135,6 +136,9 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
   const skills = extractSkills(description);
   const source_job_id = getSourceJobId(jobUrl);
   const dedupHash = hashString(`${title}|${company}|${location}`);
+  
+  // Infer job_type from description, default to w2-contract if cannot be determined
+  const job_type: JobType = inferJobTypeFromDescription(description);
 
   return {
     source: 'Dice',
@@ -148,6 +152,7 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
     description,
     url: jobUrl, // Use 'url' column for deduplication (unique index)
     job_url: jobUrl, // Keep for backward compatibility if needed
+    job_type, // Required for job type filtering
     scraped_at: new Date().toISOString(),
     hash: dedupHash,
   };
