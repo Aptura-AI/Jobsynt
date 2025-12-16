@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
+// Helper to get 30 days ago date
+function get30DaysAgoDate(): string {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  return thirtyDaysAgo.toISOString().split('T')[0];
+}
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
@@ -35,9 +42,12 @@ export default function CompanyDashboardClient() {
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
     // TODO: Filter by company_id when we have company session
+    // Filter out jobs older than 30 days
+    const thirtyDaysAgo = get30DaysAgoDate();
     const { data, error } = await supabase
       .from('scraped_jobs')
       .select('*')
+      .gte('posted_date', thirtyDaysAgo) // Only jobs from last 30 days
       .order('created_at', { ascending: false })
       .limit(50);
 
