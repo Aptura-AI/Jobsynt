@@ -26,22 +26,26 @@ function LoginForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
+      // Check if response is a redirect (status 307/308)
+      if (res.redirected || res.status === 307 || res.status === 308) {
+        // Server-side redirect - follow it
+        window.location.href = res.url;
+        return;
+      }
+      
       const data = await res.json();
       if (!res.ok) {
         setMessageType('error');
         setMessage(data.message || 'Invalid credentials');
         console.error('Login failed:', data);
       } else {
+        // Fallback: if API returns JSON instead of redirect, do client-side redirect
         console.log('Login successful:', data);
-        // Small delay to ensure cookie is set before redirect
-        setTimeout(() => {
-          // Role-aware redirect using window.location.href
-          if (data?.role === 'admin') {
-            window.location.href = '/admin';
-          } else {
-            window.location.href = '/dashboard';
-          }
-        }, 100);
+        if (data?.role === 'admin') {
+          window.location.href = '/admin';
+        } else {
+          window.location.href = '/dashboard';
+        }
       }
     } catch (err) {
       setMessageType('error');

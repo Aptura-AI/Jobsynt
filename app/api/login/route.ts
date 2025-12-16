@@ -14,7 +14,7 @@ type User = {
   role: UserRole;
 };
 
-export async function POST(req: Request) {
+export async function POST(req: Request & { url?: string }) {
   try {
     const payload = await req.json();
     const { email, password } = payload;
@@ -39,11 +39,23 @@ export async function POST(req: Request) {
           role: status.role, // Use role from database
           userId,
         });
-        setAuthCookie(token);
-        return NextResponse.json({
-          email: data.user.email,
-          role: status.role, // Return actual role from database
+        
+        // Determine redirect path based on role
+        const redirectPath = status.role === 'admin' ? '/admin' : '/dashboard';
+        
+        // Create response with redirect
+        const response = NextResponse.redirect(new URL(redirectPath, requestUrl.origin));
+        
+        // Set cookie on the redirect response
+        response.cookies.set('jobsynth_token', token, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+          path: '/',
+          maxAge: 60 * 60 * 24 * 7,
         });
+        
+        return response;
       }
       
       // If Supabase auth failed, log the error for debugging
