@@ -35,7 +35,8 @@ function LoginForm() {
         const next = searchParams.get('next');
         if (next?.startsWith('/')) {
           router.push(next);
-        } else if (data.role === 'admin') {
+        } else if (data?.role === 'admin') {
+          // Verify role exists and is string before checking
           router.push('/admin');
         } else {
           // For other roles, let middleware handle the redirect

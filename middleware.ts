@@ -104,9 +104,14 @@ export async function middleware(request: NextRequest) {
       if (pathname === '/') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
+      // Admin trying to access other routes - redirect to /admin
+      return NextResponse.redirect(new URL('/admin', request.url));
     }
-    // On error, allow access (fail open) to prevent blocking users
-    return NextResponse.next();
+    // For non-admin users, if DB query fails, redirect to login for security
+    // This prevents unauthorized access when we can't verify user status
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('error', 'auth_error');
+    return NextResponse.redirect(loginUrl);
   }
 
   const userRole = userStatus.role;
