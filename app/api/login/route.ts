@@ -19,31 +19,6 @@ export async function POST(req: Request) {
     const payload = await req.json();
     const { email, password } = payload;
 
-    // Master admin login (fixed credentials)
-    if (email.toLowerCase() === 'info@jobsynt.com' && password === 'Jobsynt@2026') {
-      // Fetch userId from Supabase if available
-      let userId: string | undefined;
-      if (supabaseUrl && supabaseAnonKey) {
-        const supabase = createClient(supabaseUrl, supabaseAnonKey);
-        const { data: user } = await supabase.auth.getUserByEmail('info@jobsynt.com');
-        userId = user.user?.id;
-      }
-      
-      const token = signToken({
-        email: 'info@jobsynt.com',
-        role: 'admin',
-        userId,
-        admin_master: true,
-      });
-      setAuthCookie(token);
-      return NextResponse.json({
-        email: 'info@jobsynt.com',
-        role: 'admin',
-        admin_master: true,
-      });
-    }
-
-    // Try Supabase first if configured
     if (supabaseUrl && supabaseAnonKey) {
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -52,14 +27,17 @@ export async function POST(req: Request) {
       });
 
       if (!error && data.user) {
+        // Get userId from auth result
+        const userId = data.user.id;
+        
         // Fetch role from database (single source of truth)
         const { getUserOnboardingStatus } = await import('@/lib/auth-routing');
-        const status = await getUserOnboardingStatus(data.user.email!, data.user.id);
+        const status = await getUserOnboardingStatus(data.user.email!, userId);
         
         const token = signToken({
           email: data.user.email!,
           role: status.role, // Use role from database
-          userId: data.user.id,
+          userId,
         });
         setAuthCookie(token);
         return NextResponse.json({
@@ -83,18 +61,11 @@ export async function POST(req: Request) {
     // user.role is already typed as UserRole, use it directly
     const role: UserRole = user.role;
     
-    // For JSON fallback, try to get userId from Supabase if available
-    let userId: string | undefined;
-    if (supabaseUrl && supabaseAnonKey) {
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
-      const { data: supabaseUser } = await supabase.auth.getUserByEmail(user.email);
-      userId = supabaseUser.user?.id;
-    }
-    
+    // For JSON fallback, userId is not available (no Supabase auth user)
     const token = signToken({ 
       email: user.email, 
       role,
-      userId,
+      userId: undefined,
     });
     setAuthCookie(token);
     return NextResponse.json({ email: user.email, role });
