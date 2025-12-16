@@ -11,6 +11,7 @@ export async function middleware(request: NextRequest) {
 
   // Public routes - always allowed
   const publicRoutes = [
+    '/',
     '/login',
     '/signup',
     '/company/register',
@@ -23,7 +24,7 @@ export async function middleware(request: NextRequest) {
     pathname === route || pathname.startsWith(route)
   );
 
-  // Allow all public routes
+  // Allow all public routes (including root)
   if (isPublicRoute) {
     return NextResponse.next();
   }
