@@ -199,14 +199,14 @@ export async function POST(req: NextRequest) {
           email: candidateData.email,
           name: candidateData.name,
           phone: candidateData.phone,
-          title: candidateData.title,
+          title: candidateData.title || null, // Allow empty title for admin-created candidates
           location: candidateData.location,
           experience_years: candidateData.experience,
           skills: candidateData.skills,
           preferred_job_types, // JSONB array
           visa_status: candidateData.visa,
           rate_expectation: candidateData.rate,
-          availability: candidateData.availability,
+          availability: candidateData.availability || 'immediate',
           summary: candidateData.summary,
           projects: candidateData.projects,
           onboarding_complete: hasRequiredFields,
