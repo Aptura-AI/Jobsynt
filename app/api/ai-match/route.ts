@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import { ALLOWED_JOB_TYPES } from '@/lib/job-types';
+import { get30DaysAgoDate } from '@/lib/job-filters';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -29,11 +30,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Get all active jobs from scraped_jobs
-    // Filter by preferred_job_types if specified
+    // Filter out jobs older than 30 days
+    const thirtyDaysAgo = get30DaysAgoDate();
     let jobsQuery = supabase
       .from('scraped_jobs')
       .select('*')
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .gte('posted_date', thirtyDaysAgo); // Only jobs from last 30 days
     
     // Apply job type filtering if candidate has preferences
     if (Array.isArray(profile.preferred_job_types) && profile.preferred_job_types.length > 0) {

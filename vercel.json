@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/daily-job-email",
       "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-old-jobs",
-      "schedule": "0 2 * * *"
     }
   ]
 }

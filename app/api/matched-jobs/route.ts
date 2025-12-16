@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase, isSupabaseConfigured } from '@/utils/supabase';
 import { getServerSession } from '@/lib/auth';
 import { ALLOWED_JOB_TYPES } from '@/lib/job-types';
+import { get30DaysAgoDate } from '@/lib/job-filters';
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,12 +27,15 @@ export async function GET(req: NextRequest) {
     }
 
     // Build query for matched jobs
+    // Filter out jobs older than 30 days
+    const thirtyDaysAgo = get30DaysAgoDate();
     let query = supabase
       .from('scraped_jobs')
       .select('*, job_applications!left(id)')
       .eq('profile_id', profile.id)
       .gte('fit_score', 90)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .gte('posted_date', thirtyDaysAgo); // Only jobs from last 30 days
 
     // Filter by preferred_job_types if specified
     // Empty array means "show all jobs" (no filtering)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendDailyJobDigest } from '@/lib/email';
+import { get30DaysAgoDate } from '@/lib/job-filters';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -73,12 +74,15 @@ export async function GET(req: NextRequest) {
       try {
         // Get matched jobs for this profile
         // Jobs are matched when profile_id is set and fit_score >= 90
+        // Filter out jobs older than 30 days
+        const thirtyDaysAgo = get30DaysAgoDate();
         let jobsQuery = supabase
           .from('scraped_jobs')
           .select('id, title, company, location, job_type, description, url')
           .eq('profile_id', profile.id)
           .gte('fit_score', 90)
-          .eq('is_active', true);
+          .eq('is_active', true)
+          .gte('posted_date', thirtyDaysAgo); // Only jobs from last 30 days
 
         // Filter by preferred_job_types if specified
         if (Array.isArray(profile.preferred_job_types) && profile.preferred_job_types.length > 0) {
