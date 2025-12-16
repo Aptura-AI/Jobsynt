@@ -123,3 +123,4 @@ In Supabase Dashboard → Authentication → Email Templates:
 - `app/api/profile/route.ts` - Auto-mark onboarding complete
 - `app/api/candidates/route.ts` - Auto-mark onboarding complete
 
+
