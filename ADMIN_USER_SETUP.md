@@ -64,18 +64,39 @@ WHERE email = 'info@jobsynt.com';
 SELECT id FROM auth.users WHERE email = 'info@jobsynt.com';
 
 -- Then insert/update the profile (replace USER_ID_HERE with actual UUID):
-INSERT INTO profiles (user_id, email, role, onboarding_complete)
-VALUES (
-  'USER_ID_HERE',  -- Replace with actual UUID from auth.users
-  'info@jobsynt.com',
-  'admin',
-  true
-)
-ON CONFLICT (user_id) 
-DO UPDATE SET 
-  role = 'admin',
-  onboarding_complete = true,
-  email = 'info@jobsynt.com';
+-- Method 1: Update if exists, insert if not (safer approach)
+DO $$
+DECLARE
+  auth_user_id UUID;
+BEGIN
+  -- Get the user_id from auth.users
+  SELECT id INTO auth_user_id FROM auth.users WHERE email = 'info@jobsynt.com';
+  
+  IF auth_user_id IS NULL THEN
+    RAISE EXCEPTION 'User info@jobsynt.com not found in auth.users. Please create the user first.';
+  END IF;
+  
+  -- Update if profile exists
+  UPDATE profiles
+  SET 
+    user_id = auth_user_id,
+    role = 'admin',
+    onboarding_complete = true,
+    email = 'info@jobsynt.com'
+  WHERE email = 'info@jobsynt.com' OR user_id = auth_user_id;
+  
+  -- Insert if profile doesn't exist
+  IF NOT FOUND THEN
+    INSERT INTO profiles (user_id, email, role, onboarding_complete, name)
+    VALUES (
+      auth_user_id,
+      'info@jobsynt.com',
+      'admin',
+      true,
+      'Jobsynt Admin'
+    );
+  END IF;
+END $$;
 ```
 
 ## Step 3: Test Login

@@ -30,13 +30,18 @@ function LoginForm() {
       if (!res.ok) {
         setMessageType('error');
         setMessage(data.message || 'Invalid credentials');
+        console.error('Login failed:', data);
       } else {
-        // Role-aware redirect using window.location.href
-        if (data?.role === 'admin') {
-          window.location.href = '/admin';
-        } else {
-          window.location.href = '/dashboard';
-        }
+        console.log('Login successful:', data);
+        // Small delay to ensure cookie is set before redirect
+        setTimeout(() => {
+          // Role-aware redirect using window.location.href
+          if (data?.role === 'admin') {
+            window.location.href = '/admin';
+          } else {
+            window.location.href = '/dashboard';
+          }
+        }, 100);
       }
     } catch (err) {
       setMessageType('error');
