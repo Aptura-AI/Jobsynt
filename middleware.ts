@@ -9,9 +9,13 @@ import { decodeToken } from '@/utils/auth';
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Root path is always public (index page)
+  if (pathname === '/') {
+    return NextResponse.next();
+  }
+
   // Public routes - always allowed
   const publicRoutes = [
-    '/',
     '/login',
     '/signup',
     '/company/register',
@@ -24,7 +28,7 @@ export async function middleware(request: NextRequest) {
     pathname === route || pathname.startsWith(route)
   );
 
-  // Allow all public routes (including root)
+  // Allow all public routes
   if (isPublicRoute) {
     return NextResponse.next();
   }
