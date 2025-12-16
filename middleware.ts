@@ -88,13 +88,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // If no token and trying to access protected route, redirect to login
-  if (!token) {
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('callbackUrl', pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
   const email = token.email;
   const userId = token.userId;
   
