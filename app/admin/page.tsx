@@ -11,9 +11,13 @@ import AdminDashboardClient from './AdminDashboardClient';
 export default async function AdminPage() {
   // Get cookies for server-side fetch
   const cookieStore = cookies();
-  const cookieHeader = cookieStore.toString();
+  const token = cookieStore.get('jobsynth_token')?.value;
+  
+  // Build cookie header manually
+  const cookieHeader = token ? `jobsynth_token=${token}` : '';
   
   // Fetch admin session from API (JWT verified server-side)
+  // Use relative URL for internal API calls (Next.js handles this)
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
                   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
                   'http://localhost:3000');
@@ -22,9 +26,9 @@ export default async function AdminPage() {
   try {
     const response = await fetch(`${baseUrl}/api/admin/me`, {
       cache: 'no-store',
-      headers: {
+      headers: cookieHeader ? {
         Cookie: cookieHeader,
-      },
+      } : {},
     });
 
     if (response.status === 401) {
