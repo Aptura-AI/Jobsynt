@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { supabase, isSupabaseConfigured } from '@/utils/supabase';
 import { getServerSession } from '@/lib/auth';
 import { ALLOWED_JOB_TYPES, isValidJobType } from '@/lib/job-types';
+import { cookies } from 'next/headers';
+import { verifyToken } from '@/utils/auth';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 export async function GET() {
   try {
@@ -26,7 +33,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     // Parse JSON with error handling
     let payload;
@@ -38,7 +45,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
     }
 
-    // Get session for email
+    // Check if this is an admin request (from admin dashboard)
+    const cookieStore = cookies();
+    const rawToken = cookieStore.get('jobsynth_token')?.value;
+    let isAdminRequest = false;
+    let adminSupabase = null;
+
+    if (rawToken && supabaseUrl && supabaseServiceKey) {
+      const token = verifyToken(rawToken);
+      if (token && token.role === 'admin') {
+        isAdminRequest = true;
+        // Use admin client (service role) to bypass RLS
+        adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
+      }
+    }
+
+    // Get session for email (fallback for non-admin requests)
     const session = await getServerSession();
     const email = payload.email || session?.user?.email;
 
@@ -51,6 +73,9 @@ export async function POST(req: Request) {
         error: 'Database not configured. Please run the SQL schema in Supabase.' 
       }, { status: 500 });
     }
+
+    // Use admin client if available, otherwise use regular client
+    const dbClient = adminSupabase || supabase;
 
     // Prepare candidate data - clean and sanitize
     const candidateData = {
@@ -72,7 +97,7 @@ export async function POST(req: Request) {
     };
 
     // Check if candidate exists
-    const { data: existing, error: checkError } = await supabase
+    const { data: existing, error: checkError } = await dbClient
       .from('candidates')
       .select('id')
       .eq('email', candidateData.email)
@@ -92,7 +117,7 @@ export async function POST(req: Request) {
     let result;
     if (existing) {
       // Update existing
-      const { data, error } = await supabase
+      const { data, error } = await dbClient
         .from('candidates')
         .update(candidateData)
         .eq('id', existing.id)
@@ -106,7 +131,7 @@ export async function POST(req: Request) {
       result = data;
     } else {
       // Insert new
-      const { data, error } = await supabase
+      const { data, error } = await dbClient
         .from('candidates')
         .insert(candidateData)
         .select()
@@ -131,11 +156,20 @@ export async function POST(req: Request) {
 
     // Also try to update profiles table (don't fail if it doesn't work)
     // Mark onboarding_complete if required fields are present
+    // IMPORTANT: Use admin client for profiles upsert to bypass RLS
     const hasRequiredFields = candidateData.name && candidateData.title && 
                               candidateData.location && candidateData.skills.length > 0;
     
     try {
-      await supabase
+      // Always use admin client for profiles table to bypass RLS
+      const profilesClient = adminSupabase || (supabaseUrl && supabaseServiceKey 
+        ? createClient(supabaseUrl, supabaseServiceKey) 
+        : null);
+      
+      if (!profilesClient) {
+        console.log('Profile update skipped (admin client not available)');
+      } else {
+        const { error: profileError } = await profilesClient
         .from('profiles')
         .upsert({
           email: candidateData.email,
@@ -152,6 +186,12 @@ export async function POST(req: Request) {
           projects: candidateData.projects,
           onboarding_complete: hasRequiredFields, // Mark complete when required fields are saved
         }, { onConflict: 'email' });
+      
+        if (profileError) {
+          console.error('Profile update error:', profileError);
+          // Don't fail the request if profile update fails
+        }
+      }
     } catch (profileError) {
       console.log('Profile update skipped (table may not exist):', profileError);
     }
