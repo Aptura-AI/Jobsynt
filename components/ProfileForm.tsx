@@ -11,6 +11,7 @@ import { ALLOWED_JOB_TYPES, JOB_TYPE_LABELS, type JobType } from '@/lib/job-type
 type FormState = {
   name: string;
   email: string;
+  phone: string;
   title: string;
   location: string;
   experience: number;
@@ -26,6 +27,7 @@ type FormState = {
 const initialState: FormState = {
   name: '',
   email: '',
+  phone: '',
   title: '',
   location: '',
   experience: 0,
@@ -79,6 +81,7 @@ export default function ProfileForm() {
       <div className="grid gap-4 md:grid-cols-2">
         <Input label="Name" required value={state.name} onChange={(e) => setState({ ...state, name: e.target.value })} />
         <Input label="Email" type="email" required value={state.email} onChange={(e) => setState({ ...state, email: e.target.value })} />
+        <Input label="Phone Number" type="tel" value={state.phone} onChange={(e) => setState({ ...state, phone: e.target.value })} placeholder="+1 (555) 123-4567" />
         <Input label="Title" required value={state.title} onChange={(e) => setState({ ...state, title: e.target.value })} />
         <Input label="Location" required value={state.location} onChange={(e) => setState({ ...state, location: e.target.value })} />
         <Input

@@ -11,11 +11,13 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.87.1",
+    "@types/nodemailer": "^7.0.4",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.0",
     "jsonwebtoken": "^9.0.2",
     "next": "14.2.3",
     "next-auth": "^4.24.13",
+    "nodemailer": "^7.0.11",
     "openai": "^6.10.0",
     "papaparse": "^5.5.3",
     "pdf-parse": "^1.1.1",

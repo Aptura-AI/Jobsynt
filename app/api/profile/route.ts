@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
     const profileData = {
       email: String(session.user.email).trim().toLowerCase(),
       name,
+      phone: String(body.phone || '').trim() || null,
       title,
       location,
       experience_years: Number(body.experience_years) || 0,

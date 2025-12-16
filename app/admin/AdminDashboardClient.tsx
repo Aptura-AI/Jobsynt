@@ -10,6 +10,7 @@ type Candidate = {
   id: string;
   name: string;
   email: string;
+  phone: string | null;
   experience_years: number;
   skills: string[];
   location: string;
@@ -267,6 +268,7 @@ function CandidateForm({
   const [formData, setFormData] = useState({
     name: candidate?.name || '',
     email: candidate?.email || '',
+    phone: candidate?.phone || '',
     experience_years: candidate?.experience_years || 0,
     skills: (candidate?.skills || []).join(', '),
     location: candidate?.location || '',
@@ -322,6 +324,7 @@ function CandidateForm({
       const profileData = {
         name: formData.name,
         email: formData.email.toLowerCase(),
+        phone: formData.phone?.trim() || null,
         experience_years: formData.experience_years,
         skills,
         location: formData.location,
@@ -382,6 +385,16 @@ function CandidateForm({
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="w-full px-3 py-2 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1">Phone Number</label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="w-full px-3 py-2 border rounded"
+              placeholder="+1 (555) 123-4567"
             />
           </div>
           <div>

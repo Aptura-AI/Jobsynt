@@ -6,6 +6,7 @@ import { ALLOWED_JOB_TYPES, isValidJobType } from '@/lib/job-types';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/utils/auth';
 import { createClient } from '@supabase/supabase-js';
+import { sendAuthEmail } from '@/lib/email';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -45,24 +46,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
     }
 
-    // Check if this is an admin request (from admin dashboard)
+    // SECURITY: Require admin authentication for candidate creation/updates
+    // This endpoint is only accessible from admin dashboard
     const cookieStore = cookies();
     const rawToken = cookieStore.get('jobsynth_token')?.value;
-    let isAdminRequest = false;
-    let adminSupabase = null;
 
-    if (rawToken && supabaseUrl && supabaseServiceKey) {
-      const token = verifyToken(rawToken);
-      if (token && token.role === 'admin') {
-        isAdminRequest = true;
-        // Use admin client (service role) to bypass RLS
-        adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
-      }
+    if (!rawToken) {
+      return NextResponse.json({ error: 'Unauthorized - Admin authentication required' }, { status: 401 });
     }
 
-    // Get session for email (fallback for non-admin requests)
-    const session = await getServerSession();
-    const email = payload.email || session?.user?.email;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json({ 
+        error: 'Database not configured. Please configure SUPABASE_SERVICE_ROLE_KEY.' 
+      }, { status: 500 });
+    }
+
+    // Verify admin token
+    const token = verifyToken(rawToken);
+    if (!token || token.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
+    }
+
+    // Use admin client (service role) to bypass RLS for all operations
+    const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
+    const dbClient = adminSupabase;
+    
+    console.log('✅ Admin authenticated - using service role client to bypass RLS');
+
+    // Get email from payload (admin provides it)
+    const email = payload.email;
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
@@ -74,13 +86,11 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
-    // Use admin client if available, otherwise use regular client
-    const dbClient = adminSupabase || supabase;
-
     // Prepare candidate data - clean and sanitize
     const candidateData = {
       name: String(payload.name || '').trim(),
       email: String(email).trim().toLowerCase(),
+      phone: String(payload.phone || '').trim() || null,
       title: String(payload.title || '').trim(),
       location: String(payload.location || '').trim(),
       experience: Number(payload.experience) || 0,
@@ -126,6 +136,13 @@ export async function POST(req: NextRequest) {
       
       if (error) {
         console.error('Update error:', error);
+        // Check if it's an RLS error
+        if (error.code === '42501' || error.message.includes('row-level security') || error.message.includes('RLS')) {
+          return NextResponse.json({ 
+            error: 'Database permission error. Please ensure service role key is configured correctly.',
+            details: error.message 
+          }, { status: 500 });
+        }
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
       result = data;
@@ -139,6 +156,13 @@ export async function POST(req: NextRequest) {
       
       if (error) {
         console.error('Insert error:', error);
+        // Check if it's an RLS error
+        if (error.code === '42501' || error.message.includes('row-level security') || error.message.includes('RLS')) {
+          return NextResponse.json({ 
+            error: 'Database permission error. Please ensure service role key is configured correctly.',
+            details: error.message 
+          }, { status: 500 });
+        }
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
       result = data;
@@ -160,20 +184,21 @@ export async function POST(req: NextRequest) {
     const hasRequiredFields = candidateData.name && candidateData.title && 
                               candidateData.location && candidateData.skills.length > 0;
     
+    // Update profiles table (admin has access via service role)
     try {
-      // Always use admin client for profiles table to bypass RLS
-      const profilesClient = adminSupabase || (supabaseUrl && supabaseServiceKey 
-        ? createClient(supabaseUrl, supabaseServiceKey) 
-        : null);
-      
-      if (!profilesClient) {
-        console.log('Profile update skipped (admin client not available)');
-      } else {
-        const { error: profileError } = await profilesClient
+      // Check if profile already exists and has user_id (authenticated)
+      const { data: existingProfile } = await adminSupabase
+        .from('profiles')
+        .select('user_id, pending_auth')
+        .eq('email', candidateData.email)
+        .maybeSingle();
+
+      const { error: profileError } = await adminSupabase
         .from('profiles')
         .upsert({
           email: candidateData.email,
           name: candidateData.name,
+          phone: candidateData.phone,
           title: candidateData.title,
           location: candidateData.location,
           experience_years: candidateData.experience,
@@ -184,12 +209,21 @@ export async function POST(req: NextRequest) {
           availability: candidateData.availability,
           summary: candidateData.summary,
           projects: candidateData.projects,
-          onboarding_complete: hasRequiredFields, // Mark complete when required fields are saved
+          onboarding_complete: hasRequiredFields,
+          // Mark as pending_auth if user hasn't authenticated yet (no user_id)
+          pending_auth: !existingProfile?.user_id,
         }, { onConflict: 'email' });
-      
-        if (profileError) {
-          console.error('Profile update error:', profileError);
-          // Don't fail the request if profile update fails
+    
+      if (profileError) {
+        console.error('Profile update error:', profileError);
+        // Don't fail the request if profile update fails
+      } else {
+        // Send authentication email if this is a new profile or user hasn't authenticated
+        if (!existingProfile?.user_id) {
+          // Send auth email asynchronously (don't block response)
+          sendAuthEmail(candidateData.email, candidateData.name).catch(err => {
+            console.error('Failed to send auth email:', err);
+          });
         }
       }
     } catch (profileError) {

@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/ai-match",
       "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/daily-job-email",
+      "schedule": "0 12 * * *"
     }
   ]
 }
