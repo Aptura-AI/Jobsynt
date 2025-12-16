@@ -1,19 +1,32 @@
 import { redirect } from 'next/navigation';
-import { getServerSession } from '@/lib/auth';
+import { cookies } from 'next/headers';
+import { verifyToken } from '@/utils/auth';
 import AdminDashboardClient from './AdminDashboardClient';
 
+/**
+ * Admin Page
+ * 
+ * Reads custom JWT token (jobsynth_token) directly.
+ * Server components run in Node runtime, so verifyToken() is safe here.
+ */
 export default async function AdminPage() {
-  const session = await getServerSession();
+  // Get custom JWT token from cookies
+  const cookieStore = cookies();
+  const rawToken = cookieStore.get('jobsynth_token')?.value;
   
-  if (!session?.user?.email) {
+  if (!rawToken) {
     redirect('/login?next=/admin');
   }
 
-  // Check if user is admin using role from database (single source of truth)
-  const isAdmin = session.user.role === 'admin';
+  // Verify JWT signature (safe in Node runtime - server components)
+  const token = verifyToken(rawToken);
+  
+  if (!token || !token.email) {
+    redirect('/login?next=/admin');
+  }
 
-  if (!isAdmin) {
-    // Non-admin trying to access admin page - redirect to their dashboard
+  // Check if user is admin
+  if (token.role !== 'admin') {
     redirect('/dashboard');
   }
 
