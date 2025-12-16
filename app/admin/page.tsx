@@ -9,11 +9,11 @@ export default async function AdminPage() {
     redirect('/login?next=/admin');
   }
 
-  // Check if user is master admin
-  const isMasterAdmin = (session as any).admin_master === true || 
-    (session.user.email.toLowerCase() === 'info@jobsynt.com' && session.user.role === 'admin');
+  // Check if user is admin using role from database (single source of truth)
+  const isAdmin = session.user.role === 'admin';
 
-  if (!isMasterAdmin) {
+  if (!isAdmin) {
+    // Non-admin trying to access admin page - redirect to their dashboard
     redirect('/dashboard');
   }
 

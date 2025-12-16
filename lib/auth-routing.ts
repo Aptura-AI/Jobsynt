@@ -133,6 +133,16 @@ export async function getPostAuthRedirect(
 ): Promise<string> {
   const status = await getUserOnboardingStatus(email, userId);
 
+  // Enhanced logging for debugging
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[AUTH REDIRECT]', { 
+      email, 
+      role: status.role, 
+      onboarding_complete: status.onboardingComplete,
+      isFirstTime: status.isFirstTime 
+    });
+  }
+
   // Rule 1: Admin users ALWAYS go to /admin (no exceptions)
   if (status.role === 'admin') {
     if (process.env.NODE_ENV === 'development') {

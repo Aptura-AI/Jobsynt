@@ -19,9 +19,8 @@ import { getPostAuthRedirect, getUserOnboardingStatus, isAdminUser } from '@/lib
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Public routes that don't need auth
+  // Public routes that don't need auth (but admins will be redirected)
   const publicRoutes = [
-    '/',
     '/login',
     '/signup',
     '/company/register',
@@ -35,15 +34,42 @@ export async function middleware(request: NextRequest) {
     pathname === route || pathname.startsWith(route)
   );
 
-  if (isPublicRoute) {
-    return NextResponse.next();
-  }
-
-  // Get session token
+  // Get session token (needed for both root and protected routes)
   const token = await getToken({ 
     req: request, 
     secret: process.env.NEXTAUTH_SECRET 
   });
+
+  // Handle root path separately - redirect admins to /admin
+  if (pathname === '/') {
+    if (token) {
+      const email = token.email as string;
+      const userId = token.id as string;
+      
+      try {
+        const userStatus = await getUserOnboardingStatus(email, userId);
+        if (userStatus.role === 'admin') {
+          // Admin accessing root - redirect to /admin
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`🚫 Redirected admin from / to /admin: ${email}`);
+          }
+          return NextResponse.redirect(new URL('/admin', request.url));
+        }
+      } catch (error) {
+        // On error, allow access to root
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Middleware: Error checking admin status for /:', error);
+        }
+      }
+    }
+    
+    // Non-admin or no token - allow access to root
+    return NextResponse.next();
+  }
+
+  if (isPublicRoute) {
+    return NextResponse.next();
+  }
 
   // If no token and trying to access protected route, redirect to login
   if (!token) {
@@ -75,7 +101,7 @@ export async function middleware(request: NextRequest) {
     if (!isAdmin) {
       // Non-admin trying to access admin route - redirect to their correct dashboard
       if (process.env.NODE_ENV === 'development') {
-        console.log(`🚫 Blocked non-admin access to /admin: ${email} (role=${userRole})`);
+        console.log('[MIDDLEWARE BLOCK]', pathname, userRole, '→ redirecting to dashboard');
       }
       try {
         const redirectPath = await getPostAuthRedirect(email, userId);
