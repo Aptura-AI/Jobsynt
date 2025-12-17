@@ -50,6 +50,12 @@ export default function ProfileForm() {
   useEffect(() => {
     const loadProfile = async () => {
       try {
+        // Check URL params for email (from password reset flow)
+        const urlParams = new URLSearchParams(window.location.search);
+        const emailParam = urlParams.get('email');
+        const verified = urlParams.get('verified') === 'true';
+
+        // Try to load from profile API first
         const res = await fetch('/api/profile');
         if (res.ok) {
           const data = await res.json();
@@ -72,6 +78,11 @@ export default function ProfileForm() {
               projects: [], // Projects not stored in profile currently
             });
           }
+        }
+
+        // If verified=true in URL, show success message
+        if (verified) {
+          setMessage('Email verified! Please review and confirm your profile information.');
         }
       } catch (error) {
         console.error('Error loading profile:', error);
@@ -108,8 +119,12 @@ export default function ProfileForm() {
       if (!res.ok) {
         throw new Error(data.error || data.message || 'Unable to save profile');
       }
-      setMessage(data.message || 'Profile saved successfully!');
-      // Don't reset form - keep the data visible
+      setMessage(data.message || 'Profile saved successfully! Redirecting to dashboard...');
+      
+      // Redirect to dashboard after successful save
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1500);
     } catch (err) {
       setMessage((err as Error).message);
     } finally {

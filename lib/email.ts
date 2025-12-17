@@ -23,71 +23,72 @@ const FROM_ADDRESS = SENDER_NAME ? `${SENDER_NAME} <${FROM_EMAIL}>` : FROM_EMAIL
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.jobsynt.com';
 
 /**
- * Send authentication email to candidate
+ * Send password reset email to candidate (simplified flow)
+ * Creates user account if needed and sends password reset link
+ * Email is auto-verified when candidate clicks the link
  */
 export async function sendAuthEmail(email: string, name: string): Promise<boolean> {
   try {
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      console.warn('Email not configured - skipping auth email');
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn('Supabase not configured - cannot send password reset');
       return false;
     }
 
-    const authLink = `${SITE_URL}/auth/signup?email=${encodeURIComponent(email)}`;
-    
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #4F46E5; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-          .button { display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-          .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>Welcome to Jobsynt!</h1>
-          </div>
-          <div class="content">
-            <p>Hi ${name},</p>
-            <p>Your profile has been created on Jobsynt! To access your dashboard and view detailed job matches, please authenticate your account.</p>
-            <p>Click the button below to set up your password and activate your profile:</p>
-            <p style="text-align: center;">
-              <a href="${authLink}" class="button">Authenticate Your Profile</a>
-            </p>
-            <p>Or copy and paste this link into your browser:</p>
-            <p style="word-break: break-all; color: #4F46E5;">${authLink}</p>
-            <p>Once authenticated, you'll be able to:</p>
-            <ul>
-              <li>View detailed job descriptions</li>
-              <li>Access your personalized dashboard</li>
-              <li>Track your job applications</li>
-              <li>Receive daily job recommendations</li>
-            </ul>
-            <p>If you didn't create this account, you can safely ignore this email.</p>
-          </div>
-          <div class="footer">
-            <p>© ${new Date().getFullYear()} Jobsynt. All rights reserved.</p>
-            <p>This email was sent from info@jobsynt.com</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    await emailTransporter.sendMail({
-      from: FROM_ADDRESS,
-      to: email,
-      subject: 'Authenticate Your Jobsynt Profile',
-      html,
+    // Check if user exists using admin API
+    const { data: existingUser, error: getUserError } = await supabase.auth.admin.getUserByEmail(email);
+
+    // If user doesn't exist, create them first (with temporary password)
+    if (!existingUser?.user) {
+      // Generate a secure random password
+      const tempPassword = `Temp${Math.random().toString(36).slice(-12)}!${Date.now()}`;
+      
+      const { error: signupError } = await supabase.auth.admin.createUser({
+        email,
+        password: tempPassword,
+        email_confirm: true, // Auto-confirm email
+        user_metadata: {
+          role: 'candidate',
+          name: name,
+        },
+      });
+
+      if (signupError) {
+        console.error('Error creating user:', signupError);
+        return false;
+      }
+    }
+
+    // Send password reset email (works for both new and existing users)
+    // The reset link will auto-verify email and allow password setting
+    const { error: resetError } = await supabase.auth.admin.generateLink({
+      type: 'recovery',
+      email: email,
+      options: {
+        redirectTo: `${SITE_URL}/reset-password?email=${encodeURIComponent(email)}&type=recovery`,
+      },
     });
 
-    console.log(`✅ Auth email sent to ${email}`);
+    if (resetError) {
+      console.error('Error generating password reset link:', resetError);
+      // Fallback: use regular resetPasswordForEmail (requires anon key)
+      const supabaseAnon = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '');
+      const { error: fallbackError } = await supabaseAnon.auth.resetPasswordForEmail(email, {
+        redirectTo: `${SITE_URL}/reset-password?email=${encodeURIComponent(email)}&type=recovery`,
+      });
+      
+      if (fallbackError) {
+        console.error('Error sending password reset (fallback):', fallbackError);
+        return false;
+      }
+    }
+
+    console.log(`✅ Password reset email sent to ${email}`);
     return true;
   } catch (error) {
     console.error('Error sending auth email:', error);

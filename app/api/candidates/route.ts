@@ -209,6 +209,7 @@ export async function POST(req: NextRequest) {
           availability: candidateData.availability || 'immediate',
           summary: candidateData.summary,
           projects: candidateData.projects,
+          resume_url: candidateData.resume_url, // Copy resume URL from candidates table
           onboarding_complete: hasRequiredFields,
           // Mark as pending_auth if user hasn't authenticated yet (no user_id)
           pending_auth: !existingProfile?.user_id,

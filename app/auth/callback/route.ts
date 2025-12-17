@@ -38,6 +38,7 @@ export async function GET(req: Request) {
     // HARDENED: Ensure profile exists with correct defaults
     // - role defaults to 'candidate' (unless already admin in DB)
     // - onboarding_complete defaults to false
+    // - Link user_id to existing profile if pending_auth
     if (supabaseServiceKey) {
       await ensureProfileExists(
         userId,
@@ -45,6 +46,16 @@ export async function GET(req: Request) {
         user.user_metadata?.name || user.user_metadata?.full_name,
         user.user_metadata?.avatar_url || user.user_metadata?.picture
       );
+      
+      // If this is a password reset flow, ensure pending_auth is cleared
+      if (type === 'recovery') {
+        const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
+        await adminSupabase
+          .from('profiles')
+          .update({ pending_auth: false })
+          .eq('email', email)
+          .eq('user_id', userId);
+      }
     }
 
     // Get role from database (single source of truth)
