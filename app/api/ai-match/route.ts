@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get profile
+    // Get profile with all fields including resume_text
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('*')
@@ -27,27 +27,90 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // STEP 1: Use deterministic matching to get eligible jobs (score ≥70)
-    const matchingResult = await fetchAndMatchJobs(supabase, profile, {
-      minScore: 70,
-      limit: 100,
-      logFiltering: true,
-    });
+    // Ensure resume_text is populated (fetch from resumes table if missing in profile)
+    if (!profile.resume_text) {
+      const { data: resumeRow } = await supabase
+        .from('resumes')
+        .select('extracted_text')
+        .eq('profile_id', profile.id)
+        .order('uploaded_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (resumeRow?.extracted_text) {
+        // Update profile with resume_text for future use
+        await supabase
+          .from('profiles')
+          .update({ resume_text: resumeRow.extracted_text })
+          .eq('id', profile.id);
+        
+        profile.resume_text = resumeRow.extracted_text;
+      }
+    }
 
-    if (matchingResult.eligible.length === 0) {
+    // STEP 1: Fetch jobs from candidate_job_matches (deterministic matching already done)
+    // AI receives ONLY jobs from candidate_job_matches table
+    const { data: matches, error: matchesError } = await supabase
+      .from('candidate_job_matches')
+      .select(`
+        job_id,
+        match_score,
+        reasons,
+        scraped_jobs (
+          id,
+          title,
+          company,
+          location,
+          job_type,
+          description,
+          salary,
+          pay_rate_min,
+          pay_rate_max,
+          required_years_experience,
+          skills
+        )
+      `)
+      .eq('candidate_id', profile.id)
+      .order('match_score', { ascending: false })
+      .limit(50);
+
+    if (matchesError || !matches || matches.length === 0) {
       return NextResponse.json({
         matched: 0,
-        message: 'No eligible jobs found (all jobs filtered or scored below 70%)',
-        stats: matchingResult.stats,
+        message: 'No matched jobs found in candidate_job_matches. Run deterministic matching first.',
       });
     }
 
-    // STEP 2: Pass only eligible jobs to AI for final review
-    // AI must not re-score or filter - these jobs are already validated
+    // STEP 2: Pass matched jobs to AI for review and ranking
+    // AI must not re-score or filter - these jobs are already validated (score ≥70%)
     let matchedCount = 0;
     const aiProcessedJobs: Array<{ jobId: string; matchScore: number; aiConfirmed: boolean }> = [];
 
-    for (const eligibleJob of matchingResult.eligible.slice(0, 50)) { // Limit to 50 for AI processing
+    for (const match of matches) {
+      const job = match.scraped_jobs;
+      if (!job || !job.id) {
+        continue;
+      }
+
+      // Convert to EligibleJob format for AI review
+      const eligibleJob = {
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        job_type: job.job_type,
+        description: job.description,
+        salary: job.salary,
+        match_score: match.match_score,
+        score_breakdown: {
+          skills: 0, // Will be extracted from reasons if available
+          jobTitle: 0,
+          experience: 0,
+          degree: 0,
+          pay: 0,
+          total: match.match_score,
+        },
+      };
       // Skip jobs without ID (required for saving matched jobs)
       if (!eligibleJob.id) {
         console.warn(`Skipping job without ID: ${eligibleJob.title} at ${eligibleJob.company}`);
@@ -60,23 +123,20 @@ export async function POST(req: NextRequest) {
         const aiReview = await reviewJobWithAI(eligibleJob as import('@/lib/matching/aiJobReview').EligibleJob, profile);
 
         if (aiReview.confirmed) {
-          // Save matched job to database
-          const matchReasons = [
-            `Deterministic score: ${eligibleJob.match_score}%`,
-            `Skills: ${eligibleJob.score_breakdown.skills}pts`,
-            `Experience: ${eligibleJob.score_breakdown.experience}pts`,
-            `Pay: ${eligibleJob.score_breakdown.pay}pts`,
+          // Update candidate_job_matches with AI insights
+          const updatedReasons = [
+            ...(Array.isArray(match.reasons) ? match.reasons : []),
             ...(aiReview.advice || []).slice(0, 3), // Include top 3 AI advice items
           ];
 
           const { error: updateError } = await supabase
-            .from('scraped_jobs')
+            .from('candidate_job_matches')
             .update({
-              profile_id: profile.id,
-              fit_score: eligibleJob.match_score,
-              match_reasons: matchReasons,
+              reasons: updatedReasons,
+              updated_at: new Date().toISOString(),
             })
-            .eq('id', eligibleJob.id);
+            .eq('candidate_id', profile.id)
+            .eq('job_id', eligibleJob.id);
 
           if (!updateError) {
             matchedCount++;
@@ -102,16 +162,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       matched: matchedCount,
-      message: `Matched ${matchedCount} jobs (passed hard filters + scoring ≥70% + AI confirmation)`,
+      message: `Reviewed ${matchedCount} jobs from candidate_job_matches (AI confirmed matches)`,
       stats: {
-        ...matchingResult.stats,
+        totalFromMatches: matches.length,
         aiProcessed: aiProcessedJobs.length,
-      },
-      breakdown: {
-        totalJobs: matchingResult.stats.total,
-        hardFiltered: matchingResult.stats.filteredOut,
-        lowScore: matchingResult.stats.lowScoreRejected,
-        eligibleForAI: matchingResult.eligible.length,
         aiConfirmed: matchedCount,
       },
     });

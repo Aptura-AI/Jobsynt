@@ -159,7 +159,7 @@ export default function ProfileForm() {
           value={state.experience}
           onChange={(e) => setState({ ...state, experience: Number(e.target.value) })}
         />
-        <Input label="Visa status" value={state.visa} onChange={(e) => setState({ ...state, visa: e.target.value })} />
+        <Input label="Visa status" required value={state.visa} onChange={(e) => setState({ ...state, visa: e.target.value })} placeholder="e.g., US Citizen, H1B, etc." />
         <Input label="Rate expectation" value={state.rate} onChange={(e) => setState({ ...state, rate: e.target.value })} />
         <Input label="Availability" value={state.availability} onChange={(e) => setState({ ...state, availability: e.target.value })} />
       </div>

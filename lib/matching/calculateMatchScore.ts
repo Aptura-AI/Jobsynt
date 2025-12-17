@@ -10,8 +10,12 @@
 export type Job = {
   title?: string;
   skills?: string[] | null;
+  must_have_skills?: string | null; // Comma-separated string
+  good_to_have_skills?: string | null; // Comma-separated string
   required_years_experience?: number | null;
   required_degree?: string | null;
+  education_required?: string | null;
+  certification_required?: string | null;
   pay_rate_min?: number | null;
   pay_rate_max?: number | null;
   salary?: string | null;
@@ -21,6 +25,8 @@ export type Job = {
 
 export type CandidateProfile = {
   skills?: string[] | null;
+  resume_text?: string | null;
+  summary?: string | null;
   experience_years?: number | null;
   expected_pay_min?: number | null;
   rate_expectation?: string | null;
@@ -73,32 +79,97 @@ function extractPayRate(salary: string | null | undefined): number | null {
 
 /**
  * Score: Skill Match (Max 25 points)
- * ≥3 skills match → +25
- * 2 skills → +15
- * 1 skill → +5
+ * 
+ * Rules:
+ * - ≥80% match of must_have_skills → +25
+ * - Match against: candidate skills list, resume text, summary text
+ * - Good-to-have: 50% match → +10, 100% match → +20
  */
 function scoreSkills(job: Job, candidate: CandidateProfile): number {
-  const jobSkills = Array.isArray(job.skills) 
-    ? job.skills.map(s => String(s).toLowerCase().trim())
-    : [];
-  
+  let score = 0;
+
+  // Get must_have_skills (comma-separated string)
+  const mustHaveSkillsStr = job.must_have_skills || '';
+  const mustHaveSkills = mustHaveSkillsStr
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(s => s.length > 0);
+
+  // Get good_to_have_skills (comma-separated string)
+  const goodToHaveSkillsStr = job.good_to_have_skills || '';
+  const goodToHaveSkills = goodToHaveSkillsStr
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(s => s.length > 0);
+
+  // Build candidate skill sources: skills list, resume text, summary text
   const candidateSkills = Array.isArray(candidate.skills)
     ? candidate.skills.map(s => String(s).toLowerCase().trim())
     : [];
+  
+  const resumeText = (candidate.resume_text || '').toLowerCase();
+  const summaryText = (candidate.summary || '').toLowerCase();
+  const allCandidateText = `${resumeText} ${summaryText}`.toLowerCase();
 
-  if (jobSkills.length === 0 || candidateSkills.length === 0) {
-    return 0;
+  // Check must_have_skills match (≥80% required)
+  if (mustHaveSkills.length > 0) {
+    const matchedMustHave = mustHaveSkills.filter(requiredSkill => {
+      // Check against skills list
+      const inSkillsList = candidateSkills.some(cs => 
+        cs === requiredSkill || cs.includes(requiredSkill) || requiredSkill.includes(cs)
+      );
+      
+      // Check against resume/summary text
+      const inText = allCandidateText.includes(requiredSkill);
+      
+      return inSkillsList || inText;
+    });
+
+    const matchPercentage = (matchedMustHave.length / mustHaveSkills.length) * 100;
+    
+    if (matchPercentage >= 80) {
+      score += 25; // Full points for ≥80% match
+    } else {
+      // Partial credit for partial match
+      score += Math.floor((matchPercentage / 80) * 25);
+    }
+  } else {
+    // Fallback to old logic if must_have_skills not available
+    const jobSkills = Array.isArray(job.skills) 
+      ? job.skills.map(s => String(s).toLowerCase().trim())
+      : [];
+
+    if (jobSkills.length > 0 && candidateSkills.length > 0) {
+      const matches = jobSkills.filter(js => 
+        candidateSkills.some(cs => cs === js || cs.includes(js) || js.includes(cs))
+      ).length;
+
+      if (matches >= 3) score += 25;
+      else if (matches === 2) score += 15;
+      else if (matches === 1) score += 5;
+    }
   }
 
-  // Count matching skills
-  const matches = jobSkills.filter(js => 
-    candidateSkills.some(cs => cs === js || cs.includes(js) || js.includes(cs))
-  ).length;
+  // Check good_to_have_skills match
+  if (goodToHaveSkills.length > 0) {
+    const matchedGoodToHave = goodToHaveSkills.filter(optionalSkill => {
+      const inSkillsList = candidateSkills.some(cs => 
+        cs === optionalSkill || cs.includes(optionalSkill) || optionalSkill.includes(cs)
+      );
+      const inText = allCandidateText.includes(optionalSkill);
+      return inSkillsList || inText;
+    });
 
-  if (matches >= 3) return 25;
-  if (matches === 2) return 15;
-  if (matches === 1) return 5;
-  return 0;
+    const matchPercentage = (matchedGoodToHave.length / goodToHaveSkills.length) * 100;
+    
+    if (matchPercentage >= 100) {
+      score += 20; // 100% match → +20
+    } else if (matchPercentage >= 50) {
+      score += 10; // 50% match → +10
+    }
+  }
+
+  return Math.min(score, 25); // Cap at 25 points
 }
 
 /**
@@ -169,14 +240,19 @@ function scoreExperience(job: Job, candidate: CandidateProfile): number {
 
 /**
  * Score: Degree / Certification (Max 20 points, can be negative)
- * Required & present → +20
- * Preferred & present → +10
- * Required & missing → −10
+ * 
+ * Rules:
+ * - Only scored if job specifies education_required or certification_required
+ * - Required & present → +20
+ * - Required & missing → −10
  */
 function scoreDegree(job: Job, candidate: CandidateProfile): number {
-  const required = job.required_degree;
-  if (!required) {
-    return 0; // No degree requirement
+  // Check education_required first (new field)
+  const educationRequired = job.education_required || job.required_degree;
+  const certificationRequired = job.certification_required;
+
+  if (!educationRequired && !certificationRequired) {
+    return 0; // No requirement specified
   }
 
   const candidateDegrees = Array.isArray(candidate.degrees)
@@ -188,12 +264,23 @@ function scoreDegree(job: Job, candidate: CandidateProfile): number {
     : [];
 
   const allCredentials = [...candidateDegrees, ...candidateCerts];
-  const requiredLower = String(required).toLowerCase().trim();
+  let hasMatch = false;
 
-  // Check if candidate has the required degree/certification
-  const hasMatch = allCredentials.some(cred =>
-    cred === requiredLower || cred.includes(requiredLower) || requiredLower.includes(cred)
-  );
+  // Check education requirement
+  if (educationRequired) {
+    const requiredLower = String(educationRequired).toLowerCase().trim();
+    hasMatch = allCredentials.some(cred =>
+      cred === requiredLower || cred.includes(requiredLower) || requiredLower.includes(cred)
+    ) || (candidate.resume_text || '').toLowerCase().includes(requiredLower.toLowerCase());
+  }
+
+  // Check certification requirement
+  if (certificationRequired && !hasMatch) {
+    const requiredLower = String(certificationRequired).toLowerCase().trim();
+    hasMatch = candidateCerts.some(cert =>
+      cert === requiredLower || cert.includes(requiredLower) || requiredLower.includes(cert)
+    ) || (candidate.resume_text || '').toLowerCase().includes(requiredLower.toLowerCase());
+  }
 
   if (hasMatch) {
     return 20; // Required and present

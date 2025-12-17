@@ -8,33 +8,78 @@ const openai = new OpenAI({
   organization: process.env.OPENAI_ORG_ID || undefined,
 });
 
-const SYSTEM_PROMPT = `You are an AI Career Mentor for Jobsynt, a job marketplace for ERP, Cloud & IT professionals.
+const SYSTEM_PROMPT = `You are Jobsynt AI — a recruiter-led, AI-powered job agent acting on behalf of the candidate.
 
-Your role is to:
-1. Analyze resumes and provide feedback
-2. Match candidates with relevant job opportunities using weighted criteria
-3. Identify potential ghost jobs (fake listings)
-4. Provide career guidance and job search tips
-5. Generate relevant keywords for job searches
+You are not a chatbot and not a search engine.
+You are the candidate's dedicated job agent, entrusted to own their job discovery, prioritization, and guidance using already-curated, high-quality job data.
 
-**Job Matching Weights:**
-- 50% weight on last 2 jobs (30% to the longer one, 20% to the shorter)
-- 30% weight on previous work experience
-- 20% weight on education and certifications
+The platform has already done the heavy lifting:
+- Jobs are scraped, vetted, and pre-matched (70–80% fit)
+- Profiles, summaries, and resumes are structured and available
+- Hard constraints (location, visa, job type, pay, experience) are enforced before you see jobs
 
-Always respond in JSON format with this structure:
+Your responsibility starts after that.
+
+Your mission is to:
+- Take charge
+- Rank jobs intelligently
+- Keep the candidate focused on the best opportunities
+- Act like a senior recruiter who understands the candidate deeply
+
+CORE RESPONSIBILITIES (NON-NEGOTIABLE)
+
+1️⃣ Candidate Ownership
+- Fully understand the candidate's profile fields, resume content, and summary
+- Remember what roles fit them best
+- Continuously refine job ordering and recommendations
+- Do NOT summarize the candidate's profile unless explicitly asked
+
+2️⃣ Job Ranking & Curation (PRIMARY FUNCTION)
+- Rank jobs with recruiter-level judgment, prioritizing:
+  * Role alignment with resume + summary
+  * Depth of skill overlap (not just keywords)
+  * Career progression logic
+  * Rate / seniority fit
+  * Stability and realism of the role
+- Always present best-aligned jobs first with clear, confident reasoning
+- Actively de-prioritize weak or stale roles
+
+3️⃣ Job Communication Rules
+- Always assume jobs are real and already vetted
+- Never tell candidates to search external job boards
+- Never suggest jobs outside the platform
+- If no strong matches exist, reassure and explain that matching is actively running
+
+4️⃣ Career Guidance (SECONDARY, CONTROLLED)
+- Be concise by default, expand only if asked
+- Focus on positioning for jobs already surfaced
+- Small, high-impact improvements
+- Interview readiness for current matches
+
+5️⃣ Authority & Tone
+- Confident, calm, decisive, recruiter-like
+- Think: "I've reviewed your profile and the jobs available. Here's what you should focus on."
+- You own the process
+
+STRICT LIMITATIONS (VERY IMPORTANT)
+You must NEVER:
+- Invent jobs
+- Modify job facts
+- Recommend external job boards
+- Repeatedly summarize the candidate profile
+- Over-explain unless asked
+- Ask the candidate to "search" for jobs
+
+OUTPUT FORMAT:
+Always return JSON:
 {
-  "summary": "Brief analysis summary",
-  "strengths": ["list of candidate strengths"],
-  "improvements": ["areas for improvement"],
-  "matchedJobs": [{"title": "", "company": "", "fitScore": 0-100, "reasons": []}],
-  "ghostJobWarnings": ["any suspicious job indicators"],
-  "keywords": ["relevant search keywords"],
-  "careerTips": ["actionable advice"],
-  "nextSteps": ["recommended actions"]
+  "response": "Short recruiter-style guidance",
+  "jobs": [{"id": "...", "priority": "High|Medium|Low", "whyItFits": [...], "recommendedAction": "..."}],
+  "guidance": {"summary": "...", "nextSteps": [...]},
+  "explanation": "Natural language explanation (short, confident)"
 }
 
-Be helpful, encouraging, and specific in your feedback.`;
+You are not assisting the candidate. You are representing them. Act accordingly.`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,8 +88,9 @@ export async function POST(req: NextRequest) {
 
     let profileCtx = '';
     let finalResumeText = resumeText;
+    let matchedJobsContext = '';
 
-    // Fetch profile + resume from Supabase to give AI full context
+    // Fetch profile + resume + matched jobs from Supabase to give AI full context
     if (session?.user?.email) {
       try {
         const { data: profile } = await supabase
@@ -54,31 +100,82 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
 
         if (profile) {
-          profileCtx = `Profile:
+          // Build comprehensive profile context with all details
+          profileCtx = `Candidate Profile (Complete):
 Name: ${profile.name || ''}
+Email: ${profile.email || ''}
 Title: ${profile.title || ''}
 Location: ${profile.location || ''}
+Phone: ${profile.phone || ''}
 Experience: ${profile.experience_years || 0} years
-Skills: ${(profile.skills || []).join(', ')}
-Contract Type: ${(profile.contract_type || []).join(', ')}
-Work Mode: ${(profile.work_mode || []).join(', ')}
-Availability: ${profile.availability || ''}
-Visa: ${profile.visa_status || ''}
-Rate Expectation: ${profile.rate_expectation || ''}`;
+Skills: ${(profile.skills || []).join(', ') || 'None'}
+Preferred Job Types: ${(profile.preferred_job_types || []).join(', ') || 'All'}
+Contract Type: ${(profile.contract_type || []).join(', ') || 'Not specified'}
+Work Mode: ${(profile.work_mode || []).join(', ') || 'Not specified'}
+Availability: ${profile.availability || 'Not specified'}
+Visa Status: ${profile.visa_status || ''}
+Rate Expectation: ${profile.rate_expectation || 'Not specified'}
+Summary: ${profile.summary || 'No summary provided'}`;
 
-          const { data: resumeRow } = await supabase
-            .from('resumes')
-            .select('extracted_text')
-            .eq('profile_id', profile.id)
-            .order('uploaded_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (resumeRow?.extracted_text && !finalResumeText) {
-            finalResumeText = resumeRow.extracted_text;
+          // Get resume text from profiles.resume_text (preferred) or resumes table (fallback)
+          if (profile.resume_text && !finalResumeText) {
+            finalResumeText = profile.resume_text;
+          } else {
+            // Fallback to resumes table if resume_text not in profile
+            const { data: resumeRow } = await supabase
+              .from('resumes')
+              .select('extracted_text')
+              .eq('profile_id', profile.id)
+              .order('uploaded_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (resumeRow?.extracted_text && !finalResumeText) {
+              finalResumeText = resumeRow.extracted_text;
+            }
+          }
+
+          // Add resume text to profile context if available
+          if (finalResumeText) {
+            profileCtx += `\n\nResume Text:\n${finalResumeText.substring(0, 2000)}${finalResumeText.length > 2000 ? '...' : ''}`;
+          }
+
+          // Fetch matched jobs for context (AI agent needs to know what jobs are available)
+          // Only fetch active jobs from last 30 days
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const { data: matches } = await supabase
+            .from('candidate_job_matches')
+            .select(`
+              match_score,
+              reasons,
+              scraped_jobs (
+                id,
+                title,
+                company,
+                location,
+                job_type,
+                description,
+                salary,
+                posted_date,
+                is_active
+              )
+            `)
+            .eq('candidate_id', profile.id)
+            .eq('job_status', 'active') // Only active jobs
+            .gte('scraped_jobs.posted_date', thirtyDaysAgo.toISOString().split('T')[0])
+            .eq('scraped_jobs.is_active', true) // Only active jobs
+            .order('match_score', { ascending: false })
+            .limit(10);
+
+          if (matches && matches.length > 0) {
+            matchedJobsContext = `\n\nMatched Jobs Available (${matches.length} total, showing top 10):\n${matches.map((match: any, idx: number) => {
+              const job = match.scraped_jobs;
+              return `${idx + 1}. ${job.title} at ${job.company} (${job.location}) - ${match.match_score}% match`;
+            }).join('\n')}`;
           }
         }
       } catch (dbError) {
-        console.error('Error fetching profile/resume from DB:', dbError);
+        console.error('Error fetching profile/resume/jobs from DB:', dbError);
       }
     }
 
@@ -89,9 +186,18 @@ Rate Expectation: ${profile.rate_expectation || ''}`;
       }, { status: 400 });
     }
 
-    const baseUserMessage = finalResumeText
-      ? `Analyze this resume, use the provided profile context, and respond in JSON.\n\n${profileCtx}\n\nResume:\n${finalResumeText}`
-      : `${profileCtx}\n\nQuestion: ${userMessage}\n\nRespond in JSON as per the schema.`;
+    // Only include profile context if user explicitly asks for profile analysis
+    const userWantsProfileAnalysis = userMessage && (
+      userMessage.toLowerCase().includes('profile') ||
+      userMessage.toLowerCase().includes('summarize') ||
+      userMessage.toLowerCase().includes('analyze my profile')
+    );
+
+    const baseUserMessage = finalResumeText && userWantsProfileAnalysis
+      ? `User asked: ${userMessage}\n\nAnalyze this resume and respond in JSON.\n\n${profileCtx}${matchedJobsContext}\n\nResume:\n${finalResumeText}`
+      : userMessage
+        ? `${userMessage}\n\n${profileCtx ? `Candidate Profile (do NOT summarize unless asked):\n${profileCtx}` : ''}${matchedJobsContext}\n\nAs the candidate's recruiter agent, provide guidance based on their profile and available matched jobs. Respond in JSON format. Keep response SHORT and recruiter-like unless user asks for details.`
+        : `User uploaded resume but no question. Wait for user question.`;
 
     const chatHistory = Array.isArray(messages) ? messages : [];
     const openAIMessages = [
@@ -117,10 +223,23 @@ Rate Expectation: ${profile.rate_expectation || ''}`;
       result = JSON.parse(raw);
     } catch (parseError) {
       console.error('JSON parse error:', parseError);
-      result = { 
-        summary: raw,
-        error: 'AI response was not valid JSON',
-      };
+      // If JSON parsing fails, try to extract JSON from the response
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          result = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          result = { 
+            response: raw,
+            error: 'AI response was not valid JSON',
+          };
+        }
+      } else {
+        result = { 
+          response: raw,
+          error: 'AI response was not valid JSON',
+        };
+      }
     }
 
     if (!result || Object.keys(result).length === 0) {
@@ -129,7 +248,14 @@ Rate Expectation: ${profile.rate_expectation || ''}`;
       }, { status: 500 });
     }
 
-    // No automatic scraping - jobs are manually uploaded
+    // Ensure response format matches new structure
+    // If old format, transform to new format
+    if (result.response && !result.guidance) {
+      result.guidance = {
+        summary: result.response,
+        nextSteps: result.careerAdvice || [],
+      };
+    }
 
     return NextResponse.json(result);
   } catch (error: any) {

@@ -11,7 +11,7 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-// OpenAI Prompt ID for job matching
+// OpenAI Prompt ID for job matching (updated to version 3)
 const PROMPT_ID = 'pmpt_693a19adbe988194a90c57840fb224b80cd9872f8d8138ea';
 
 export type EligibleJob = {
@@ -34,12 +34,25 @@ export type EligibleJob = {
 };
 
 export type CandidateProfile = {
+  id?: string;
+  name?: string | null;
+  email?: string | null;
+  title?: string | null;
+  location?: string | null;
+  phone?: string | null;
   skills?: string[] | null;
   experience_years?: number | null;
-  location?: string | null;
+  preferred_job_types?: string[] | null;
   rate_expectation?: string | null;
+  expected_pay_min?: number | null;
   work_mode?: string[] | null;
   contract_type?: string[] | null;
+  visa_status?: string | null;
+  availability?: string | null;
+  summary?: string | null;
+  resume_text?: string | null;
+  degrees?: string[] | null;
+  certifications?: string[] | null;
 };
 
 export type AIReviewResult = {
@@ -79,20 +92,30 @@ export async function reviewJobWithAI(
       const response = await openai.responses.create({
         prompt: {
           id: PROMPT_ID,
-          version: '2',
+          version: '3',
         },
         input: {
           candidate: {
+            name: candidate.name,
+            title: candidate.title,
             skills: candidate.skills || [],
             experience: candidate.experience_years || 0,
             location: candidate.location,
+            preferredJobTypes: candidate.preferred_job_types || [],
             rateExpectation: candidate.rate_expectation,
+            expectedPayMin: candidate.expected_pay_min,
             workMode: candidate.work_mode || [],
             contractType: candidate.contract_type || [],
+            visaStatus: candidate.visa_status,
+            availability: candidate.availability,
+            summary: candidate.summary,
+            resumeText: candidate.resume_text ? candidate.resume_text.substring(0, 2000) : undefined,
+            degrees: candidate.degrees || [],
+            certifications: candidate.certifications || [],
           },
           job: jobData,
           // CRITICAL: Tell AI these jobs are pre-filtered and scored
-          note: 'This job has already passed hard filters (location, job type) and scored ≥70% on deterministic matching. Do not re-score. Provide application advice and insights only.',
+          note: 'This job has already passed hard filters (location, job type, experience, rate) and scored ≥70% on deterministic matching. Do not re-score. Provide application advice and insights only.',
         } as any,
       });
 
@@ -122,11 +145,20 @@ export async function reviewJobWithAI(
             role: 'user',
             content: `Review this pre-filtered job match:
 
-Candidate:
-- Skills: ${(candidate.skills || []).join(', ') || 'None'}
-- Experience: ${candidate.experience_years || 0} years
+Candidate Profile (Complete):
+- Name: ${candidate.name || 'Not provided'}
+- Title: ${candidate.title || 'Not provided'}
 - Location: ${candidate.location || 'Any'}
+- Experience: ${candidate.experience_years || 0} years
+- Skills: ${(candidate.skills || []).join(', ') || 'None'}
+- Preferred Job Types: ${(candidate.preferred_job_types || []).join(', ') || 'All'}
+- Contract Type: ${(candidate.contract_type || []).join(', ') || 'Not specified'}
+- Work Mode: ${(candidate.work_mode || []).join(', ') || 'Not specified'}
+- Visa Status: ${candidate.visa_status || 'Not specified'}
 - Rate Expectation: ${candidate.rate_expectation || 'Not specified'}
+- Availability: ${candidate.availability || 'Not specified'}
+- Summary: ${candidate.summary || 'No summary provided'}
+${candidate.resume_text ? `- Resume Text: ${candidate.resume_text.substring(0, 1000)}${candidate.resume_text.length > 1000 ? '...' : ''}` : ''}
 
 Job:
 - Title: ${job.title}

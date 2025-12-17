@@ -14,6 +14,10 @@ export type Job = {
   location: string;
   job_type?: string | null;
   is_remote?: boolean | null;
+  location_type?: 'Onsite' | 'Hybrid' | 'Remote' | null;
+  required_years_experience?: number | null;
+  pay_rate_min?: number | null;
+  pay_rate_max?: number | null;
   [key: string]: any;
 };
 
@@ -22,6 +26,9 @@ export type CandidateProfile = {
   location?: string | null;
   preferred_job_types?: string[] | null;
   work_mode?: string[] | null;
+  experience_years?: number | null;
+  expected_pay_min?: number | null;
+  rate_expectation?: string | null;
   [key: string]: any;
 };
 
@@ -31,10 +38,19 @@ export type FilterResult = {
 };
 
 /**
- * Hard filter: Location must match OR job is remote
+ * Hard filter: Location must match OR job is remote/hybrid
+ * 
+ * Rules:
+ * - Remote → always allowed
+ * - Hybrid/Onsite → must match candidate city
  */
 function filterByLocation(job: Job, candidate: CandidateProfile): FilterResult {
-  // If job is remote, always pass
+  // Check location_type first (new field)
+  if (job.location_type === 'Remote') {
+    return { passed: true };
+  }
+
+  // Fallback to is_remote flag
   if (job.is_remote === true) {
     return { passed: true };
   }
@@ -44,38 +60,36 @@ function filterByLocation(job: Job, candidate: CandidateProfile): FilterResult {
     return { passed: true };
   }
 
-  // Normalize locations for comparison
+  // For Hybrid/Onsite jobs, location must match
   const jobLocation = (job.location || '').toLowerCase().trim();
   const candidateLocation = (candidate.location || '').toLowerCase().trim();
 
-  // Extract city/state from location strings
-  // Handle formats like "New York, NY", "San Francisco, CA", "Remote", etc.
+  // Extract city from location strings (handle "New York, NY" format)
   if (jobLocation.includes('remote') || jobLocation.includes('anywhere')) {
     return { passed: true };
   }
 
-  // Simple matching: check if candidate location appears in job location
-  // This handles cases like "New York" matching "New York, NY"
-  const candidateParts = candidateLocation.split(',').map(p => p.trim());
-  const jobParts = jobLocation.split(',').map(p => p.trim());
+  // Extract city name (before comma) for matching
+  const candidateCity = candidateLocation.split(',')[0].trim();
+  const jobCity = jobLocation.split(',')[0].trim();
 
-  // Check if any candidate location part matches any job location part
-  const hasMatch = candidateParts.some(cPart => 
-    jobParts.some(jPart => jPart.includes(cPart) || cPart.includes(jPart))
-  );
-
-  if (hasMatch) {
+  // Check if candidate city matches job city
+  if (jobCity.includes(candidateCity) || candidateCity.includes(jobCity)) {
     return { passed: true };
   }
 
   return {
     passed: false,
-    reason: `Location mismatch: job is in "${job.location}" but candidate prefers "${candidate.location}" and job is not remote`,
+    reason: `Location mismatch: job is ${job.location_type || 'Onsite'} in "${job.location}" but candidate is in "${candidate.location}"`,
   };
 }
 
 /**
  * Hard filter: Job type must exist in candidate's selected job types
+ * 
+ * Rules:
+ * - Treat 1099 and C2C as equivalent
+ * - Full-time only if explicitly selected
  */
 function filterByJobType(job: Job, candidate: CandidateProfile): FilterResult {
   // If candidate has no job type preferences, pass all jobs
@@ -92,10 +106,21 @@ function filterByJobType(job: Job, candidate: CandidateProfile): FilterResult {
   }
 
   // Normalize job types for comparison
-  const jobType = (job.job_type || '').toLowerCase().trim();
+  let jobType = (job.job_type || '').toLowerCase().trim();
   const preferredTypes = (candidate.preferred_job_types || []).map(t => 
     String(t).toLowerCase().trim()
   );
+
+  // Treat 1099 and C2C as equivalent
+  if (jobType === '1099') {
+    jobType = 'c2c';
+  }
+  if (jobType === 'c2c') {
+    // Check if candidate has either 1099 or c2c
+    if (preferredTypes.includes('1099') || preferredTypes.includes('c2c')) {
+      return { passed: true };
+    }
+  }
 
   if (preferredTypes.includes(jobType)) {
     return { passed: true };
@@ -108,8 +133,44 @@ function filterByJobType(job: Job, candidate: CandidateProfile): FilterResult {
 }
 
 /**
+ * Hard filter: Experience + Rate
+ * Candidate years ≥ job required years
+ * Job rate ≥ candidate expectation
+ */
+function filterByExperienceAndRate(job: Job, candidate: CandidateProfile): FilterResult {
+  // Check experience requirement
+  if (job.required_years_experience !== null && job.required_years_experience !== undefined) {
+    const candidateExp = candidate.experience_years || 0;
+    if (candidateExp < job.required_years_experience) {
+      return {
+        passed: false,
+        reason: `Experience mismatch: job requires ${job.required_years_experience} years but candidate has ${candidateExp} years`,
+      };
+    }
+  }
+
+  // Check pay rate
+  const jobPayRate = job.pay_rate_min || job.pay_rate_max;
+  if (jobPayRate !== null && jobPayRate !== undefined) {
+    const candidateMinPay = candidate.expected_pay_min;
+    if (candidateMinPay !== null && candidateMinPay !== undefined) {
+      if (jobPayRate < candidateMinPay) {
+        return {
+          passed: false,
+          reason: `Pay rate mismatch: job pays $${jobPayRate}/hr but candidate expects $${candidateMinPay}/hr`,
+        };
+      }
+    }
+  }
+
+  return { passed: true };
+}
+
+/**
  * Apply all hard filters to a job
  * Returns null if job fails any filter, otherwise returns the job
+ * 
+ * ALL filters must pass for a job to be eligible.
  */
 export function hardFilterJobs(
   jobs: Job[],
@@ -130,6 +191,13 @@ export function hardFilterJobs(
     const jobTypeResult = filterByJobType(job, candidate);
     if (!jobTypeResult.passed) {
       filtered.push({ job, reason: jobTypeResult.reason || 'Job type filter failed' });
+      continue;
+    }
+
+    // Apply experience + rate filter
+    const experienceRateResult = filterByExperienceAndRate(job, candidate);
+    if (!experienceRateResult.passed) {
+      filtered.push({ job, reason: experienceRateResult.reason || 'Experience/Rate filter failed' });
       continue;
     }
 

@@ -50,13 +50,42 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
 
   const fetchRecommendedJobs = async () => {
     try {
-      const res = await fetch('/api/matched-jobs');
+      const res = await fetch('/api/match-jobs');
       if (res.ok) {
         const data = await res.json();
         setRecommendedJobs(data.jobs || []);
       }
     } catch (error) {
       console.error('Error fetching recommended jobs:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFindNewJobs = async () => {
+    setLoading(true);
+    try {
+      // Trigger matching
+      const matchRes = await fetch('/api/match-jobs', {
+        method: 'POST',
+      });
+      
+      if (matchRes.ok) {
+        const matchData = await matchRes.json();
+        // Refresh the job list
+        await fetchRecommendedJobs();
+        
+        if (matchData.matchesFound === 0) {
+          alert('No new matching jobs found. Try updating your profile or check back later.');
+        } else {
+          alert(`Found ${matchData.matchesFound} new matching jobs!`);
+        }
+      } else {
+        alert('Error finding new jobs. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error finding new jobs:', error);
+      alert('Error finding new jobs. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -176,11 +205,19 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
       {/* Recommended Jobs */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <h2 className="text-lg sm:text-xl font-bold text-ink">Matched Jobs (70%+ Match)</h2>
-          {/* Match threshold aligned with backend: /api/matched-jobs uses fit_score >= 70 */}
-          <Link href="/jobs" className="text-sm font-semibold text-primary hover:underline">
-            View All Jobs →
-          </Link>
+          <h2 className="text-lg sm:text-xl font-bold text-ink">Your Matched Jobs</h2>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleFindNewJobs}
+              disabled={loading}
+              className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
+            >
+              🔄 Find New Matching Jobs
+            </button>
+            <Link href="/jobs" className="text-sm font-semibold text-primary hover:underline">
+              View All Jobs →
+            </Link>
+          </div>
         </div>
         {recommendedJobs.length > 0 ? (
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
@@ -189,7 +226,10 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
                 <div className="mb-2 flex items-start justify-between">
                   <div>
                     <h3 className="font-semibold text-ink">{job.title}</h3>
-                    <p className="text-sm text-muted">{job.company} • {job.location}</p>
+                    <p className="text-sm text-muted">{job.company} • {job.location || 'Location not specified'}</p>
+                    {job.job_type && (
+                      <p className="text-xs text-muted mt-1">Type: {job.job_type}</p>
+                    )}
                   </div>
                   {job.fit_score && (
                     <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
@@ -197,7 +237,11 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
                     </span>
                   )}
                 </div>
-                {job.salary && <p className="text-sm font-semibold text-ink">{job.salary}</p>}
+                {(job.salary || job.pay_rate_min) && (
+                  <p className="text-sm font-semibold text-ink">
+                    {job.salary || `$${job.pay_rate_min}${job.pay_rate_max ? ` - $${job.pay_rate_max}` : ''}/hr`}
+                  </p>
+                )}
                 {job.description && <p className="mt-2 text-xs text-muted line-clamp-2">{job.description}</p>}
                 {job.match_reasons && job.match_reasons.length > 0 && (
                   <div className="mt-2">
@@ -209,13 +253,13 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
                     </ul>
                   </div>
                 )}
-                <div className="mt-3 flex items-center justify-between">
+                <div className="mt-3 flex items-center justify-between gap-2">
                   {job.url && (
                     <a
                       href={job.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm font-semibold text-primary hover:underline"
+                      className="text-sm font-semibold text-primary hover:underline flex-1"
                     >
                       View Job →
                     </a>

@@ -72,26 +72,44 @@ export async function GET(req: NextRequest) {
     // Process each profile
     for (const profile of profiles) {
       try {
-        // Get matched jobs for this profile
-        // Jobs are matched when profile_id is set and fit_score >= 70 (new matching system threshold)
-        // Filter out jobs older than 30 days
+        // Get matched jobs from candidate_job_matches (single source of truth)
+        // Only fetch active jobs from last 30 days
         const thirtyDaysAgo = get30DaysAgoDate();
-        let jobsQuery = supabase
-          .from('scraped_jobs')
-          .select('id, title, company, location, job_type, description, url')
-          .eq('profile_id', profile.id)
-          .gte('fit_score', 70) // Updated to match new matching system threshold
-          .eq('is_active', true)
-          .gte('posted_date', thirtyDaysAgo); // Only jobs from last 30 days
+        const { data: matches, error: jobsError } = await supabase
+          .from('candidate_job_matches')
+          .select(`
+            match_score,
+            reasons,
+            scraped_jobs (
+              id,
+              title,
+              company,
+              location,
+              job_type,
+              description,
+              url,
+              posted_date
+            )
+          `)
+          .eq('candidate_id', profile.id)
+          .eq('job_status', 'active') // Only active jobs
+          .gte('scraped_jobs.posted_date', thirtyDaysAgo) // Only jobs from last 30 days
+          .eq('scraped_jobs.is_active', true) // Only active jobs
+          .order('match_score', { ascending: false })
+          .limit(5); // Limit to top 5 jobs per email (as per requirements)
 
-        // Filter by preferred_job_types if specified
-        if (Array.isArray(profile.preferred_job_types) && profile.preferred_job_types.length > 0) {
-          jobsQuery = jobsQuery.in('job_type', profile.preferred_job_types);
-        }
-
-        const { data: jobs, error: jobsError } = await jobsQuery
-          .order('fit_score', { ascending: false })
-          .limit(10); // Limit to top 10 jobs per email
+        // Transform to job format
+        const jobs = (matches || []).map((match: any) => ({
+          id: match.scraped_jobs.id,
+          title: match.scraped_jobs.title,
+          company: match.scraped_jobs.company,
+          location: match.scraped_jobs.location,
+          job_type: match.scraped_jobs.job_type,
+          description: match.scraped_jobs.description,
+          url: match.scraped_jobs.url,
+          fit_score: match.match_score,
+          match_reasons: match.reasons || [],
+        }));
 
         if (jobsError) {
           console.error(`Error fetching jobs for ${profile.email}:`, jobsError);

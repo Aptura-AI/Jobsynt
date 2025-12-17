@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
       work_mode: Array.isArray(body.work_mode) ? body.work_mode : [],
       preferred_job_types, // JSONB array of job types
       preferred_job_type: String(body.preferred_job_type || 'remote').trim(), // Keep for backward compatibility
-      visa_status: String(body.visa_status || '').trim() || null,
+      visa_status: String(body.visa_status || '').trim() || '', // Required field (defaults to empty string)
       rate_expectation: String(body.rate_expectation || '').trim() || null,
       availability: String(body.availability || 'immediate').trim(),
       summary: String(body.summary || '').trim() || null,
@@ -130,6 +130,24 @@ export async function POST(req: NextRequest) {
         }, { status: 500 });
       }
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Trigger immediate job matching after profile save
+    try {
+      const matchRes = await fetch(`${req.nextUrl.origin}/api/match-jobs`, {
+        method: 'POST',
+        headers: {
+          'Cookie': req.headers.get('cookie') || '',
+        },
+      });
+      
+      if (matchRes.ok) {
+        const matchData = await matchRes.json();
+        console.log(`[Profile Save] Triggered matching: ${matchData.matchesFound} jobs found`);
+      }
+    } catch (matchError) {
+      // Don't fail profile save if matching fails
+      console.error('Error triggering job matching:', matchError);
     }
 
     return NextResponse.json({ profile, message: 'Profile saved successfully' });
@@ -183,7 +201,7 @@ export async function PUT(req: NextRequest) {
         work_mode: body.work_mode,
         preferred_job_types, // JSONB array
         preferred_job_type: body.preferred_job_type,
-        visa_status: body.visa_status,
+        visa_status: body.visa_status || '', // Required field
         rate_expectation: body.rate_expectation,
         availability: body.availability,
         summary: body.summary,
@@ -195,6 +213,24 @@ export async function PUT(req: NextRequest) {
     if (error) {
       console.error('Error updating profile:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Trigger immediate job matching after profile update
+    try {
+      const matchRes = await fetch(`${req.nextUrl.origin}/api/match-jobs`, {
+        method: 'POST',
+        headers: {
+          'Cookie': req.headers.get('cookie') || '',
+        },
+      });
+      
+      if (matchRes.ok) {
+        const matchData = await matchRes.json();
+        console.log(`[Profile Update] Triggered matching: ${matchData.matchesFound} jobs found`);
+      }
+    } catch (matchError) {
+      // Don't fail profile update if matching fails
+      console.error('Error triggering job matching:', matchError);
     }
 
     return NextResponse.json({ profile, message: 'Profile updated successfully' });
