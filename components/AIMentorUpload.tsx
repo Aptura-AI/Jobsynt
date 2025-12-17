@@ -105,25 +105,25 @@ export default function AIMentorUpload() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-6 shadow-lg">
-      <h2 className="mb-4 text-2xl font-bold text-ink">AI Career Mentor</h2>
+    <div className="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-4 sm:p-6 shadow-lg">
+      <h2 className="mb-4 text-xl sm:text-2xl font-bold text-ink">AI Career Mentor</h2>
 
       {/* Chat Messages */}
       {messages.length > 0 && (
-        <div className="mb-4 max-h-96 space-y-3 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div className="mb-4 max-h-64 sm:max-h-96 space-y-3 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 sm:p-4">
           {messages.map((msg, idx) => (
             <div
               key={idx}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                className={`max-w-[85%] sm:max-w-[80%] rounded-lg px-3 sm:px-4 py-2 ${
                   msg.role === 'user'
                     ? 'bg-primary text-white'
                     : 'bg-white text-ink border border-slate-200'
                 }`}
               >
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                <p className="text-xs sm:text-sm whitespace-pre-wrap break-words">{msg.content}</p>
               </div>
             </div>
           ))}

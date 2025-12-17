@@ -130,17 +130,17 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
   };
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-ink">Complete Your Profile</h1>
-        <p className="mt-2 text-muted">
+    <div className="mx-auto max-w-2xl px-4 sm:px-6">
+      <div className="mb-6 sm:mb-8 text-center">
+        <h1 className="text-2xl sm:text-3xl font-bold text-ink">Complete Your Profile</h1>
+        <p className="mt-2 text-sm sm:text-base text-muted">
           Help us match you with the best opportunities by filling out your profile.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 card p-6">
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 card p-4 sm:p-6">
         {/* Basic Info */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
           <Input
             label="Full Name"
             required
@@ -205,7 +205,7 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
         </div>
 
         {/* Job Preferences - Multi-select */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
           <MultiSelect
             label="Contract Type"
             options={contractTypeOptions}

@@ -129,8 +129,8 @@ export default function ProfileForm() {
   }
 
   return (
-    <form className="card p-6" onSubmit={handleSubmit}>
-      <div className="grid gap-4 md:grid-cols-2">
+    <form className="card p-4 sm:p-6" onSubmit={handleSubmit}>
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
         <Input label="Name" required value={state.name} onChange={(e) => setState({ ...state, name: e.target.value })} />
         <Input label="Email" type="email" required value={state.email} disabled className="bg-gray-50" />
         <Input label="Phone Number" type="tel" value={state.phone} onChange={(e) => setState({ ...state, phone: e.target.value })} placeholder="+1 (555) 123-4567" />
@@ -157,7 +157,7 @@ export default function ProfileForm() {
         <label className="mb-2 block text-sm font-medium text-ink">
           Preferred Job Types <span className="text-muted text-xs">(Select one or more, leave empty to see all jobs)</span>
         </label>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {ALLOWED_JOB_TYPES.map((jobType) => (
             <label key={jobType} className="flex items-center space-x-2 cursor-pointer">
               <input
@@ -207,11 +207,11 @@ export default function ProfileForm() {
         />
       </div>
 
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <Button type="submit" loading={loading}>
+      <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <Button type="submit" loading={loading} className="w-full sm:w-auto">
           Save Profile
         </Button>
-        {message && <span className="text-sm text-muted">{message}</span>}
+        {message && <span className="text-sm text-muted text-center sm:text-left">{message}</span>}
       </div>
     </form>
   );

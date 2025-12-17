@@ -78,14 +78,14 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 space-y-8">
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-10 space-y-6 sm:space-y-8">
       {/* Welcome Section */}
       <div className="mb-2 space-y-2">
-        <p className="text-sm font-semibold uppercase tracking-[0.1em] text-primary">
+        <p className="text-xs sm:text-sm font-semibold uppercase tracking-[0.1em] text-primary">
           {isAdmin ? 'Admin Dashboard' : 'Your Dashboard'}
         </p>
-        <h1 className="text-3xl font-bold text-ink">Welcome back, {profile.name}!</h1>
-        <p className="text-muted">
+        <h1 className="text-2xl sm:text-3xl font-bold text-ink">Welcome back, {profile.name}!</h1>
+        <p className="text-sm sm:text-base text-muted">
           {isAdmin
             ? 'Manage candidates, review applications, and oversee job listings.'
             : `Track your job applications, view matched opportunities, and manage your profile.`}
@@ -93,22 +93,22 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="card p-4">
-          <p className="text-sm text-muted">Profile Status</p>
-          <p className="text-2xl font-bold text-green-600">Complete</p>
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-4">
+        <div className="card p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-muted">Profile Status</p>
+          <p className="text-xl sm:text-2xl font-bold text-green-600">Complete</p>
         </div>
-        <div className="card p-4">
-          <p className="text-sm text-muted">Skills Listed</p>
-          <p className="text-2xl font-bold text-ink">{profile.skills?.length || 0}</p>
+        <div className="card p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-muted">Skills Listed</p>
+          <p className="text-xl sm:text-2xl font-bold text-ink">{profile.skills?.length || 0}</p>
         </div>
-        <div className="card p-4">
-          <p className="text-sm text-muted">Recommended Jobs</p>
-          <p className="text-2xl font-bold text-ink">{recommendedJobs.length}</p>
+        <div className="card p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-muted">Recommended Jobs</p>
+          <p className="text-xl sm:text-2xl font-bold text-ink">{recommendedJobs.length}</p>
         </div>
-        <div className="card p-4">
-          <p className="text-sm text-muted">Match Score</p>
-          <p className="text-2xl font-bold text-ink">
+        <div className="card p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-muted">Match Score</p>
+          <p className="text-xl sm:text-2xl font-bold text-ink">
             {recommendedJobs.length > 0 
               ? `${Math.round(recommendedJobs.reduce((sum, j) => sum + (j.fit_score || 0), 0) / recommendedJobs.length)}%`
               : 'N/A'}
@@ -117,12 +117,12 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
       </div>
 
       {/* Profile Summary */}
-      <div className="card p-6">
+      <div className="card p-4 sm:p-6">
         <div>
-          <h2 className="text-xl font-bold text-ink">{profile.name}</h2>
-          <p className="text-muted">{profile.title}</p>
+          <h2 className="text-lg sm:text-xl font-bold text-ink">{profile.name}</h2>
+          <p className="text-sm sm:text-base text-muted">{profile.title}</p>
         </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-3">
           <div>
             <p className="text-xs text-muted">Location</p>
             <p className="font-semibold text-ink">{profile.location || 'Not specified'}</p>
@@ -175,14 +175,14 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
 
       {/* Recommended Jobs */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-ink">Matched Jobs (90%+ Match)</h2>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <h2 className="text-lg sm:text-xl font-bold text-ink">Matched Jobs (70%+ Match)</h2>
           <Link href="/jobs" className="text-sm font-semibold text-primary hover:underline">
             View All Jobs →
           </Link>
         </div>
         {recommendedJobs.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {recommendedJobs.map((job: any) => (
               <div key={job.id} className="card p-4">
                 <div className="mb-2 flex items-start justify-between">
@@ -254,7 +254,7 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
       </div>
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           href="/jobs"
           className="card p-4 hover:shadow-md transition-shadow text-center"
