@@ -177,6 +177,7 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <h2 className="text-lg sm:text-xl font-bold text-ink">Matched Jobs (70%+ Match)</h2>
+          {/* Match threshold aligned with backend: /api/matched-jobs uses fit_score >= 70 */}
           <Link href="/jobs" className="text-sm font-semibold text-primary hover:underline">
             View All Jobs →
           </Link>
