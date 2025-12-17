@@ -119,8 +119,24 @@ export async function GET(req: NextRequest) {
           return found.slice(0, 5); // Limit to 5 skills
         };
 
-        // Send email
-        const success = await sendDailyJobDigest(
+        // Check if we've already sent an email to this candidate today
+        const today = new Date().toISOString().split('T')[0];
+        const { data: existingEmail } = await supabase
+          .from('email_events')
+          .select('id')
+          .eq('email', profile.email)
+          .eq('type', 'daily_matches')
+          .gte('sent_at', `${today}T00:00:00Z`)
+          .maybeSingle();
+
+        if (existingEmail) {
+          // Already sent today, skip (idempotent)
+          console.log(`⏭️  Skipping ${profile.email} - already sent today`);
+          continue;
+        }
+
+        // Send email with tracking
+        const result = await sendDailyJobDigest(
           profile.email,
           profile.name || 'Candidate',
           jobs.map(job => ({
@@ -130,12 +146,14 @@ export async function GET(req: NextRequest) {
             job_type: job.job_type,
             skills_required: extractSkills(job.description),
             url: job.url || '',
-          }))
+          })),
+          profile.id,
+          jobs.map(j => j.id).filter(Boolean)
         );
 
-        if (success) {
+        if (result.success) {
           emailsSent++;
-          console.log(`✅ Sent job digest to ${profile.email} (${jobs.length} jobs)`);
+          console.log(`✅ Sent job digest to ${profile.email} (${jobs.length} jobs, message_id: ${result.messageId})`);
         } else {
           emailsFailed++;
           errors.push(`${profile.email}: Failed to send email`);

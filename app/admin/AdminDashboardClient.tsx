@@ -23,6 +23,57 @@ type Candidate = {
   created_by_admin: boolean;
 };
 
+type Metrics = {
+  totalCandidates: number;
+  activeCandidates: number;
+  activeJobs: number;
+  jobsMatchedToday: number;
+  avgMatchScore: number;
+  openRate24h: number;
+  emailsSent24h: number;
+  emailsOpened24h: number;
+};
+
+type Funnel = {
+  registeredCandidates: number;
+  profilesCompleted: number;
+  candidatesWithMatches: number;
+  candidatesEmailed: number;
+  candidatesOpenedEmail: number;
+  completionRate: number;
+  matchRate: number;
+  emailOpenRate: number;
+};
+
+type AIHealth = {
+  jobsEvaluated: number;
+  jobsPassedPreFilter: number;
+  jobsPassedAIThreshold: number;
+  rejectionReasons: {
+    locationMismatch: number;
+    jobTypeMismatch: number;
+    skillsLessThan3: number;
+    payMismatch: number;
+    experienceMismatch: number;
+    lowScore: number;
+  };
+  preFilterPassRate: number;
+  aiThresholdPassRate: number;
+};
+
+type EmailMetrics = {
+  totalEmailsSent: number;
+  totalEmailsOpened: number;
+  emailsSentToday: number;
+  emailsOpenedToday: number;
+  openRate: number;
+  openRateChange: number;
+  emailsByType: Record<string, number>;
+  opensByType: Record<string, number>;
+  recent7DaysRate: number;
+  previous7DaysRate: number;
+};
+
 export default function AdminDashboardClient() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,10 +89,51 @@ export default function AdminDashboardClient() {
   } | null>(null);
   const [showUploadDetails, setShowUploadDetails] = useState(false);
   const [uploading, setUploading] = useState(false);
+  
+  // Metrics state
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [funnel, setFunnel] = useState<Funnel | null>(null);
+  const [aiHealth, setAIHealth] = useState<AIHealth | null>(null);
+  const [emailMetrics, setEmailMetrics] = useState<EmailMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
 
   useEffect(() => {
     fetchCandidates();
+    fetchMetrics();
   }, []);
+
+  const fetchMetrics = async () => {
+    try {
+      setMetricsLoading(true);
+      const [metricsRes, funnelRes, aiHealthRes, emailMetricsRes] = await Promise.all([
+        fetch('/api/admin/metrics'),
+        fetch('/api/admin/funnel'),
+        fetch('/api/admin/ai-health'),
+        fetch('/api/admin/email-metrics'),
+      ]);
+
+      if (metricsRes.ok) {
+        const data = await metricsRes.json();
+        setMetrics(data);
+      }
+      if (funnelRes.ok) {
+        const data = await funnelRes.json();
+        setFunnel(data);
+      }
+      if (aiHealthRes.ok) {
+        const data = await aiHealthRes.json();
+        setAIHealth(data);
+      }
+      if (emailMetricsRes.ok) {
+        const data = await emailMetricsRes.json();
+        setEmailMetrics(data);
+      }
+    } catch (error) {
+      console.error('Error fetching metrics:', error);
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
 
   const fetchCandidates = async () => {
     if (!supabaseUrl || !supabaseAnonKey) {
@@ -156,6 +248,141 @@ export default function AdminDashboardClient() {
         <h1 className="text-3xl font-bold text-ink">Admin Dashboard</h1>
         <p className="text-muted mt-2">Manage candidates and upload jobs</p>
       </div>
+
+      {/* Executive Metrics */}
+      {metricsLoading ? (
+        <div className="animate-pulse space-y-4">
+          <div className="h-32 rounded bg-slate-200"></div>
+        </div>
+      ) : metrics && (
+        <div>
+          <h2 className="text-xl font-bold text-ink mb-4">Executive Metrics</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+            <div className="card p-4">
+              <div className="text-sm text-muted mb-1">Total Candidates</div>
+              <div className="text-2xl font-bold text-ink">{metrics.totalCandidates}</div>
+            </div>
+            <div className="card p-4">
+              <div className="text-sm text-muted mb-1">Active (7d)</div>
+              <div className="text-2xl font-bold text-ink">{metrics.activeCandidates}</div>
+            </div>
+            <div className="card p-4">
+              <div className="text-sm text-muted mb-1">Active Jobs</div>
+              <div className="text-2xl font-bold text-ink">{metrics.activeJobs}</div>
+            </div>
+            <div className="card p-4">
+              <div className="text-sm text-muted mb-1">Matched Today</div>
+              <div className="text-2xl font-bold text-ink">{metrics.jobsMatchedToday}</div>
+            </div>
+            <div className="card p-4">
+              <div className="text-sm text-muted mb-1">Avg Match Score</div>
+              <div className="text-2xl font-bold text-ink">{metrics.avgMatchScore}%</div>
+            </div>
+            <div className="card p-4">
+              <div className="text-sm text-muted mb-1">Open Rate (24h)</div>
+              <div className="text-2xl font-bold text-ink">{metrics.openRate24h}%</div>
+              <div className="text-xs text-muted mt-1">{metrics.emailsOpened24h}/{metrics.emailsSent24h} opened</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Candidate Funnel */}
+      {funnel && (
+        <div>
+          <h2 className="text-xl font-bold text-ink mb-4">Candidate Funnel</h2>
+          <div className="card p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div>
+                <div className="text-sm text-muted">Registered</div>
+                <div className="text-xl font-bold">{funnel.registeredCandidates}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">Profiles Complete</div>
+                <div className="text-xl font-bold">{funnel.profilesCompleted}</div>
+                <div className="text-xs text-muted">{funnel.completionRate}%</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">With Matches</div>
+                <div className="text-xl font-bold">{funnel.candidatesWithMatches}</div>
+                <div className="text-xs text-muted">{funnel.matchRate}%</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">Opened Email</div>
+                <div className="text-xl font-bold">{funnel.candidatesOpenedEmail}</div>
+                <div className="text-xs text-muted">{funnel.emailOpenRate}%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Matching Health */}
+      {aiHealth && (
+        <div>
+          <h2 className="text-xl font-bold text-ink mb-4">AI Matching Health</h2>
+          <div className="card p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <div className="text-sm text-muted">Jobs Evaluated</div>
+                <div className="text-xl font-bold">{aiHealth.jobsEvaluated}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">Passed Pre-Filter</div>
+                <div className="text-xl font-bold">{aiHealth.jobsPassedPreFilter}</div>
+                <div className="text-xs text-muted">{aiHealth.preFilterPassRate}%</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">Passed AI Threshold</div>
+                <div className="text-xl font-bold">{aiHealth.jobsPassedAIThreshold}</div>
+                <div className="text-xs text-muted">{aiHealth.aiThresholdPassRate}%</div>
+              </div>
+            </div>
+            <div className="mt-4">
+              <div className="text-sm font-semibold mb-2">Rejection Reasons:</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                <div>Low Score: {aiHealth.rejectionReasons.lowScore}</div>
+                <div>Location: {aiHealth.rejectionReasons.locationMismatch}</div>
+                <div>Job Type: {aiHealth.rejectionReasons.jobTypeMismatch}</div>
+                <div>Skills: {aiHealth.rejectionReasons.skillsLessThan3}</div>
+                <div>Pay: {aiHealth.rejectionReasons.payMismatch}</div>
+                <div>Experience: {aiHealth.rejectionReasons.experienceMismatch}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Performance */}
+      {emailMetrics && (
+        <div>
+          <h2 className="text-xl font-bold text-ink mb-4">Email Performance</h2>
+          <div className="card p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div>
+                <div className="text-sm text-muted">Total Sent (30d)</div>
+                <div className="text-xl font-bold">{emailMetrics.totalEmailsSent}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">Total Opened (30d)</div>
+                <div className="text-xl font-bold">{emailMetrics.totalEmailsOpened}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">Open Rate</div>
+                <div className="text-xl font-bold">{emailMetrics.openRate}%</div>
+                <div className={`text-xs ${emailMetrics.openRateChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {emailMetrics.openRateChange >= 0 ? '+' : ''}{emailMetrics.openRateChange}% vs last week
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">Sent Today</div>
+                <div className="text-xl font-bold">{emailMetrics.emailsSentToday}</div>
+                <div className="text-xs text-muted">{emailMetrics.emailsOpenedToday} opened</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Excel Upload Section */}
       <div className="card p-6">

@@ -21,6 +21,8 @@ const SENDER_NAME = process.env.SENDER_NAME || 'JobSynt';
 // Format: "JobSynt <info@jobsynt.com>" for better email display
 const FROM_ADDRESS = SENDER_NAME ? `${SENDER_NAME} <${FROM_EMAIL}>` : FROM_EMAIL;
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.jobsynt.com';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 /**
  * Send password reset email to candidate (simplified flow)
@@ -93,7 +95,8 @@ export async function sendAuthEmail(email: string, name: string): Promise<boolea
 }
 
 /**
- * Send daily job digest email
+ * Send daily job digest email with tracking
+ * Returns message_id for tracking purposes
  */
 export async function sendDailyJobDigest(
   email: string,
@@ -105,19 +108,24 @@ export async function sendDailyJobDigest(
     job_type: string | null;
     skills_required: string[] | null;
     url: string;
-  }>
-): Promise<boolean> {
+  }>,
+  candidateId?: string,
+  jobIds?: string[]
+): Promise<{ success: boolean; messageId?: string }> {
   try {
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
       console.warn('Email not configured - skipping job digest');
-      return false;
+      return { success: false };
     }
 
     if (jobs.length === 0) {
       console.log(`No jobs to send to ${email}`);
-      return true;
+      return { success: true };
     }
 
+    // Generate unique message_id for tracking
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    const trackingPixelUrl = `${SITE_URL}/api/email/open?mid=${messageId}`;
     const loginLink = `${SITE_URL}/auth/login?email=${encodeURIComponent(email)}`;
     
     // Format job type for display
@@ -187,22 +195,46 @@ export async function sendDailyJobDigest(
             <p>You're receiving this because you have a profile on Jobsynt.</p>
           </div>
         </div>
+        <!-- Email tracking pixel (invisible 1x1 image) -->
+        <img src="${trackingPixelUrl}" width="1" height="1" style="display: none; width: 1px; height: 1px; border: 0;" alt="" />
       </body>
       </html>
     `;
 
+    const subject = `Your Daily Job Matches - ${jobs.length} New Opportunity${jobs.length > 1 ? 'ies' : ''}`;
+
     await emailTransporter.sendMail({
       from: FROM_ADDRESS,
       to: email,
-      subject: `Your Daily Job Matches - ${jobs.length} New Opportunity${jobs.length > 1 ? 'ies' : ''}`,
+      subject,
       html,
     });
 
-    console.log(`✅ Daily job digest sent to ${email} (${jobs.length} jobs)`);
-    return true;
+    // Log email event to database (async, don't block)
+    if (supabaseUrl && supabaseServiceKey) {
+      try {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        
+        await supabase.from('email_events').insert({
+          email,
+          candidate_id: candidateId || null,
+          job_ids: Array.isArray(jobIds) ? jobIds : (jobs.map(j => j.url).filter(Boolean) || []),
+          type: 'daily_matches',
+          message_id: messageId,
+          subject,
+        });
+      } catch (err) {
+        console.error('Error logging email event:', err);
+        // Don't fail email send if logging fails
+      }
+    }
+
+    console.log(`✅ Daily job digest sent to ${email} (${jobs.length} jobs, message_id: ${messageId})`);
+    return { success: true, messageId };
   } catch (error) {
     console.error('Error sending daily job digest:', error);
-    return false;
+    return { success: false };
   }
 }
 
