@@ -1,17 +1,28 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import OAuthButton from '@/components/OAuthButton';
 import Link from 'next/link';
 
 function SignupForm() {
-  const [email, setEmail] = useState('');
+  const searchParams = useSearchParams();
+  const emailFromUrl = searchParams.get('email') || '';
+  
+  const [email, setEmail] = useState(emailFromUrl);
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'error' | 'success'>('error');
   const [loading, setLoading] = useState(false);
+
+  // Update email if URL parameter changes
+  useEffect(() => {
+    if (emailFromUrl) {
+      setEmail(emailFromUrl);
+    }
+  }, [emailFromUrl]);
 
   const handlePasswordSignup = async (e: React.FormEvent) => {
     e.preventDefault();
