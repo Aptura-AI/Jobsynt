@@ -15,7 +15,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 const PROMPT_ID = 'pmpt_693a19adbe988194a90c57840fb224b80cd9872f8d8138ea';
 
 export type EligibleJob = {
-  id: string;
+  id: string; // Required - jobs without ID are filtered out before AI review
   title: string;
   company: string;
   location: string;
@@ -75,7 +75,7 @@ export async function reviewJobWithAI(
 
     // Try OpenAI Responses API first (if available)
     try {
-      // @ts-ignore - responses API may not be in type definitions yet
+      // Type assertion needed because Responses API input structure may not match type definitions
       const response = await openai.responses.create({
         prompt: {
           id: PROMPT_ID,
@@ -93,7 +93,7 @@ export async function reviewJobWithAI(
           job: jobData,
           // CRITICAL: Tell AI these jobs are pre-filtered and scored
           note: 'This job has already passed hard filters (location, job type) and scored ≥70% on deterministic matching. Do not re-score. Provide application advice and insights only.',
-        },
+        } as any,
       });
 
       // Parse response (structure depends on prompt)

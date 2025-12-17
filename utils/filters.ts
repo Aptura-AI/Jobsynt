@@ -3,9 +3,9 @@ type Job = {
   title: string;
   company: string;
   location: string;
-  experience: string;
-  skills: string[];
-  workMode: string;
+  experience?: string;
+  skills?: string[];
+  workMode?: string;
   summary?: string;
 };
 
@@ -47,9 +47,9 @@ export function filterJobs(jobs: Job[], params: JobFilterParams) {
       matchesText(job.company, params.search) ||
       matchesText(job.summary || '', params.search);
     const locationMatch = !params.location || job.location.toLowerCase().includes(params.location.toLowerCase());
-    const experienceMatch = !params.experience || job.experience === params.experience;
-    const workModeMatch = !params.workMode || job.workMode === params.workMode;
-    const skillsMatch = matchesSkills(job.skills, params.skills);
+    const experienceMatch = !params.experience || (job.experience && job.experience === params.experience);
+    const workModeMatch = !params.workMode || (job.workMode && job.workMode === params.workMode);
+    const skillsMatch = matchesSkills(job.skills || [], params.skills);
     return searchMatch && locationMatch && experienceMatch && workModeMatch && skillsMatch;
   });
 }

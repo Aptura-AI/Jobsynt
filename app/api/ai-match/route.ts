@@ -48,9 +48,16 @@ export async function POST(req: NextRequest) {
     const aiProcessedJobs: Array<{ jobId: string; matchScore: number; aiConfirmed: boolean }> = [];
 
     for (const eligibleJob of matchingResult.eligible.slice(0, 50)) { // Limit to 50 for AI processing
+      // Skip jobs without ID (required for saving matched jobs)
+      if (!eligibleJob.id) {
+        console.warn(`Skipping job without ID: ${eligibleJob.title} at ${eligibleJob.company}`);
+        continue;
+      }
+
       try {
         // Review job with AI (using Responses API or fallback)
-        const aiReview = await reviewJobWithAI(eligibleJob, profile);
+        // Type assertion: we've verified id exists above, so we can safely cast
+        const aiReview = await reviewJobWithAI(eligibleJob as import('@/lib/matching/aiJobReview').EligibleJob, profile);
 
         if (aiReview.confirmed) {
           // Save matched job to database

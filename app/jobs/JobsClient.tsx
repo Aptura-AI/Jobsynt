@@ -10,9 +10,9 @@ type Job = {
   title: string;
   company: string;
   location: string;
-  experience: string;
-  skills: string[];
-  workMode: string;
+  experience?: string;
+  skills?: string[];
+  workMode?: string;
   summary?: string;
   rate?: string;
 };

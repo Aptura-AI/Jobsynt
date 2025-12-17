@@ -40,28 +40,24 @@ export async function sendAuthEmail(email: string, name: string): Promise<boolea
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check if user exists using admin API
-    const { data: existingUser, error: getUserError } = await supabase.auth.admin.getUserByEmail(email);
+    // Try to create user first (with temporary password)
+    // If user already exists, the createUser will fail but we can still send reset email
+    const tempPassword = `Temp${Math.random().toString(36).slice(-12)}!${Date.now()}`;
+    
+    const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+      email,
+      password: tempPassword,
+      email_confirm: true, // Auto-confirm email
+      user_metadata: {
+        role: 'candidate',
+        name: name,
+      },
+    });
 
-    // If user doesn't exist, create them first (with temporary password)
-    if (!existingUser?.user) {
-      // Generate a secure random password
-      const tempPassword = `Temp${Math.random().toString(36).slice(-12)}!${Date.now()}`;
-      
-      const { error: signupError } = await supabase.auth.admin.createUser({
-        email,
-        password: tempPassword,
-        email_confirm: true, // Auto-confirm email
-        user_metadata: {
-          role: 'candidate',
-          name: name,
-        },
-      });
-
-      if (signupError) {
-        console.error('Error creating user:', signupError);
-        return false;
-      }
+    // If user already exists, that's fine - we'll just send reset email
+    if (createError && !createError.message.includes('already registered') && !createError.message.includes('already exists')) {
+      console.error('Error creating user:', createError);
+      // Continue anyway - user might exist, try sending reset email
     }
 
     // Send password reset email (works for both new and existing users)
