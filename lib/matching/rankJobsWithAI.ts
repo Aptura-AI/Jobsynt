@@ -18,8 +18,9 @@ import { createClient } from '@supabase/supabase-js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-// OpenAI Prompt ID for job matching (version 3)
+// OpenAI Prompt ID for job matching (version 4 - updated Jan 2025)
 const PROMPT_ID = 'pmpt_693a19adbe988194a90c57840fb224b80cd9872f8d8138ea';
+const PROMPT_VERSION = '4';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -247,39 +248,29 @@ export async function rankJobsWithAI(
     // Count explicit targets for AI context
     const explicitTargetCount = jobsData.filter(j => j.isRecruiterTargeted).length;
 
-    // Call OpenAI Responses API with prompt version 3
+    // Call OpenAI Responses API with prompt version 4
     try {
       const response = await openai.responses.create({
         prompt: {
           id: PROMPT_ID,
-          version: '3',
+          version: PROMPT_VERSION,
         },
         input: {
           candidate: candidateData,
           jobs: jobsData,
-          note: `LEDGER-BASED RANKING WITH SKILL VALIDATION:
-
-These ${jobsData.length} jobs are from the candidate's qualified job ledger. They have ALREADY been approved and MUST NOT be discarded.
-
-SKILL HIERARCHY (CRITICAL FOR RANKING):
-- Primary Skills (${candidateData.primarySkills.join(', ') || 'none defined'}): Define ELIGIBILITY. Platform ownership matters.
-- Secondary Skills: Ecosystem skills within primary stack. Influence ranking.
-- Adjacent Skills: Partial exposure to other platforms. Lower priority.
-- Generic Skills: Cross-platform domain skills.
-
-HARD RULE: Primary stack mismatch = no High priority rating.
-If a job uses a different primary platform than the candidate's primary skills, rate it Medium or Low.
-Example: If candidate's primary is "Oracle HCM" but job requires "Workday", that's a platform mismatch.
-
-SKILL VALIDATION:
-- Candidate-provided skills are INTENT, not FACT
-- Cross-check against resume text when possible
-- Platform ownership always outweighs keyword overlap
-
-${explicitTargetCount} job(s) were EXPLICITLY targeted by a recruiter - always prioritize these.
-
-Your role: 1) Rank by priority considering skill hierarchy, 2) Explain fit clearly, 3) Recommend actions.
-You may NOT: remove jobs, add jobs, or suggest external job boards.`,
+          context: {
+            jobCount: jobsData.length,
+            explicitTargets: explicitTargetCount,
+            primarySkills: candidateData.primarySkills,
+            isLedgerBased: true,
+            rules: [
+              'Jobs are from qualified ledger - do not discard',
+              'Primary platform alignment is most important',
+              'Cross-platform mismatches = Medium or Low priority',
+              'Recruiter-targeted jobs must never be discarded',
+              'Candidate skills are signals, validate against resume',
+            ],
+          },
         } as any,
       });
 
