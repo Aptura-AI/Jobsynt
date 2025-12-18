@@ -1,119 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getServerSession } from '@/lib/auth';
-import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 /**
- * Extract text from file (PDF, DOCX, TXT)
+ * Extract text from PDF file
  * 
- * Uses mammoth for DOCX parsing and pdf-parse for PDF parsing.
- * Confidence threshold: If extracted text is too short, flag as low confidence.
+ * Only PDF files are supported for system stability and data integrity.
  */
-async function extractTextFromFile(file: File): Promise<{ text: string; confidence: 'high' | 'medium' | 'low' }> {
+async function extractTextFromPDF(file: File): Promise<{ text: string; confidence: 'high' | 'medium' | 'low' }> {
   try {
-    // Plain text files
-    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-      const text = await file.text();
-      return { 
-        text: text.trim(), 
-        confidence: text.length > 100 ? 'high' : 'medium' 
-      };
-    }
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
     
-    // DOCX files (application/vnd.openxmlformats-officedocument.wordprocessingml.document)
-    if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
-        file.name.endsWith('.docx')) {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+    try {
+      const data = await pdfParse(buffer);
+      const extractedText = data.text.trim();
       
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        const extractedText = result.value.trim();
-        
-        // Determine confidence based on extracted text length
-        let confidence: 'high' | 'medium' | 'low' = 'low';
-        if (extractedText.length > 500) {
-          confidence = 'high';
-        } else if (extractedText.length > 100) {
-          confidence = 'medium';
-        }
-        
-        if (extractedText.length === 0) {
-          return {
-            text: 'Unable to extract text from DOCX file. Please ensure the file has readable text content.',
-            confidence: 'low'
-          };
-        }
-        
-        return { text: extractedText, confidence };
-      } catch (docxError: any) {
-        console.error('DOCX parsing error:', docxError);
+      // Determine confidence based on extracted text length
+      let confidence: 'high' | 'medium' | 'low' = 'low';
+      if (extractedText.length > 500) {
+        confidence = 'high';
+      } else if (extractedText.length > 100) {
+        confidence = 'medium';
+      }
+      
+      if (extractedText.length === 0) {
         return {
-          text: `Error parsing DOCX file: ${docxError.message}. Please try converting to PDF or ensure the file is not corrupted.`,
+          text: 'Unable to extract text from PDF. Please ensure the PDF has selectable text (not scanned images).',
           confidence: 'low'
         };
       }
-    }
-    
-    // PDF files
-    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
       
-      try {
-        const data = await pdfParse(buffer);
-        const extractedText = data.text.trim();
-        
-        // Determine confidence based on extracted text length
-        let confidence: 'high' | 'medium' | 'low' = 'low';
-        if (extractedText.length > 500) {
-          confidence = 'high';
-        } else if (extractedText.length > 100) {
-          confidence = 'medium';
-        }
-        
-        if (extractedText.length === 0) {
-          return {
-            text: 'Unable to extract text from PDF. Please ensure the PDF has selectable text (not scanned images).',
-            confidence: 'low'
-          };
-        }
-        
-        return { text: extractedText, confidence };
-      } catch (pdfError: any) {
-        console.error('PDF parsing error:', pdfError);
-        // Fallback to basic extraction
-        const uint8Array = new Uint8Array(arrayBuffer);
-        const decoder = new TextDecoder('utf-8', { fatal: false });
-        const chunks = decoder.decode(uint8Array);
-        
-        const streamMatches = chunks.match(/stream[\s\S]*?endstream/g);
-        let text = '';
-        if (streamMatches) {
-          streamMatches.forEach(match => {
-            const content = match.replace(/stream|endstream/g, '').trim();
-            const readable = content.split('').filter(c => {
-              const code = c.charCodeAt(0);
-              return (code >= 32 && code <= 126) || code === 10 || code === 13;
-            }).join('');
-            text += readable + ' ';
-          });
-        }
-        
-        const fallbackText = text.trim() || 'Unable to extract text from PDF. Please upload a PDF with selectable text.';
-        return { text: fallbackText, confidence: 'low' };
+      return { text: extractedText, confidence };
+    } catch (pdfError: any) {
+      console.error('PDF parsing error:', pdfError);
+      // Fallback to basic extraction
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const decoder = new TextDecoder('utf-8', { fatal: false });
+      const chunks = decoder.decode(uint8Array);
+      
+      const streamMatches = chunks.match(/stream[\s\S]*?endstream/g);
+      let text = '';
+      if (streamMatches) {
+        streamMatches.forEach(match => {
+          const content = match.replace(/stream|endstream/g, '').trim();
+          const readable = content.split('').filter(c => {
+            const code = c.charCodeAt(0);
+            return (code >= 32 && code <= 126) || code === 10 || code === 13;
+          }).join('');
+          text += readable + ' ';
+        });
       }
+      
+      const fallbackText = text.trim() || 'Unable to extract text from PDF. Please upload a PDF with selectable text.';
+      return { text: fallbackText, confidence: 'low' };
     }
-    
-    // Unsupported file type
-    return {
-      text: 'Unsupported file type. Please upload PDF, DOCX, or TXT files.',
-      confidence: 'low'
-    };
   } catch (error: any) {
     console.error('Text extraction error:', error);
     return { 
@@ -141,10 +86,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // Validate file type
-    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
-    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(pdf|doc|docx|txt)$/i)) {
-      return NextResponse.json({ error: 'Invalid file type. Please upload PDF, DOC, DOCX, or TXT' }, { status: 400 });
+    // STRICT: Only PDF files allowed
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      return NextResponse.json({ 
+        error: 'Only PDF resumes are supported at this time.' 
+      }, { status: 400 });
     }
 
     // Validate file size (max 10MB)
@@ -165,8 +111,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found. Please complete your profile first.' }, { status: 400 });
     }
 
-    // Extract text from file
-    const { text: extractedText, confidence } = await extractTextFromFile(file);
+    // Extract text from PDF
+    const { text: extractedText, confidence } = await extractTextFromPDF(file);
 
     // Warn user if confidence is low
     if (confidence === 'low') {
@@ -174,16 +120,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Generate unique file path
-    const fileExt = file.name.split('.').pop();
     const timestamp = Date.now();
-    const filePath = `${profile.id}/${timestamp}_resume.${fileExt}`;
+    const filePath = `${profile.id}/${timestamp}_resume.pdf`;
 
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);
 
     // Upload to Supabase Storage
-    // Use service role key for admin access to storage
     const supabaseAdmin = createClient(
       supabaseUrl,
       process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseServiceKey
@@ -192,13 +136,12 @@ export async function POST(req: NextRequest) {
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('resumes')
       .upload(filePath, buffer, {
-        contentType: file.type,
+        contentType: 'application/pdf',
         upsert: true,
       });
 
     if (uploadError) {
       console.error('Upload error:', uploadError);
-      // If bucket doesn't exist, try to create it (this requires admin access)
       if (uploadError.message.includes('Bucket') || uploadError.message.includes('not found')) {
         return NextResponse.json({ 
           error: 'Resume storage not configured. Please contact support or run the resumes table migration.',
@@ -208,7 +151,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to upload resume', details: uploadError.message }, { status: 500 });
     }
 
-    // Get public URL (use admin client)
+    // Get public URL
     const { data: urlData } = supabaseAdmin.storage
       .from('resumes')
       .getPublicUrl(filePath);
@@ -222,7 +165,7 @@ export async function POST(req: NextRequest) {
         file_path: filePath,
         file_name: file.name,
         file_size: file.size,
-        file_type: file.type,
+        file_type: 'application/pdf',
         public_url: urlData.publicUrl,
         extracted_text: extractedText,
       }, { onConflict: 'profile_id' })
@@ -231,7 +174,6 @@ export async function POST(req: NextRequest) {
 
     if (dbError) {
       console.error('Database error:', dbError);
-      // Try to clean up uploaded file
       await supabase.storage.from('resumes').remove([filePath]);
       return NextResponse.json({ error: 'Failed to save resume record', details: dbError.message }, { status: 500 });
     }
@@ -241,7 +183,7 @@ export async function POST(req: NextRequest) {
       .from('profiles')
       .update({ 
         resume_url: urlData.publicUrl,
-        resume_text: extractedText, // Store parsed text separately for matching
+        resume_text: extractedText,
       })
       .eq('id', profile.id);
 

@@ -53,8 +53,15 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
   };
 
   const handleResumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setResumeFile(e.target.files[0]);
+    const file = e.target.files?.[0];
+    if (file) {
+      // Client-side validation: PDF only
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        setError('Only PDF resumes are supported. Please upload a PDF file.');
+        e.target.value = ''; // Reset file input
+        return;
+      }
+      setResumeFile(file);
     }
   };
 
@@ -261,11 +268,13 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
 
         {/* Resume Upload */}
         <div>
-          <label className="mb-1 block text-sm font-semibold text-ink">Resume (PDF)</label>
+          <label className="mb-1 block text-sm font-semibold text-ink">
+            Resume (<span className="font-bold">PDF ONLY</span>)
+          </label>
           <div className="flex items-center gap-4">
             <input
               type="file"
-              accept=".pdf,.doc,.docx"
+              accept="application/pdf"
               onChange={handleResumeChange}
               className="block w-full text-sm text-muted file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
             />
@@ -273,6 +282,7 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
           {resumeFile && (
             <p className="mt-2 text-sm text-green-600">Selected: {resumeFile.name}</p>
           )}
+          <p className="mt-1 text-xs text-muted">Only PDF resumes are supported.</p>
         </div>
 
         {/* Error Message */}
