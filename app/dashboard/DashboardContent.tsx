@@ -50,13 +50,19 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
 
   const fetchRecommendedJobs = async () => {
     try {
+      console.log('[Dashboard] Fetching recommended jobs...');
       const res = await fetch('/api/match-jobs');
+      console.log('[Dashboard] API response status:', res.status);
       if (res.ok) {
         const data = await res.json();
+        console.log('[Dashboard] Jobs received:', data.jobs?.length || 0, 'jobs');
+        console.log('[Dashboard] Full response:', data);
         setRecommendedJobs(data.jobs || []);
+      } else {
+        console.error('[Dashboard] API error:', res.status, res.statusText);
       }
     } catch (error) {
-      console.error('Error fetching recommended jobs:', error);
+      console.error('[Dashboard] Error fetching recommended jobs:', error);
     } finally {
       setLoading(false);
     }
