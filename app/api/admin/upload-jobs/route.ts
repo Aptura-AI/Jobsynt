@@ -189,6 +189,13 @@ function determineLocationType(isRemote: boolean, location: string): 'Remote' | 
 
 /**
  * Parse date from various formats
+ * Supported formats:
+ * - "today" / "todays" → current system date
+ * - "yesterday" → yesterday's date
+ * - "N days ago" / "N day ago" → N days before current date
+ * - "mm/dd/yyyy" or "mm-dd-yyyy" → US date format (month/day/year)
+ * - "yyyy-mm-dd" → ISO format
+ * - Any other format → fallback to JavaScript Date parsing
  */
 function parseDate(dateValue: any): string | null {
   if (!dateValue) return null;
@@ -199,48 +206,57 @@ function parseDate(dateValue: any): string | null {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Handle relative dates
+  // Handle relative dates: "today" or "todays"
   if (dateStr === 'today' || dateStr === 'todays') {
+    console.log(`[parseDate] "${dateValue}" → today: ${today.toISOString().split('T')[0]}`);
     return today.toISOString().split('T')[0];
   }
   
+  // Handle "yesterday"
   if (dateStr === 'yesterday') {
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
+    console.log(`[parseDate] "${dateValue}" → yesterday: ${yesterday.toISOString().split('T')[0]}`);
     return yesterday.toISOString().split('T')[0];
   }
 
-  // Handle "X days ago" format
-  const daysAgoMatch = dateStr.match(/^(\d+)\s*(day|days)\s*ago$/);
+  // Handle "X days ago" or "X day ago" format (e.g., "3 days ago", "1 day ago")
+  const daysAgoMatch = dateStr.match(/^(\d+)\s*(day|days)\s*ago$/i);
   if (daysAgoMatch) {
     const daysAgo = parseInt(daysAgoMatch[1]);
     const pastDate = new Date(today);
     pastDate.setDate(pastDate.getDate() - daysAgo);
+    console.log(`[parseDate] "${dateValue}" → ${daysAgo} days ago: ${pastDate.toISOString().split('T')[0]}`);
     return pastDate.toISOString().split('T')[0];
   }
 
-  // Try dd/mm/yyyy format
-  const ddMMyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (ddMMyyyyMatch) {
-    const [, day, month, year] = ddMMyyyyMatch;
+  // Handle mm/dd/yyyy or mm-dd-yyyy format (US date format)
+  const mmDDyyyyMatch = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (mmDDyyyyMatch) {
+    const [, month, day, year] = mmDDyyyyMatch;
     const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     if (!isNaN(date.getTime())) {
+      console.log(`[parseDate] "${dateValue}" → mm/dd/yyyy: ${date.toISOString().split('T')[0]}`);
       return date.toISOString().split('T')[0];
     }
   }
 
-  // Try yyyy-mm-dd format (ISO format)
+  // Handle yyyy-mm-dd format (ISO format)
   const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (isoMatch) {
+    console.log(`[parseDate] "${dateValue}" → ISO format: ${dateStr}`);
     return dateStr;
   }
 
-  // Try JavaScript Date parsing as fallback
+  // Fallback: Try JavaScript Date parsing
   const parsed = new Date(dateStr);
   if (!isNaN(parsed.getTime())) {
+    console.log(`[parseDate] "${dateValue}" → JS Date fallback: ${parsed.toISOString().split('T')[0]}`);
     return parsed.toISOString().split('T')[0];
   }
 
+  // If all parsing fails, return null (will default to today in the main logic)
+  console.log(`[parseDate] "${dateValue}" → Could not parse, returning null`);
   return null;
 }
 
