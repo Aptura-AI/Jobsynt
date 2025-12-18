@@ -229,7 +229,9 @@ export async function GET(req: NextRequest) {
 
     // LEDGER QUERY: Fetch from candidate_job_matches
     // NO reprocessing, NO AI, NO modification
-    const { data: matches, error: matchesError } = await supabase
+    // NOTE: We fetch ALL matches first, then filter by date client-side
+    // This is because .gte() on posted_date excludes jobs where posted_date is NULL
+    const { data: rawMatches, error: matchesError } = await supabase
       .from('candidate_job_matches')
       .select(`
         job_id,
@@ -257,8 +259,23 @@ export async function GET(req: NextRequest) {
       `)
       .eq('candidate_id', profile.id)
       .is('applied_at', null)      // Not applied
-      .is('dismissed_at', null)    // Not dismissed
-      .gte('scraped_jobs.posted_date', thirtyDaysAgo); // Within 30 days
+      .is('dismissed_at', null);   // Not dismissed
+    
+    // Filter by date CLIENT-SIDE to handle NULL posted_date properly
+    // NULL posted_date = treat as recent (job was just uploaded without date)
+    const matches = (rawMatches || []).filter((match: any) => {
+      const job = match.scraped_jobs;
+      if (!job) return false;
+      
+      // If posted_date is NULL, treat as recent (within 30 days)
+      if (!job.posted_date) {
+        console.log(`[Active Feed] Job ${job.id?.substring(0, 8)} has NULL posted_date - including as recent`);
+        return true;
+      }
+      
+      // Check if within 30 days
+      return job.posted_date >= thirtyDaysAgo;
+    });
 
     if (matchesError) {
       console.error('[Active Feed] Query error:', matchesError);

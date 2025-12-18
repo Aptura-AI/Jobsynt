@@ -144,13 +144,23 @@ export async function rankJobsWithAI(
       .eq('candidate_id', candidateId)
       .is('applied_at', null)      // Not applied
       .is('dismissed_at', null)    // Not dismissed
-      .gte('scraped_jobs.posted_date', thirtyDaysAgoStr) // Within 30 days
       .order('match_score', { ascending: false })
-      .limit(20); // Limit to top 20 for AI ranking
+      .limit(30); // Fetch extra to allow for filtering
+    
+    // Filter by date CLIENT-SIDE to handle NULL posted_date properly
+    // NULL posted_date = treat as recent (job was just uploaded without date)
+    const filteredMatches = (matches || []).filter((match: any) => {
+      const job = match.scraped_jobs;
+      if (!job) return false;
+      // If posted_date is NULL, treat as recent (within 30 days)
+      if (!job.posted_date) return true;
+      // Check if within 30 days
+      return job.posted_date >= thirtyDaysAgoStr;
+    }).slice(0, 20); // Limit to top 20 for AI ranking
 
     // LEDGER RULE: If no jobs exist in the ledger, return appropriate message
     // AI NEVER says "no matching jobs" - instead, explain the system is working
-    if (matchesError || !matches || matches.length === 0) {
+    if (matchesError || !filteredMatches || filteredMatches.length === 0) {
       return {
         jobs: [],
         guidance: {
@@ -166,7 +176,7 @@ export async function rankJobsWithAI(
 
     // Transform to MatchedJob format
     // NO additional filtering - trust the ledger query
-    const matchedJobs: MatchedJob[] = matches.map((match: any) => {
+    const matchedJobs: MatchedJob[] = filteredMatches.map((match: any) => {
       const job = match.scraped_jobs;
       return {
         id: job.id,

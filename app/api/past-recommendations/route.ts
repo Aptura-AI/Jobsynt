@@ -54,6 +54,8 @@ export async function GET(req: NextRequest) {
     const thirtyDaysAgo = get30DaysAgoDate();
 
     // Build query - simple ledger read
+    // NOTE: We removed the date filter from the query because .gte() on posted_date excludes NULL values
+    // We filter client-side instead to handle NULL posted_date properly
     let query = supabase
       .from('candidate_job_matches')
       .select(`
@@ -83,9 +85,8 @@ export async function GET(req: NextRequest) {
         )
       `)
       .eq('candidate_id', profile.id)
-      .gte('scraped_jobs.posted_date', thirtyDaysAgo)
       .order('qualified_at', { ascending: false })
-      .limit(limit);
+      .limit(limit * 2); // Fetch extra to allow for date filtering
 
     // Apply filters based on query params
     if (!includeApplied) {
@@ -95,15 +96,25 @@ export async function GET(req: NextRequest) {
       query = query.is('dismissed_at', null);
     }
 
-    const { data: matches, error: matchesError } = await query;
+    const { data: rawMatches, error: matchesError } = await query;
 
     if (matchesError) {
       console.error('[Past Recommendations] Query error:', matchesError);
       return NextResponse.json({ jobs: [], total: 0 });
     }
+    
+    // Filter by date CLIENT-SIDE to handle NULL posted_date properly
+    // NULL posted_date = treat as recent (job was just uploaded without date)
+    const matches = (rawMatches || []).filter((match: any) => {
+      const job = match.scraped_jobs;
+      if (!job) return false;
+      // If posted_date is NULL, treat as recent
+      if (!job.posted_date) return true;
+      return job.posted_date >= thirtyDaysAgo;
+    }).slice(0, limit);
 
     // Transform to job format - NO filtering, NO processing
-    const jobs = (matches || []).map((match: any) => {
+    const jobs = matches.map((match: any) => {
       const job = match.scraped_jobs;
       return {
         id: job.id,

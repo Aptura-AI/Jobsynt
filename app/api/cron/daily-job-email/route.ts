@@ -115,8 +115,7 @@ export async function GET(req: NextRequest) {
           `)
           .eq('candidate_id', profile.id)
           .is('applied_at', null)      // Not applied
-          .is('dismissed_at', null)    // Not dismissed
-          .gte('scraped_jobs.posted_date', thirtyDaysAgo);
+          .is('dismissed_at', null);   // Not dismissed
 
         if (jobsError) {
           console.error(`[Email Cron] Error fetching jobs for ${profile.email}:`, jobsError);
@@ -124,9 +123,18 @@ export async function GET(req: NextRequest) {
           emailsFailed++;
           continue;
         }
+        
+        // Filter by date CLIENT-SIDE to handle NULL posted_date properly
+        const filteredMatches = (matches || []).filter((match: any) => {
+          const job = match.scraped_jobs;
+          if (!job) return false;
+          // If posted_date is NULL, treat as recent
+          if (!job.posted_date) return true;
+          return job.posted_date >= thirtyDaysAgo;
+        });
 
         // Sort by: explicit_target > ai_priority > fit_score
-        const sortedMatches = (matches || []).sort((a: any, b: any) => {
+        const sortedMatches = filteredMatches.sort((a: any, b: any) => {
           // 1. Explicit targets first
           if (a.match_source === 'explicit_target' && b.match_source !== 'explicit_target') return -1;
           if (b.match_source === 'explicit_target' && a.match_source !== 'explicit_target') return 1;

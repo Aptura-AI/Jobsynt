@@ -212,13 +212,22 @@ Summary: ${profile.summary || 'No summary provided'}`;
             .eq('candidate_id', profile.id)
             .is('applied_at', null)      // Not applied
             .is('dismissed_at', null)    // Not dismissed
-            .gte('scraped_jobs.posted_date', thirtyDaysAgo.toISOString().split('T')[0])
             .order('match_score', { ascending: false })
-            .limit(10);
+            .limit(20);
+          
+          // Filter by date CLIENT-SIDE to handle NULL posted_date properly
+          const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+          const filteredMatches = (matches || []).filter((match: any) => {
+            const job = match.scraped_jobs;
+            if (!job) return false;
+            // If posted_date is NULL, treat as recent
+            if (!job.posted_date) return true;
+            return job.posted_date >= thirtyDaysAgoStr;
+          }).slice(0, 10);
 
-          if (matches && matches.length > 0) {
+          if (filteredMatches && filteredMatches.length > 0) {
             // Sort: explicit_target first, then by ai_priority, then by score
-            const sortedMatches = matches.sort((a: any, b: any) => {
+            const sortedMatches = filteredMatches.sort((a: any, b: any) => {
               if (a.match_source === 'explicit_target' && b.match_source !== 'explicit_target') return -1;
               if (b.match_source === 'explicit_target' && a.match_source !== 'explicit_target') return 1;
               const priorityOrder: Record<string, number> = { 'High': 3, 'Medium': 2, 'Low': 1 };
