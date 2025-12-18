@@ -82,10 +82,13 @@ export type PassedJob = Job & {
 };
 
 /**
- * LENIENT Location Filter
+ * ULTRA-LENIENT Location Filter
  * - Remote → always allowed
- * - If candidate has no location → allow Remote only
- * - Hybrid/Onsite → same city (lenient matching)
+ * - If candidate has no location → PASS (let AI decide)
+ * - If job has no location → PASS
+ * - Hybrid/Onsite → same city (lenient matching) or PASS
+ * 
+ * GOAL: Don't block jobs on location alone. AI will handle mismatch explanation.
  */
 function filterByLocation(job: Job, candidate: CandidateProfile): FilterResult {
   // Remote jobs always pass
@@ -99,13 +102,15 @@ function filterByLocation(job: Job, candidate: CandidateProfile): FilterResult {
     return { passed: true };
   }
 
-  // If candidate has no location, only allow remote jobs
+  // If job has no location info, PASS
+  if (!job.location || job.location.trim() === '') {
+    return { passed: true };
+  }
+
+  // If candidate has no location, PASS anyway - let AI explain the mismatch
+  // Many candidates are willing to relocate or work remotely
   if (!candidate.location || candidate.location.trim() === '') {
-    return {
-      passed: false,
-      reason: 'location_mismatch',
-      stage: 'Candidate has no location set - only remote jobs allowed',
-    };
+    return { passed: true }; // Changed from reject to pass
   }
 
   // For Hybrid/Onsite, do lenient city matching
@@ -128,133 +133,50 @@ function filterByLocation(job: Job, candidate: CandidateProfile): FilterResult {
     return { passed: true };
   }
 
-  return {
-    passed: false,
-    reason: 'location_mismatch',
-    stage: `Job is ${job.location_type || 'Onsite'} in "${job.location}" but candidate is in "${candidate.location}"`,
-  };
+  // LENIENT: Pass anyway but note the mismatch - AI will explain
+  // We don't want to block jobs just because location doesn't match
+  return { passed: true }; // Changed from reject to pass
 }
 
 /**
- * LENIENT Job Type Filter
+ * ULTRA-LENIENT Job Type Filter
+ * - ALWAYS PASS - let AI handle job type explanations
  * - If candidate has no preferences → allow all
  * - 1099 and C2C are equivalent
- * - If job has no type → allow (don't reject on missing data)
+ * - If job has no type → allow (don't reject missing data)
+ * 
+ * GOAL: Never block on job type. AI will explain mismatches.
  */
 function filterByJobType(job: Job, candidate: CandidateProfile): FilterResult {
-  // If candidate has no preferences, allow all jobs
-  if (!candidate.preferred_job_types || candidate.preferred_job_types.length === 0) {
-    return { passed: true };
-  }
-
-  // If job has no type, PASS (lenient - don't reject missing data)
-  if (!job.job_type) {
-    return { passed: true };
-  }
-
-  // Normalize job types
-  let jobType = (job.job_type || '').toLowerCase().trim();
-  const preferredTypes = (candidate.preferred_job_types || []).map(t => 
-    String(t).toLowerCase().trim()
-  );
-
-  // 1099 and C2C equivalence
-  if (jobType === '1099' || jobType === 'c2c') {
-    if (preferredTypes.includes('1099') || preferredTypes.includes('c2c')) {
-      return { passed: true };
-    }
-  }
-
-  // Direct match
-  if (preferredTypes.includes(jobType)) {
-    return { passed: true };
-  }
-
-  // Partial match (e.g., "full-time" matches "full time")
-  const normalizedJobType = jobType.replace(/[-_\s]/g, '');
-  for (const pref of preferredTypes) {
-    if (pref.replace(/[-_\s]/g, '') === normalizedJobType) {
-      return { passed: true };
-    }
-  }
-
-  return {
-    passed: false,
-    reason: 'job_type_mismatch',
-    stage: `Job type "${job.job_type}" not in candidate's preferred types: ${preferredTypes.join(', ')}`,
-  };
+  // ALWAYS PASS - we never reject on job type
+  // AI will rank jobs by type preference and explain mismatches
+  return { passed: true };
 }
 
 /**
- * LENIENT Visa Filter
- * - UNSPECIFIED → allow ALL jobs
- * - If job has no visa requirement → allow
- * - Otherwise, match candidate visa to job requirement
+ * ULTRA-LENIENT Visa Filter
+ * - ALWAYS PASS - let AI handle visa explanations
+ * - AI will note if there's a potential visa issue
+ * 
+ * GOAL: Never block on visa. AI will explain requirements.
  */
 function filterByVisa(job: Job, candidate: CandidateProfile): FilterResult {
-  const candidateVisa = (candidate.visa_status || 'UNSPECIFIED').toUpperCase().trim();
-
-  // UNSPECIFIED allows all jobs
-  if (candidateVisa === 'UNSPECIFIED' || candidateVisa === '') {
-    return { passed: true };
-  }
-
-  // If job has no visa requirement, allow
-  if (!job.visa_requirement || job.visa_requirement.trim() === '') {
-    return { passed: true };
-  }
-
-  // Normalize job visa requirement
-  const jobVisa = job.visa_requirement.toUpperCase().trim();
-
-  // US Citizen and Green Card can work any job
-  if (candidateVisa === 'US_CITIZEN' || candidateVisa === 'GREEN_CARD') {
-    return { passed: true };
-  }
-
-  // Check if job allows candidate's visa
-  if (jobVisa.includes(candidateVisa) || jobVisa.includes('ANY') || jobVisa.includes('ALL')) {
-    return { passed: true };
-  }
-
-  // H1B/EAD/TN can work most jobs unless explicitly restricted to citizens
-  if (['H1B', 'EAD', 'TN', 'F1'].includes(candidateVisa)) {
-    if (!jobVisa.includes('CITIZEN') && !jobVisa.includes('US ONLY') && !jobVisa.includes('CLEARANCE')) {
-      return { passed: true };
-    }
-  }
-
-  return {
-    passed: false,
-    reason: 'visa_block',
-    stage: `Job requires "${job.visa_requirement}" but candidate has "${candidate.visa_status}"`,
-  };
+  // ALWAYS PASS - we never reject on visa
+  // AI will note visa requirements and explain any potential issues
+  return { passed: true };
 }
 
 /**
- * LENIENT Experience Filter
- * - Candidate >= (job required - 1 year)
- * - If job has no requirement → pass
+ * ULTRA-LENIENT Experience Filter
+ * - ALWAYS PASS - let AI handle experience explanations
+ * - AI will note if candidate is under-experienced
+ * 
+ * GOAL: Never block on experience. AI will explain gaps.
  */
 function filterByExperience(job: Job, candidate: CandidateProfile): FilterResult {
-  // If job has no experience requirement, pass
-  if (job.required_years_experience === null || job.required_years_experience === undefined) {
-    return { passed: true };
-  }
-
-  const candidateExp = candidate.experience_years || 0;
-  const requiredExp = job.required_years_experience;
-
-  // Lenient: allow 1 year less than required
-  if (candidateExp >= requiredExp - 1) {
-    return { passed: true };
-  }
-
-  return {
-    passed: false,
-    reason: 'experience_mismatch',
-    stage: `Job requires ${requiredExp} years but candidate has ${candidateExp} years`,
-  };
+  // ALWAYS PASS - we never reject on experience
+  // AI will rank jobs based on experience fit and explain gaps
+  return { passed: true };
 }
 
 /**
@@ -297,9 +219,12 @@ function filterByRate(job: Job, candidate: CandidateProfile): FilterResult {
 }
 
 /**
- * LENIENT Skills Filter
- * - At least 30% overlap required
- * - Matches against: job skills, candidate skills, resume_text, summary
+ * ULTRA-LENIENT Skills Filter
+ * - Pass if candidate has ANY skill overlap
+ * - Pass if candidate has no skills (let AI decide from job description)
+ * - Pass if job has no skills defined
+ * 
+ * GOAL: Let jobs through. AI handles skill evaluation.
  */
 function filterBySkills(job: Job, candidate: CandidateProfile): FilterResult {
   // Extract job skills
@@ -325,17 +250,36 @@ function filterBySkills(job: Job, candidate: CandidateProfile): FilterResult {
     return { passed: true };
   }
 
-  // Build candidate skills corpus
+  // Build candidate skills corpus - include structured skills
   const candidateCorpus: string[] = [];
   
   if (Array.isArray(candidate.skills)) {
     candidateCorpus.push(...candidate.skills.map(s => s.toLowerCase().trim()));
+  }
+  // Add structured skills
+  if (Array.isArray(candidate.primary_skills)) {
+    candidateCorpus.push(...candidate.primary_skills.map(s => s.toLowerCase().trim()));
+  }
+  if (Array.isArray(candidate.secondary_skills)) {
+    candidateCorpus.push(...candidate.secondary_skills.map(s => s.toLowerCase().trim()));
+  }
+  if (Array.isArray(candidate.adjacent_skills)) {
+    candidateCorpus.push(...candidate.adjacent_skills.map(s => s.toLowerCase().trim()));
+  }
+  if (Array.isArray(candidate.generic_skills)) {
+    candidateCorpus.push(...candidate.generic_skills.map(s => s.toLowerCase().trim()));
   }
   if (candidate.resume_text) {
     candidateCorpus.push(candidate.resume_text.toLowerCase());
   }
   if (candidate.summary) {
     candidateCorpus.push(candidate.summary.toLowerCase());
+  }
+
+  // If candidate has no skills/resume at all, PASS anyway - let AI decide
+  if (candidateCorpus.length === 0 || candidateCorpus.join('').trim() === '') {
+    console.log(`[Skills Filter] Candidate has no skills/resume - passing to AI`);
+    return { passed: true };
   }
 
   const candidateText = candidateCorpus.join(' ');
@@ -351,21 +295,25 @@ function filterBySkills(job: Job, candidate: CandidateProfile): FilterResult {
 
   const matchRatio = matchCount / normalizedJobSkills.length;
 
-  // Lenient: 30% match threshold
-  if (matchRatio >= 0.3) {
+  // ULTRA-LENIENT: Any match at all → pass
+  if (matchCount >= 1) {
     return { passed: true };
   }
 
-  // If very few skills required (1-2), require at least 1 match
-  if (normalizedJobSkills.length <= 2 && matchCount >= 1) {
-    return { passed: true };
+  // Even with 0 matches, check if any words from job description appear in candidate
+  // This catches cases where skill names don't match exactly
+  if (job.description) {
+    const jobWords = job.description.toLowerCase().split(/\s+/).filter(w => w.length > 4);
+    const hasAnyOverlap = jobWords.some(word => candidateText.includes(word));
+    if (hasAnyOverlap) {
+      return { passed: true };
+    }
   }
 
-  return {
-    passed: false,
-    reason: 'skills_below_threshold',
-    stage: `Only ${Math.round(matchRatio * 100)}% skill match (${matchCount}/${normalizedJobSkills.length}). Need 30%+`,
-  };
+  // Still pass but note low confidence - AI will rank accordingly
+  // We NEVER block at pre-filter level for skills
+  console.log(`[Skills Filter] Low skill match (${matchCount}/${normalizedJobSkills.length}) but passing to AI`);
+  return { passed: true }; // Changed from reject to pass
 }
 
 /**
@@ -480,6 +428,23 @@ export function lenientPreFilter(
       reasonCounts[log.reason] = (reasonCounts[log.reason] || 0) + 1;
     }
     console.log('[Lenient Pre-Filter] Rejection breakdown:', reasonCounts);
+  }
+
+  // SAFETY NET: If ALL jobs were filtered out but we have jobs, pass some anyway
+  // Candidates should always see SOME jobs - AI will explain mismatches
+  if (passed.length === 0 && jobs.length > 0) {
+    console.log(`[Lenient Pre-Filter] SAFETY NET: All jobs filtered! Passing first 10 to AI anyway`);
+    const safetyPassed = jobs.slice(0, 10).map(job => ({
+      ...job,
+      match_source: 'global_match' as const,
+    }));
+    return { 
+      passed: safetyPassed, 
+      filtered: [], 
+      rejectionLogs: [],
+      explicitTargetCount: 0,
+      globalMatchCount: safetyPassed.length,
+    };
   }
 
   return { passed, filtered, rejectionLogs, explicitTargetCount, globalMatchCount };
