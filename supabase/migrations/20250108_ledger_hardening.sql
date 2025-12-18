@@ -110,20 +110,54 @@ CREATE INDEX IF NOT EXISTS idx_cjm_active_feed_optimized
 ON public.candidate_job_matches(candidate_id, visibility_status, ai_priority, match_score DESC);
 
 -- ============================================
--- PART 4: Create email_events table if not exists
+-- PART 4: Create or Update email_events table
 -- ============================================
+
+-- First, create the table if it doesn't exist
 CREATE TABLE IF NOT EXISTS public.email_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   candidate_id UUID NOT NULL,
-  email_type TEXT NOT NULL, -- 'daily_jobs', 'welcome', 'reminder', etc.
   sent_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   opened_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
   clicked_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
-  job_ids UUID[] DEFAULT NULL, -- Jobs included in email
   metadata JSONB DEFAULT NULL
 );
 
--- Indexes for email events
+-- Add email_type column if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'email_events' 
+    AND column_name = 'email_type'
+  ) THEN
+    ALTER TABLE public.email_events 
+    ADD COLUMN email_type TEXT NOT NULL DEFAULT 'daily_jobs';
+    RAISE NOTICE '✅ Added email_type column to email_events';
+  ELSE
+    RAISE NOTICE 'ℹ️  email_type column already exists';
+  END IF;
+END $$;
+
+-- Add job_ids column if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'email_events' 
+    AND column_name = 'job_ids'
+  ) THEN
+    ALTER TABLE public.email_events 
+    ADD COLUMN job_ids UUID[] DEFAULT NULL;
+    RAISE NOTICE '✅ Added job_ids column to email_events';
+  ELSE
+    RAISE NOTICE 'ℹ️  job_ids column already exists';
+  END IF;
+END $$;
+
+-- Indexes for email events (only create if columns exist)
 CREATE INDEX IF NOT EXISTS idx_email_events_candidate 
 ON public.email_events(candidate_id, sent_at DESC);
 
@@ -186,4 +220,3 @@ BEGIN
   RAISE NOTICE '📊 Created: email_events, admin_kpi_snapshots tables';
   RAISE NOTICE '📊 Created performance indexes';
 END $$;
-
