@@ -75,13 +75,20 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
         // Refresh the job list
         await fetchRecommendedJobs();
         
-        if (matchData.matchesFound === 0) {
-          alert('No new matching jobs found. Try updating your profile or check back later.');
+        // API returns newJobsQualified (new jobs added) and alreadyQualified (existing in ledger)
+        const newJobs = matchData.newJobsQualified || 0;
+        const existingJobs = matchData.alreadyQualified || 0;
+        
+        if (newJobs === 0 && existingJobs === 0) {
+          alert('No matching jobs found. Try updating your profile or check back later.');
+        } else if (newJobs === 0) {
+          alert(`You have ${existingJobs} jobs in your feed. No new matches found right now.`);
         } else {
-          alert(`Found ${matchData.matchesFound} new matching jobs!`);
+          alert(`Found ${newJobs} new matching jobs! (${existingJobs} already in your feed)`);
         }
       } else {
-        alert('Error finding new jobs. Please try again.');
+        const errorData = await matchRes.json().catch(() => ({}));
+        alert(errorData.error || 'Error finding new jobs. Please try again.');
       }
     } catch (error) {
       console.error('Error finding new jobs:', error);
@@ -291,9 +298,25 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
             ))}
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-muted">
-            <p>No matched jobs yet. AI agent is matching jobs to your profile.</p>
-            <p className="mt-2 text-xs">Check back in a few minutes!</p>
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
+            <div className="text-4xl mb-3">🔍</div>
+            <p className="text-lg font-semibold text-ink mb-2">No matched jobs yet</p>
+            <p className="text-sm text-muted mb-4">
+              Our AI is actively sourcing and reviewing roles for you.<br />
+              New matches will appear here as they are qualified.
+            </p>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={handleFindNewJobs}
+                disabled={loading}
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-semibold"
+              >
+                {loading ? 'Searching...' : '🔄 Search for Jobs Now'}
+              </button>
+              <p className="text-xs text-muted mt-2">
+                💡 Tip: Make sure your profile has skills and job preferences set.
+              </p>
+            </div>
           </div>
         )}
       </div>
