@@ -207,15 +207,40 @@ export async function fetchAndMatchJobs(
   const thirtyDaysAgo = get30DaysAgoDate();
 
   // Fetch jobs from last 30 days
-  let query = supabase
+  // Note: is_active can be NULL (not yet set) or true
+  // Note: posted_date can be NULL (use created_at as fallback)
+  
+  // First, try with posted_date filter
+  let { data: jobs, error } = await supabase
     .from('scraped_jobs')
     .select('*')
-    .eq('is_active', true)
-    .gte('posted_date', thirtyDaysAgo)
-    .order('posted_date', { ascending: false })
+    .or('is_active.is.null,is_active.eq.true') // Allow NULL or true
+    .or(`posted_date.gte.${thirtyDaysAgo},posted_date.is.null`) // Allow NULL posted_date
+    .order('created_at', { ascending: false })
     .limit(limit);
 
-  const { data: jobs, error } = await query;
+  console.log(`[Job Matching] Query returned ${jobs?.length || 0} jobs from scraped_jobs`);
+  
+  // If no jobs found, try without date filter as fallback
+  if ((!jobs || jobs.length === 0) && !error) {
+    console.log(`[Job Matching] No jobs found with date filter, trying without...`);
+    const fallback = await supabase
+      .from('scraped_jobs')
+      .select('*')
+      .or('is_active.is.null,is_active.eq.true')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    
+    if (fallback.data && fallback.data.length > 0) {
+      jobs = fallback.data;
+      console.log(`[Job Matching] Fallback found ${jobs.length} jobs without date filter`);
+    }
+  }
+  
+  if (jobs && jobs.length > 0) {
+    // Log first job for debugging
+    console.log(`[Job Matching] Sample job: ${jobs[0].title} at ${jobs[0].company}, is_active=${jobs[0].is_active}, posted=${jobs[0].posted_date}, created=${jobs[0].created_at}`);
+  }
 
   if (error) {
     console.error('Failed to fetch jobs:', error);

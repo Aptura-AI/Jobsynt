@@ -53,10 +53,26 @@ export async function POST(req: NextRequest) {
     console.log(`[Match Jobs] Candidate ${profile.id.substring(0, 8)}... has ${existingJobIds.size} existing qualified jobs`);
 
     // Fetch and match ONLY NEW jobs (exclude already qualified jobs)
+    console.log(`[Match Jobs] Starting matching for candidate: ${profile.email}`);
+    console.log(`[Match Jobs] Profile skills: ${(profile.skills || []).join(', ') || 'NONE'}`);
+    console.log(`[Match Jobs] Profile primary_skills: ${(profile.primary_skills || []).join(', ') || 'NONE'}`);
+    console.log(`[Match Jobs] Profile location: ${profile.location || 'NOT SET'}`);
+    
     const matchingResult = await fetchAndMatchJobs(supabase, profile, {
       minScore: 70,
       logFiltering: true,
     });
+    
+    console.log(`[Match Jobs] Matching result: ${matchingResult.stats.total} total, ${matchingResult.stats.passedPreFilter} passed pre-filter, ${matchingResult.eligible.length} eligible`);
+    
+    // Log why jobs were rejected (for debugging)
+    if (matchingResult.stats.filteredOut > 0 && matchingResult.rejectionLogs.length > 0) {
+      const reasonCounts: Record<string, number> = {};
+      matchingResult.rejectionLogs.forEach(log => {
+        reasonCounts[log.reason] = (reasonCounts[log.reason] || 0) + 1;
+      });
+      console.log(`[Match Jobs] Rejection reasons:`, reasonCounts);
+    }
 
     // CRITICAL: Filter out jobs that already exist in candidate_job_matches
     // Jobs are inserted ONCE and NEVER re-processed
@@ -140,6 +156,19 @@ export async function POST(req: NextRequest) {
     const explicitTargets = newEligibleJobs.filter(j => j.match_source === 'explicit_target').length;
     const globalMatches = newEligibleJobs.filter(j => j.match_source === 'global_match').length;
 
+    // Build diagnostic info
+    const diagnostics = {
+      totalJobsInDB: matchingResult.stats.total,
+      passedPreFilter: matchingResult.stats.passedPreFilter,
+      eligibleJobs: matchingResult.eligible.length,
+      rejectionBreakdown: {} as Record<string, number>,
+    };
+    
+    // Count rejection reasons
+    matchingResult.rejectionLogs.forEach(log => {
+      diagnostics.rejectionBreakdown[log.reason] = (diagnostics.rejectionBreakdown[log.reason] || 0) + 1;
+    });
+
     return NextResponse.json({
       success: true,
       newJobsQualified: insertedCount,
@@ -148,6 +177,7 @@ export async function POST(req: NextRequest) {
       explicitTargets,
       globalMatches,
       stats: matchingResult.stats,
+      diagnostics, // Include diagnostic info
       message: `Qualified ${insertedCount} new jobs (${explicitTargets} targeted, ${globalMatches} global). ${existingJobIds.size} already in ledger.`,
     });
   } catch (error: any) {
