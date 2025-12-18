@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getServerSession } from '@/lib/auth';
 import { ALLOWED_JOB_TYPES, isValidJobType } from '@/lib/job-types';
+import { normalizeVisaStatus, isValidVisaStatus } from '@/lib/visa-types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
       work_mode: Array.isArray(body.work_mode) ? body.work_mode : [],
       preferred_job_types, // JSONB array of job types
       preferred_job_type: String(body.preferred_job_type || 'remote').trim(), // Keep for backward compatibility
-      visa_status: String(body.visa_status || '').trim() || '', // Required field (defaults to empty string)
+      visa_status: normalizeVisaStatus(body.visa_status || body.visa), // Normalize and save enum value
       rate_expectation: String(body.rate_expectation || '').trim() || null,
       availability: String(body.availability || 'immediate').trim(),
       summary: String(body.summary || '').trim() || null,
@@ -201,7 +202,7 @@ export async function PUT(req: NextRequest) {
         work_mode: body.work_mode,
         preferred_job_types, // JSONB array
         preferred_job_type: body.preferred_job_type,
-        visa_status: body.visa_status || '', // Required field
+        visa_status: normalizeVisaStatus(body.visa_status || body.visa), // Normalize and save enum value
         rate_expectation: body.rate_expectation,
         availability: body.availability,
         summary: body.summary,

@@ -7,6 +7,7 @@ import Textarea from './Textarea';
 import TagInput from './TagInput';
 import ResumeUpload from './ResumeUpload';
 import { ALLOWED_JOB_TYPES, JOB_TYPE_LABELS, type JobType } from '@/lib/job-types';
+import { VISA_STATUS_VALUES, VISA_STATUS_LABELS, normalizeVisaStatus, type VisaStatus } from '@/lib/visa-types';
 
 type FormState = {
   name: string;
@@ -17,7 +18,7 @@ type FormState = {
   experience: number;
   skills: string[];
   preferred_job_types: JobType[];
-  visa: string;
+  visa: VisaStatus;
   rate: string;
   availability: string;
   summary: string;
@@ -33,7 +34,7 @@ const initialState: FormState = {
   experience: 0,
   skills: [],
   preferred_job_types: [],
-  visa: '',
+  visa: 'UNSPECIFIED',
   rate: '',
   availability: '',
   summary: '',
@@ -52,7 +53,6 @@ export default function ProfileForm() {
       try {
         // Check URL params for email (from password reset flow)
         const urlParams = new URLSearchParams(window.location.search);
-        const emailParam = urlParams.get('email');
         const verified = urlParams.get('verified') === 'true';
 
         // Try to load from profile API first
@@ -71,7 +71,8 @@ export default function ProfileForm() {
               preferred_job_types: Array.isArray(data.profile.preferred_job_types) 
                 ? data.profile.preferred_job_types 
                 : [],
-              visa: data.profile.visa_status || '',
+              // Normalize visa status from database to enum value
+              visa: normalizeVisaStatus(data.profile.visa_status),
               rate: data.profile.rate_expectation || '',
               availability: data.profile.availability || 'immediate',
               summary: data.profile.summary || '',
@@ -105,6 +106,14 @@ export default function ProfileForm() {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
+
+    // Validate visa selection
+    if (!state.visa) {
+      setMessage('Please select your visa status');
+      setLoading(false);
+      return;
+    }
+
     try {
       // Use PUT to update existing profile, POST for new
       const res = await fetch('/api/profile', {
@@ -113,6 +122,7 @@ export default function ProfileForm() {
         body: JSON.stringify({
           ...state,
           experience_years: state.experience,
+          visa_status: state.visa, // Send enum value
         }),
       });
       const data = await res.json();
@@ -159,9 +169,29 @@ export default function ProfileForm() {
           value={state.experience}
           onChange={(e) => setState({ ...state, experience: Number(e.target.value) })}
         />
-        <Input label="Visa status" required value={state.visa} onChange={(e) => setState({ ...state, visa: e.target.value })} placeholder="e.g., US Citizen, H1B, etc." />
-        <Input label="Rate expectation" value={state.rate} onChange={(e) => setState({ ...state, rate: e.target.value })} />
-        <Input label="Availability" value={state.availability} onChange={(e) => setState({ ...state, availability: e.target.value })} />
+        
+        {/* Visa Status Dropdown - REQUIRED */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-ink">
+            Visa Status <span className="text-red-500">*</span>
+          </label>
+          <select
+            required
+            value={state.visa}
+            onChange={(e) => setState({ ...state, visa: e.target.value as VisaStatus })}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="" disabled>Select visa status</option>
+            {VISA_STATUS_VALUES.map((visa) => (
+              <option key={visa} value={visa}>
+                {VISA_STATUS_LABELS[visa]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <Input label="Rate expectation" value={state.rate} onChange={(e) => setState({ ...state, rate: e.target.value })} placeholder="e.g., $80/hr" />
+        <Input label="Availability" value={state.availability} onChange={(e) => setState({ ...state, availability: e.target.value })} placeholder="e.g., immediate, 2 weeks" />
       </div>
 
       <div className="mt-4">
@@ -231,4 +261,3 @@ export default function ProfileForm() {
     </form>
   );
 }
-

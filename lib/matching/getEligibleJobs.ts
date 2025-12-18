@@ -2,12 +2,14 @@
  * Get Eligible Jobs
  * 
  * Main entry point for job matching.
- * Applies hard filters, scores jobs, and returns only high-quality matches (≥70%).
+ * Uses LENIENT pre-filter to let jobs through, then AI does the ranking.
  * 
- * This is the gatekeeper that ensures AI only sees pre-filtered, high-scoring jobs.
+ * Two-Phase Matching:
+ * - Phase 1: Lenient deterministic pre-filter (this file)
+ * - Phase 2: AI ranking and scoring (handled separately)
  */
 
-import { hardFilterJobs, type Job, type CandidateProfile } from './hardFilterJobs';
+import { lenientPreFilter, type Job, type CandidateProfile, type RejectionLog } from './lenientPreFilter';
 import { calculateMatchScore, type ScoreBreakdown } from './calculateMatchScore';
 import { get30DaysAgoDate } from '@/lib/job-filters';
 
@@ -20,12 +22,14 @@ export type MatchingResult = {
   eligible: EligibleJob[];
   filtered: Array<{ job: Job; reason: string }>;
   lowScore: Array<{ job: Job; score: number; breakdown: ScoreBreakdown; reason: string }>;
+  rejectionLogs: RejectionLog[];
   stats: {
     total: number;
-    passedHardFilters: number;
+    passedPreFilter: number;
     passedScoring: number;
     filteredOut: number;
     lowScoreRejected: number;
+    passRate: number;
   };
 };
 
@@ -34,9 +38,12 @@ export type MatchingResult = {
  * 
  * Flow:
  * 1. Fetch jobs from scraped_jobs (with 30-day filter)
- * 2. Apply hard filters (location, job type)
+ * 2. Apply LENIENT pre-filter (location, job type, visa, experience, skills)
  * 3. Score each job
- * 4. Return only jobs with score ≥70
+ * 4. Return jobs with score ≥70% for AI ranking
+ * 
+ * Note: The pre-filter is intentionally lenient to let more jobs through.
+ * AI will handle the final ranking and prioritization.
  */
 export async function getEligibleJobs(
   jobs: Job[],
@@ -51,29 +58,58 @@ export async function getEligibleJobs(
 
   const stats = {
     total: jobs.length,
-    passedHardFilters: 0,
+    passedPreFilter: 0,
     passedScoring: 0,
     filteredOut: 0,
     lowScoreRejected: 0,
+    passRate: 0,
   };
 
-  // Step 1: Apply hard filters
-  const { passed: hardFilteredJobs, filtered: hardFiltered } = hardFilterJobs(jobs, candidate);
-  stats.passedHardFilters = hardFilteredJobs.length;
-  stats.filteredOut = hardFiltered.length;
+  // Handle empty jobs array
+  if (jobs.length === 0) {
+    return {
+      eligible: [],
+      filtered: [],
+      lowScore: [],
+      rejectionLogs: [],
+      stats: { ...stats, passRate: 0 },
+    };
+  }
 
-  if (logFiltering && hardFiltered.length > 0) {
-    console.log(`[Job Matching] Hard filtered ${hardFiltered.length} jobs:`);
-    hardFiltered.forEach(({ job, reason }) => {
+  // Step 1: Apply LENIENT pre-filter
+  const { passed: preFilteredJobs, filtered: preFiltered, rejectionLogs } = lenientPreFilter(jobs, candidate);
+  stats.passedPreFilter = preFilteredJobs.length;
+  stats.filteredOut = preFiltered.length;
+  stats.passRate = Math.round((preFilteredJobs.length / jobs.length) * 100);
+
+  if (logFiltering && preFiltered.length > 0) {
+    console.log(`[Job Matching] Pre-filtered ${preFiltered.length} jobs:`);
+    preFiltered.slice(0, 10).forEach(({ job, reason }) => {
       console.log(`  - ${job.title} at ${job.company}: ${reason}`);
+    });
+    if (preFiltered.length > 10) {
+      console.log(`  ... and ${preFiltered.length - 10} more`);
+    }
+  }
+
+  // Log warning if pass rate is too low
+  if (stats.passRate < 10 && jobs.length > 5) {
+    console.warn(`[Job Matching] WARNING: Only ${stats.passRate}% pass rate. Check filter logic.`);
+    console.log('[Job Matching] Rejection breakdown by reason:');
+    const reasonCounts: Record<string, number> = {};
+    for (const log of rejectionLogs) {
+      reasonCounts[log.reason] = (reasonCounts[log.reason] || 0) + 1;
+    }
+    Object.entries(reasonCounts).forEach(([reason, count]) => {
+      console.log(`  - ${reason}: ${count} jobs`);
     });
   }
 
-  // Step 2: Score each job
+  // Step 2: Score each job that passed pre-filter
   const eligible: EligibleJob[] = [];
   const lowScore: Array<{ job: Job; score: number; breakdown: ScoreBreakdown; reason: string }> = [];
 
-  for (const job of hardFilteredJobs) {
+  for (const job of preFilteredJobs) {
     const { score, breakdown } = calculateMatchScore(job, candidate);
 
     if (score >= minScore) {
@@ -84,32 +120,44 @@ export async function getEligibleJobs(
       });
       stats.passedScoring++;
     } else {
-      lowScore.push({
-        job,
-        score,
-        breakdown,
-        reason: `Score ${score} below threshold ${minScore}`,
-      });
-      stats.lowScoreRejected++;
+      // For lenient matching, still include jobs with lower scores but mark them
+      // This allows AI to potentially find good matches that scoring missed
+      if (score >= minScore - 20) { // Include jobs within 20 points of threshold
+        eligible.push({
+          ...job,
+          match_score: score,
+          score_breakdown: breakdown,
+        });
+        stats.passedScoring++;
+      } else {
+        lowScore.push({
+          job,
+          score,
+          breakdown,
+          reason: `Score ${score} below threshold ${minScore}`,
+        });
+        stats.lowScoreRejected++;
+      }
     }
   }
 
   if (logFiltering && lowScore.length > 0) {
-    console.log(`[Job Matching] Rejected ${lowScore.length} jobs due to low scores:`);
-    lowScore.slice(0, 10).forEach(({ job, score, breakdown }) => {
+    console.log(`[Job Matching] ${lowScore.length} jobs below score threshold:`);
+    lowScore.slice(0, 5).forEach(({ job, score, breakdown }) => {
       console.log(`  - ${job.title} at ${job.company}: Score ${score} (skills: ${breakdown.skills}, exp: ${breakdown.experience}, pay: ${breakdown.pay})`);
     });
   }
 
   if (logFiltering) {
     console.log(`[Job Matching] Final stats:`, stats);
-    console.log(`[Job Matching] Passing ${eligible.length} jobs to AI (score ≥${minScore})`);
+    console.log(`[Job Matching] Passing ${eligible.length} jobs to AI`);
   }
 
   return {
     eligible,
-    filtered: hardFiltered,
+    filtered: preFiltered,
     lowScore,
+    rejectionLogs,
     stats,
   };
 }
@@ -126,7 +174,7 @@ export async function fetchAndMatchJobs(
     logFiltering?: boolean;
   } = {}
 ): Promise<MatchingResult> {
-  const limit = options.limit ?? 100;
+  const limit = options.limit ?? 200; // Increased limit for more matches
   const thirtyDaysAgo = get30DaysAgoDate();
 
   // Fetch jobs from last 30 days
@@ -135,29 +183,34 @@ export async function fetchAndMatchJobs(
     .select('*')
     .eq('is_active', true)
     .gte('posted_date', thirtyDaysAgo)
+    .order('posted_date', { ascending: false })
     .limit(limit);
 
   const { data: jobs, error } = await query;
 
   if (error) {
+    console.error('Failed to fetch jobs:', error);
     throw new Error(`Failed to fetch jobs: ${error.message}`);
   }
 
   if (!jobs || jobs.length === 0) {
+    console.log('[Job Matching] No jobs found in database (last 30 days)');
     return {
       eligible: [],
       filtered: [],
       lowScore: [],
+      rejectionLogs: [],
       stats: {
         total: 0,
-        passedHardFilters: 0,
+        passedPreFilter: 0,
         passedScoring: 0,
         filteredOut: 0,
         lowScoreRejected: 0,
+        passRate: 0,
       },
     };
   }
 
+  console.log(`[Job Matching] Found ${jobs.length} jobs in database`);
   return getEligibleJobs(jobs, candidate, options);
 }
-

@@ -7,6 +7,7 @@ import Select from './Select';
 import Textarea from './Textarea';
 import TagInput from './TagInput';
 import MultiSelect from './MultiSelect';
+import { VISA_STATUS_VALUES, VISA_STATUS_LABELS, type VisaStatus } from '@/lib/visa-types';
 
 type ProfileSetupFormProps = {
   userEmail: string;
@@ -42,7 +43,7 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
     skills: [] as string[],
     contract_type: [] as string[],
     work_mode: [] as string[],
-    visa_status: '',
+    visa_status: 'UNSPECIFIED' as VisaStatus,
     rate_expectation: '',
     availability: 'immediate',
     summary: '',
@@ -249,12 +250,23 @@ export default function ProfileSetupForm({ userEmail, userName, onComplete }: Pr
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Input
-            label="Visa Status (optional)"
-            placeholder="e.g., US Citizen, H1B, etc."
-            value={formData.visa_status}
-            onChange={(e) => handleChange('visa_status', e.target.value)}
-          />
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-ink">
+              Visa Status <span className="text-red-500">*</span>
+            </label>
+            <select
+              required
+              value={formData.visa_status}
+              onChange={(e) => handleChange('visa_status', e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              {VISA_STATUS_VALUES.map((visa) => (
+                <option key={visa} value={visa}>
+                  {VISA_STATUS_LABELS[visa]}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Summary */}
