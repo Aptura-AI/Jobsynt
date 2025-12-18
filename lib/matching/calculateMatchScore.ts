@@ -209,23 +209,27 @@ function scoreJobTitle(job: Job, candidate: CandidateProfile): number {
 }
 
 /**
- * Score: Experience (Max 20 points, NO NEGATIVE)
+ * Score: Experience (Max 20 points)
  * Candidate ≥ required → +20
+ * Within 20% (pre-filter allows this) → +15
  * Within 1 year → +10
- * Missing by >2 years → 0 (no penalty, AI handles explanation)
- * 
- * LENIENT: We don't penalize for experience gaps
  */
 function scoreExperience(job: Job, candidate: CandidateProfile): number {
   const required = job.required_years_experience;
   const candidateExp = candidate.experience_years || 0;
 
   if (required === null || required === undefined) {
-    return 0; // No requirement specified
+    return 10; // No requirement specified - neutral score
   }
 
   if (candidateExp >= required) {
-    return 20;
+    return 20; // Meets or exceeds
+  }
+
+  // Within 20% margin (which is what pre-filter allows)
+  const minRequired = required * 0.8;
+  if (candidateExp >= minRequired) {
+    return 15;
   }
 
   const diff = required - candidateExp;
@@ -233,22 +237,17 @@ function scoreExperience(job: Job, candidate: CandidateProfile): number {
     return 10;
   }
 
-  if (diff <= 3) {
-    return 5; // Small bonus for being close
-  }
-
-  return 0; // No penalty - AI will explain the gap
+  return 5; // Some experience is better than none
 }
 
 /**
- * Score: Degree / Certification (Max 20 points, NO NEGATIVE)
+ * Score: Degree / Certification (Max 20 points)
  * 
  * Rules:
  * - Only scored if job specifies education_required or certification_required
  * - Required & present → +20
- * - Required & missing → 0 (no penalty, AI handles explanation)
- * 
- * LENIENT: We don't penalize for missing credentials
+ * - Required & missing → +5 (partial credit for other qualifications)
+ * - No requirement → +10 (neutral)
  */
 function scoreDegree(job: Job, candidate: CandidateProfile): number {
   // Check education_required first (new field)
@@ -256,7 +255,7 @@ function scoreDegree(job: Job, candidate: CandidateProfile): number {
   const certificationRequired = job.certification_required;
 
   if (!educationRequired && !certificationRequired) {
-    return 0; // No requirement specified
+    return 10; // No requirement specified - neutral score
   }
 
   const candidateDegrees = Array.isArray(candidate.degrees)
@@ -290,16 +289,14 @@ function scoreDegree(job: Job, candidate: CandidateProfile): number {
     return 20; // Required and present
   }
 
-  return 0; // No penalty - AI will note the gap
+  return 5; // Missing but may have equivalent experience
 }
 
 /**
- * Score: Pay Rate (Max 10 points, NO NEGATIVE)
- * Mentioned and ≥ expectation → +10
- * Mentioned and below → 0 (no penalty, AI handles explanation)
- * Missing → 0
- * 
- * LENIENT: We don't penalize for pay rate mismatches
+ * Score: Pay Rate (Max 10 points)
+ * Meets or exceeds expectation → +10
+ * Within 25% margin (pre-filter allows this) → +7
+ * Missing data → +5 (neutral)
  */
 function scorePayRate(job: Job, candidate: CandidateProfile): number {
   // Try to get pay rate from structured fields first
@@ -314,7 +311,7 @@ function scorePayRate(job: Job, candidate: CandidateProfile): number {
   }
 
   if (jobPayRate === null) {
-    return 0; // No pay rate mentioned
+    return 5; // No pay rate mentioned - neutral
   }
 
   // Get candidate expectation
@@ -327,52 +324,45 @@ function scorePayRate(job: Job, candidate: CandidateProfile): number {
   }
 
   if (candidateMinPay === null) {
-    return 0; // No expectation specified
+    return 5; // No expectation specified - neutral
   }
 
   if (jobPayRate >= candidateMinPay) {
     return 10; // Meets or exceeds expectation
   }
 
-  // Even if below expectation, give partial credit if close (within 20%)
-  if (jobPayRate >= candidateMinPay * 0.8) {
-    return 5;
+  // Within 25% margin (which is what pre-filter allows)
+  if (jobPayRate >= candidateMinPay * 0.75) {
+    return 7;
   }
 
-  return 0; // No penalty - AI will note the difference
+  return 3; // Below expectation but passed filter
 }
 
 /**
  * Calculate total match score for a job-candidate pair
  * 
- * BASELINE SCORE:
- * - Every job starts with 50 points (neutral match)
- * - Matching factors add points
- * - Mismatches subtract points
- * - This ensures candidates always see jobs even with sparse data
+ * Scoring breakdown (max 100 points):
+ * - Skills: 0-25 points
+ * - Job Title: 0-25 points
+ * - Experience: 0-20 points
+ * - Degree/Cert: 0-20 points
+ * - Pay Rate: 0-10 points
  */
 export function calculateMatchScore(
   job: Job,
   candidate: CandidateProfile
 ): { score: number; breakdown: ScoreBreakdown } {
-  // Start with baseline of 50 points (neutral match)
-  const BASELINE = 50;
-  
   const skillsScore = scoreSkills(job, candidate);
   const jobTitleScore = scoreJobTitle(job, candidate);
   const experienceScore = scoreExperience(job, candidate);
   const degreeScore = scoreDegree(job, candidate);
   const payScore = scorePayRate(job, candidate);
 
-  const total = BASELINE + skillsScore + jobTitleScore + experienceScore + degreeScore + payScore;
+  const total = skillsScore + jobTitleScore + experienceScore + degreeScore + payScore;
 
   // Clamp score to 0-100 range
   const clampedScore = Math.max(0, Math.min(100, total));
-  
-  // Debug log for low scores
-  if (clampedScore < 50) {
-    console.log(`[Score] Low score ${clampedScore} for "${job.title}": skills=${skillsScore}, title=${jobTitleScore}, exp=${experienceScore}, degree=${degreeScore}, pay=${payScore}`);
-  }
 
   return {
     score: clampedScore,

@@ -138,10 +138,8 @@ export async function getEligibleJobs(
       continue;
     }
 
-    // GLOBAL MATCHES: Very lenient scoring threshold
-    // With baseline of 50, any job with positive factors passes
-    // We NEVER reject jobs at the scoring stage - AI does final ranking
-    if (score >= 40) { // Lowered from minScore to 40 (baseline 50 - 10 tolerance)
+    // GLOBAL MATCHES: Apply score threshold (70% default)
+    if (score >= minScore) {
       eligible.push({
         ...job,
         match_score: score,
@@ -150,21 +148,23 @@ export async function getEligibleJobs(
       });
       stats.passedScoring++;
     } else {
-      // Still include low-scoring jobs - AI will rank them lower
-      // This ensures candidates always have some jobs to see
-      console.log(`[Scoring] Low score ${score} for "${job.title}" but including anyway`);
-      eligible.push({
-        ...job,
-        match_score: Math.max(score, 40), // Minimum score of 40
-        score_breakdown: breakdown,
-        match_source: job.match_source || 'global_match',
+      // Jobs below threshold are rejected
+      lowScore.push({
+        job,
+        score,
+        breakdown,
+        reason: `Score ${score} below threshold ${minScore}`,
       });
-      stats.passedScoring++;
+      stats.lowScoreRejected++;
     }
   }
 
-  // Note: We no longer reject jobs based on score - all pass to AI
-  // lowScore array is kept for compatibility but will be empty
+  if (logFiltering && lowScore.length > 0) {
+    console.log(`[Job Matching] ${lowScore.length} jobs below score threshold:`);
+    lowScore.slice(0, 5).forEach(({ job, score, breakdown }) => {
+      console.log(`  - ${job.title} at ${job.company}: Score ${score} (skills: ${breakdown.skills}, exp: ${breakdown.experience}, pay: ${breakdown.pay})`);
+    });
+  }
 
   if (logFiltering) {
     console.log(`[Job Matching] Final stats:`, stats);
