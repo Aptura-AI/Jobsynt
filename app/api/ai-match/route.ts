@@ -87,7 +87,9 @@ export async function POST(req: NextRequest) {
     const aiProcessedJobs: Array<{ jobId: string; matchScore: number; aiConfirmed: boolean }> = [];
 
     for (const match of matches) {
-      const job = match.scraped_jobs;
+      // Handle both array and object types from Supabase join
+      const jobData = match.scraped_jobs;
+      const job = Array.isArray(jobData) ? jobData[0] : jobData;
       if (!job || !job.id) {
         continue;
       }
