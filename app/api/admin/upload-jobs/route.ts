@@ -192,6 +192,17 @@ export async function POST(req: NextRequest) {
         'description': 'key_requirements',
         'keyrequirements': 'key_requirements',
         'req': 'key_requirements',
+        // Target candidate IDs (recruiter-targeted jobs)
+        'target candidate ids': 'target_candidate_ids',
+        'target candidates': 'target_candidate_ids',
+        'targetcandidateids': 'target_candidate_ids',
+        'target_candidate_ids': 'target_candidate_ids',
+        'candidate ids': 'target_candidate_ids',
+        'candidateids': 'target_candidate_ids',
+        'target uuids': 'target_candidate_ids',
+        'targetuuids': 'target_candidate_ids',
+        'assigned to': 'target_candidate_ids',
+        'assignedto': 'target_candidate_ids',
       };
       return mapping[lower] || null;
     };
@@ -316,6 +327,12 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        // Handle target_candidate_ids - accept raw comma-separated UUIDs
+        // Don't validate UUID format at insert time, just trim whitespace
+        const targetCandidateIds = row.target_candidate_ids 
+          ? String(row.target_candidate_ids).trim() 
+          : null;
+
         const jobData = {
           title: jobTitle,
           company: jobCompany,
@@ -329,6 +346,7 @@ export async function POST(req: NextRequest) {
           profile_id: null,
           is_constant_search: false,
           is_real: true,
+          target_candidate_ids: targetCandidateIds, // Recruiter-targeted candidate UUIDs
         };
 
         // Use upsert with onConflict: 'url' for automatic deduplication

@@ -5,6 +5,12 @@
  * This is Phase 1 of two-phase matching.
  * AI does the final ranking in Phase 2.
  * 
+ * EXPLICIT TARGETING:
+ * - If a job has target_candidate_ids that includes the candidate's ID,
+ *   the job BYPASSES all pre-filters (recruiter intent is honored)
+ * - Explicit targets are marked with match_source = "explicit_target"
+ * 
+ * GLOBAL JOBS (no explicit targeting):
  * A job passes if ALL of these are true (lenient rules):
  * - Location: Remote allowed, or same city, or candidate has no city
  * - Visa: UNSPECIFIED allows all, otherwise match or job has no visa requirement
@@ -12,6 +18,8 @@
  * - Rate: Pass if job rate >= candidate expectation, or either is missing
  * - Skills: At least 30% overlap (very lenient)
  */
+
+import { shouldCandidateSeeJob } from './targetCandidates';
 
 export type Job = {
   id?: string;
@@ -29,8 +37,11 @@ export type Job = {
   required_skills?: string | null;
   must_have_skills?: string | null;
   description?: string | null;
+  target_candidate_ids?: string | null; // Recruiter-targeted candidate UUIDs
   [key: string]: any;
 };
+
+export type MatchSource = 'explicit_target' | 'global_match';
 
 export type CandidateProfile = {
   id?: string;
@@ -57,8 +68,12 @@ export type RejectionLog = {
   job_id: string | undefined;
   candidate_id: string | undefined;
   rejected_at_stage: 'pre-filter';
-  reason: 'location_mismatch' | 'job_type_mismatch' | 'visa_block' | 'experience_mismatch' | 'skills_below_threshold' | 'rate_mismatch';
+  reason: 'location_mismatch' | 'job_type_mismatch' | 'visa_block' | 'experience_mismatch' | 'skills_below_threshold' | 'rate_mismatch' | 'not_targeted';
   details: string;
+};
+
+export type PassedJob = Job & {
+  match_source: MatchSource;
 };
 
 /**
@@ -352,21 +367,61 @@ function filterBySkills(job: Job, candidate: CandidateProfile): FilterResult {
  * Apply LENIENT pre-filter to jobs
  * 
  * Goal: Let jobs through to AI for ranking
+ * 
+ * EXPLICIT TARGETING OVERRIDE:
+ * - If candidate is in job.target_candidate_ids → BYPASS all filters
+ * - Mark as match_source = "explicit_target"
+ * - Recruiter intent is ALWAYS honored
+ * 
  * Returns both passed jobs and rejection logs for debugging
  */
 export function lenientPreFilter(
   jobs: Job[],
   candidate: CandidateProfile
 ): { 
-  passed: Job[]; 
+  passed: PassedJob[]; 
   filtered: Array<{ job: Job; reason: string }>; 
   rejectionLogs: RejectionLog[];
+  explicitTargetCount: number;
+  globalMatchCount: number;
 } {
-  const passed: Job[] = [];
+  const passed: PassedJob[] = [];
   const filtered: Array<{ job: Job; reason: string }> = [];
   const rejectionLogs: RejectionLog[] = [];
+  let explicitTargetCount = 0;
+  let globalMatchCount = 0;
+
+  const candidateId = candidate.id || '';
 
   for (const job of jobs) {
+    // STEP 1: Check explicit targeting (BYPASSES ALL FILTERS)
+    const targetCheck = shouldCandidateSeeJob(job, candidateId);
+    
+    if (targetCheck.matchSource === 'explicit_target') {
+      // Recruiter explicitly targeted this candidate - ALWAYS include
+      passed.push({
+        ...job,
+        match_source: 'explicit_target',
+      });
+      explicitTargetCount++;
+      console.log(`[Explicit Target] Job "${job.title}" at ${job.company} → Candidate ${candidateId.substring(0, 8)}...`);
+      continue;
+    }
+    
+    // If job is restricted to specific candidates and this candidate is not one of them
+    if (!targetCheck.shouldSee) {
+      filtered.push({ job, reason: 'Job restricted to specific candidates' });
+      rejectionLogs.push({
+        job_id: job.id,
+        candidate_id: candidateId,
+        rejected_at_stage: 'pre-filter',
+        reason: 'not_targeted',
+        details: 'Job is restricted to specific candidates and this candidate is not targeted',
+      });
+      continue;
+    }
+
+    // STEP 2: GLOBAL job - apply normal lenient filters
     let rejected = false;
     let rejectionReason: RejectionLog['reason'] | null = null;
     let rejectionDetails = '';
@@ -395,18 +450,24 @@ export function lenientPreFilter(
       filtered.push({ job, reason: rejectionDetails });
       rejectionLogs.push({
         job_id: job.id,
-        candidate_id: candidate.id,
+        candidate_id: candidateId,
         rejected_at_stage: 'pre-filter',
         reason: rejectionReason,
         details: rejectionDetails,
       });
     } else {
-      passed.push(job);
+      passed.push({
+        ...job,
+        match_source: 'global_match',
+      });
+      globalMatchCount++;
     }
   }
 
   // Log summary for debugging
-  console.log(`[Lenient Pre-Filter] ${passed.length}/${jobs.length} jobs passed (${Math.round((passed.length / jobs.length) * 100)}%)`);
+  const passRate = jobs.length > 0 ? Math.round((passed.length / jobs.length) * 100) : 0;
+  console.log(`[Lenient Pre-Filter] ${passed.length}/${jobs.length} jobs passed (${passRate}%)`);
+  console.log(`[Lenient Pre-Filter] Breakdown: ${explicitTargetCount} explicit targets, ${globalMatchCount} global matches`);
   
   if (filtered.length > 0) {
     const reasonCounts: Record<string, number> = {};
@@ -416,7 +477,7 @@ export function lenientPreFilter(
     console.log('[Lenient Pre-Filter] Rejection breakdown:', reasonCounts);
   }
 
-  return { passed, filtered, rejectionLogs };
+  return { passed, filtered, rejectionLogs, explicitTargetCount, globalMatchCount };
 }
 
 // Export the old function name for backward compatibility

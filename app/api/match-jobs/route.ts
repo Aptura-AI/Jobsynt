@@ -49,13 +49,15 @@ export async function POST(req: NextRequest) {
       candidate_id: profile.id,
       job_id: job.id!,
       match_score: job.match_score,
+      match_source: job.match_source || 'global_match', // Track explicit vs global
       reasons: job.score_breakdown ? [
         `Skills: ${job.score_breakdown.skills} points`,
         `Job Title: ${job.score_breakdown.jobTitle} points`,
         `Experience: ${job.score_breakdown.experience} points`,
         `Degree/Cert: ${job.score_breakdown.degree} points`,
         `Pay Rate: ${job.score_breakdown.pay} points`,
-      ] : [],
+        job.match_source === 'explicit_target' ? '🎯 Recruiter-targeted' : '',
+      ].filter(Boolean) : [],
     }));
 
     // Use upsert to avoid duplicates (UNIQUE constraint on candidate_id, job_id)
@@ -73,11 +75,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Count explicit targets
+    const explicitTargets = matchingResult.eligible.filter(j => j.match_source === 'explicit_target').length;
+    const globalMatches = matchingResult.eligible.filter(j => j.match_source === 'global_match').length;
+
     return NextResponse.json({
       success: true,
       matchesFound: matchingResult.eligible.length,
+      explicitTargets,
+      globalMatches,
       stats: matchingResult.stats,
-      message: `Found ${matchingResult.eligible.length} matching jobs (score ≥70%)`,
+      message: `Found ${matchingResult.eligible.length} matching jobs (${explicitTargets} targeted, ${globalMatches} global)`,
     });
   } catch (error: any) {
     console.error('Job matching error:', error);

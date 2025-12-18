@@ -53,6 +53,7 @@ export type MatchedJob = {
   url?: string | null;
   posted_date?: string | null;
   match_score: number;
+  match_source?: 'explicit_target' | 'global_match';
   reasons?: string[] | null;
 };
 
@@ -98,6 +99,7 @@ export async function rankJobsWithAI(
       .select(`
         job_id,
         match_score,
+        match_source,
         reasons,
         job_status,
         scraped_jobs (
@@ -169,6 +171,7 @@ export async function rankJobsWithAI(
           url: job.url,
           posted_date: job.posted_date,
           match_score: match.match_score,
+          match_source: match.match_source || 'global_match',
           reasons: match.reasons || [],
         };
       });
@@ -208,6 +211,7 @@ export async function rankJobsWithAI(
     };
 
     // Prepare jobs data for AI
+    // Include match_source so AI knows which jobs are recruiter-targeted
     const jobsData = matchedJobs.map(job => ({
       id: job.id,
       title: job.title,
@@ -224,7 +228,12 @@ export async function rankJobsWithAI(
       postedDate: job.posted_date,
       matchScore: job.match_score,
       systemReasons: job.reasons || [],
+      matchSource: job.match_source, // 'explicit_target' or 'global_match'
+      isRecruiterTargeted: job.match_source === 'explicit_target',
     }));
+
+    // Count explicit targets for AI context
+    const explicitTargetCount = jobsData.filter(j => j.isRecruiterTargeted).length;
 
     // Call OpenAI Responses API with prompt version 3
     try {
@@ -236,7 +245,7 @@ export async function rankJobsWithAI(
         input: {
           candidate: candidateData,
           jobs: jobsData,
-          note: 'These jobs have already passed hard filters (location, job type, experience, rate) and scored ≥70% on deterministic matching. Your role is to rank, curate, and provide recruiter-level guidance.',
+          note: `These jobs have already passed hard filters and scored ≥70% on deterministic matching. ${explicitTargetCount} job(s) were EXPLICITLY targeted to this candidate by a recruiter - NEVER discard these. Your role is to rank, curate, and provide recruiter-level guidance. For explicitly targeted jobs, say "This role was specifically shortlisted for you."`,
         } as any,
       });
 

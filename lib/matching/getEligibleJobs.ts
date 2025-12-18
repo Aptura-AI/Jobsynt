@@ -9,13 +9,14 @@
  * - Phase 2: AI ranking and scoring (handled separately)
  */
 
-import { lenientPreFilter, type Job, type CandidateProfile, type RejectionLog } from './lenientPreFilter';
+import { lenientPreFilter, type Job, type CandidateProfile, type RejectionLog, type MatchSource, type PassedJob } from './lenientPreFilter';
 import { calculateMatchScore, type ScoreBreakdown } from './calculateMatchScore';
 import { get30DaysAgoDate } from '@/lib/job-filters';
 
 export type EligibleJob = Job & {
   match_score: number;
   score_breakdown: ScoreBreakdown;
+  match_source: MatchSource;
 };
 
 export type MatchingResult = {
@@ -30,6 +31,8 @@ export type MatchingResult = {
     filteredOut: number;
     lowScoreRejected: number;
     passRate: number;
+    explicitTargetCount: number;
+    globalMatchCount: number;
   };
 };
 
@@ -63,6 +66,8 @@ export async function getEligibleJobs(
     filteredOut: 0,
     lowScoreRejected: 0,
     passRate: 0,
+    explicitTargetCount: 0,
+    globalMatchCount: 0,
   };
 
   // Handle empty jobs array
@@ -76,8 +81,17 @@ export async function getEligibleJobs(
     };
   }
 
-  // Step 1: Apply LENIENT pre-filter
-  const { passed: preFilteredJobs, filtered: preFiltered, rejectionLogs } = lenientPreFilter(jobs, candidate);
+  // Step 1: Apply LENIENT pre-filter (includes explicit targeting)
+  const { 
+    passed: preFilteredJobs, 
+    filtered: preFiltered, 
+    rejectionLogs,
+    explicitTargetCount,
+    globalMatchCount,
+  } = lenientPreFilter(jobs, candidate);
+  
+  stats.explicitTargetCount = explicitTargetCount;
+  stats.globalMatchCount = globalMatchCount;
   stats.passedPreFilter = preFilteredJobs.length;
   stats.filteredOut = preFiltered.length;
   stats.passRate = Math.round((preFilteredJobs.length / jobs.length) * 100);
@@ -112,11 +126,25 @@ export async function getEligibleJobs(
   for (const job of preFilteredJobs) {
     const { score, breakdown } = calculateMatchScore(job, candidate);
 
+    // EXPLICIT TARGETS: Always include regardless of score (recruiter intent)
+    if (job.match_source === 'explicit_target') {
+      eligible.push({
+        ...job,
+        match_score: Math.max(score, 70), // Ensure minimum score of 70 for explicit targets
+        score_breakdown: breakdown,
+        match_source: 'explicit_target',
+      });
+      stats.passedScoring++;
+      continue;
+    }
+
+    // GLOBAL MATCHES: Apply score threshold
     if (score >= minScore) {
       eligible.push({
         ...job,
         match_score: score,
         score_breakdown: breakdown,
+        match_source: job.match_source || 'global_match',
       });
       stats.passedScoring++;
     } else {
@@ -127,6 +155,7 @@ export async function getEligibleJobs(
           ...job,
           match_score: score,
           score_breakdown: breakdown,
+          match_source: job.match_source || 'global_match',
         });
         stats.passedScoring++;
       } else {
@@ -207,6 +236,8 @@ export async function fetchAndMatchJobs(
         filteredOut: 0,
         lowScoreRejected: 0,
         passRate: 0,
+        explicitTargetCount: 0,
+        globalMatchCount: 0,
       },
     };
   }
