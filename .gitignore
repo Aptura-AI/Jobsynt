@@ -63,8 +63,9 @@ public/**/*.webp
 *.doc
 *.docx
 
-# SQL files
+# SQL files (but NOT migrations)
 *.sql
+!supabase/migrations/*.sql
 
 # Uploads
 /uploads/
