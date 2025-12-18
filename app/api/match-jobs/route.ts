@@ -96,7 +96,6 @@ export async function POST(req: NextRequest) {
       qualified_at: new Date().toISOString(),
       reasons: job.score_breakdown ? [
         `Skills: ${job.score_breakdown.skills} points`,
-        `Job Title: ${job.score_breakdown.jobTitle} points`,
         `Experience: ${job.score_breakdown.experience} points`,
         `Degree/Cert: ${job.score_breakdown.degree} points`,
         `Pay Rate: ${job.score_breakdown.pay} points`,
