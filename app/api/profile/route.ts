@@ -189,20 +189,39 @@ export async function PUT(req: NextRequest) {
       preferred_job_types = Array.from(new Set(preferred_job_types));
     }
 
+    // Process structured skills
+    const primary_skills = Array.isArray(body.primary_skills) 
+      ? body.primary_skills.filter(Boolean).slice(0, 3) // Max 3 primary skills
+      : [];
+    const secondary_skills = Array.isArray(body.secondary_skills) 
+      ? body.secondary_skills.filter(Boolean) 
+      : [];
+    const adjacent_skills = Array.isArray(body.adjacent_skills) 
+      ? body.adjacent_skills.filter(Boolean) 
+      : [];
+    const generic_skills = Array.isArray(body.generic_skills) 
+      ? body.generic_skills.filter(Boolean) 
+      : [];
+
     const { data: profile, error } = await supabase
       .from('profiles')
       .update({
         name: body.name,
-        phone: body.phone || null, // Include phone number
+        phone: body.phone || null,
         title: body.title,
         location: body.location,
         experience_years: body.experience_years,
         skills: body.skills,
+        // Structured skills
+        primary_skills,
+        secondary_skills,
+        adjacent_skills,
+        generic_skills,
         contract_type: body.contract_type,
         work_mode: body.work_mode,
-        preferred_job_types, // JSONB array
+        preferred_job_types,
         preferred_job_type: body.preferred_job_type,
-        visa_status: normalizeVisaStatus(body.visa_status || body.visa), // Normalize and save enum value
+        visa_status: normalizeVisaStatus(body.visa_status || body.visa),
         rate_expectation: body.rate_expectation,
         availability: body.availability,
         summary: body.summary,

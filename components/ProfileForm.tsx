@@ -17,6 +17,11 @@ type FormState = {
   location: string;
   experience: number;
   skills: string[];
+  // Structured skills (new)
+  primary_skills: string[];
+  secondary_skills: string[];
+  adjacent_skills: string[];
+  generic_skills: string[];
   preferred_job_types: JobType[];
   visa: VisaStatus;
   rate: string;
@@ -33,6 +38,11 @@ const initialState: FormState = {
   location: '',
   experience: 0,
   skills: [],
+  // Structured skills (new)
+  primary_skills: [],
+  secondary_skills: [],
+  adjacent_skills: [],
+  generic_skills: [],
   preferred_job_types: [],
   visa: 'UNSPECIFIED',
   rate: '',
@@ -68,6 +78,11 @@ export default function ProfileForm() {
               location: data.profile.location || '',
               experience: data.profile.experience_years || 0,
               skills: Array.isArray(data.profile.skills) ? data.profile.skills : [],
+              // Structured skills
+              primary_skills: Array.isArray(data.profile.primary_skills) ? data.profile.primary_skills : [],
+              secondary_skills: Array.isArray(data.profile.secondary_skills) ? data.profile.secondary_skills : [],
+              adjacent_skills: Array.isArray(data.profile.adjacent_skills) ? data.profile.adjacent_skills : [],
+              generic_skills: Array.isArray(data.profile.generic_skills) ? data.profile.generic_skills : [],
               preferred_job_types: Array.isArray(data.profile.preferred_job_types) 
                 ? data.profile.preferred_job_types 
                 : [],
@@ -114,6 +129,19 @@ export default function ProfileForm() {
       return;
     }
 
+    // Validate primary skills (required)
+    if (state.primary_skills.length === 0) {
+      setMessage('Please add at least one primary skill (your core platform/technology)');
+      setLoading(false);
+      return;
+    }
+
+    if (state.primary_skills.length > 3) {
+      setMessage('Maximum 3 primary skills allowed. Choose your strongest platforms.');
+      setLoading(false);
+      return;
+    }
+
     try {
       // Use PUT to update existing profile, POST for new
       const res = await fetch('/api/profile', {
@@ -123,6 +151,11 @@ export default function ProfileForm() {
           ...state,
           experience_years: state.experience,
           visa_status: state.visa, // Send enum value
+          // Structured skills
+          primary_skills: state.primary_skills,
+          secondary_skills: state.secondary_skills,
+          adjacent_skills: state.adjacent_skills,
+          generic_skills: state.generic_skills,
         }),
       });
       const data = await res.json();
@@ -194,9 +227,99 @@ export default function ProfileForm() {
         <Input label="Availability" value={state.availability} onChange={(e) => setState({ ...state, availability: e.target.value })} placeholder="e.g., immediate, 2 weeks" />
       </div>
 
-      <div className="mt-4">
-        <TagInput label="Skills" values={state.skills} onChange={(skills) => setState({ ...state, skills })} />
+      {/* ============================================ */}
+      {/* STRUCTURED SKILL BOXES - CRITICAL FOR MATCHING */}
+      {/* ============================================ */}
+      <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+        <h3 className="text-lg font-semibold text-ink mb-1">🎯 Skill Classification</h3>
+        <p className="text-sm text-muted mb-4">
+          Categorize your skills accurately. This directly impacts job matching quality.
+          <strong className="text-ink"> AI validates these against your resume.</strong>
+        </p>
+
+        {/* Primary Skills */}
+        <div className="mb-4">
+          <label className="mb-1 block text-sm font-medium text-ink">
+            Primary Skills (Stack / Platform) <span className="text-red-500">*</span>
+            <span className="ml-2 text-xs text-amber-600 font-normal">Max 3 - Your core expertise</span>
+          </label>
+          <p className="text-xs text-muted mb-2">
+            Your core platform or technology where you have hands-on, production-level experience.
+            <span className="font-medium"> Examples: Oracle HCM, Workday, SAP, AWS, Java, .NET, React</span>
+          </p>
+          <TagInput 
+            values={state.primary_skills} 
+            onChange={(primary_skills) => {
+              // Enforce max 3 limit
+              if (primary_skills.length <= 3) {
+                setState({ ...state, primary_skills });
+              }
+            }}
+            placeholder="Add primary skill (max 3)..."
+          />
+          {state.primary_skills.length >= 3 && (
+            <p className="text-xs text-amber-600 mt-1">Maximum 3 primary skills reached. Choose carefully.</p>
+          )}
+        </div>
+
+        {/* Secondary Skills */}
+        <div className="mb-4">
+          <label className="mb-1 block text-sm font-medium text-ink">
+            Secondary Skills (Ecosystem / Frameworks)
+          </label>
+          <p className="text-xs text-muted mb-2">
+            Frameworks, modules, or services within your primary skill ecosystem.
+            <span className="font-medium"> Examples: Spring, Hibernate (Java) | Payroll, OTL (Oracle) | Lambda, ECS (AWS)</span>
+          </p>
+          <TagInput 
+            values={state.secondary_skills} 
+            onChange={(secondary_skills) => setState({ ...state, secondary_skills })}
+            placeholder="Add secondary/ecosystem skills..."
+          />
+        </div>
+
+        {/* Adjacent Skills */}
+        <div className="mb-4">
+          <label className="mb-1 block text-sm font-medium text-ink">
+            Transferable / Adjacent Skills
+          </label>
+          <p className="text-xs text-muted mb-2">
+            Technologies you've worked with partially—during migrations, integrations, or short projects.
+            <span className="font-medium"> Examples: Oracle → Workday exposure | AWS → Azure exposure | Java → .NET exposure</span>
+          </p>
+          <TagInput 
+            values={state.adjacent_skills} 
+            onChange={(adjacent_skills) => setState({ ...state, adjacent_skills })}
+            placeholder="Add adjacent/transferable skills..."
+          />
+        </div>
+
+        {/* Generic Skills */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-ink">
+            Generic / Domain Skills
+          </label>
+          <p className="text-xs text-muted mb-2">
+            Industry or domain skills that apply across platforms.
+            <span className="font-medium"> Examples: Payroll Processing, REST APIs, Agile, CI/CD, Data Modeling</span>
+          </p>
+          <TagInput 
+            values={state.generic_skills} 
+            onChange={(generic_skills) => setState({ ...state, generic_skills })}
+            placeholder="Add generic/domain skills..."
+          />
+        </div>
       </div>
+
+      {/* Legacy Skills (for backwards compatibility - hidden or collapsed) */}
+      <details className="mt-4">
+        <summary className="text-sm text-muted cursor-pointer hover:text-ink">
+          📝 Additional Skills (Optional - legacy field)
+        </summary>
+        <div className="mt-2">
+          <TagInput label="Other Skills" values={state.skills} onChange={(skills) => setState({ ...state, skills })} />
+        </div>
+      </details>
 
       <div className="mt-4">
         <label className="mb-2 block text-sm font-medium text-ink">

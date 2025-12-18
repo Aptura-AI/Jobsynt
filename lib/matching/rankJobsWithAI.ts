@@ -32,6 +32,11 @@ export type CandidateProfile = {
   location?: string | null;
   phone?: string | null;
   skills?: string[] | null;
+  // Structured skills
+  primary_skills?: string[] | null;
+  secondary_skills?: string[] | null;
+  adjacent_skills?: string[] | null;
+  generic_skills?: string[] | null;
   experience_years?: number | null;
   preferred_job_types?: string[] | null;
   rate_expectation?: string | null;
@@ -192,13 +197,18 @@ export async function rankJobsWithAI(
         .in('job_id', jobIds);
     }
 
-    // Prepare candidate data for AI
+    // Prepare candidate data for AI with structured skills
     const candidateData = {
       name: candidate.name,
       title: candidate.title,
       location: candidate.location,
       experience: candidate.experience_years || 0,
       skills: candidate.skills || [],
+      // STRUCTURED SKILLS - Critical for matching accuracy
+      primarySkills: candidate.primary_skills || [],
+      secondarySkills: candidate.secondary_skills || [],
+      adjacentSkills: candidate.adjacent_skills || [],
+      genericSkills: candidate.generic_skills || [],
       preferredJobTypes: candidate.preferred_job_types || [],
       contractType: candidate.contract_type || [],
       workMode: candidate.work_mode || [],
@@ -207,7 +217,7 @@ export async function rankJobsWithAI(
       expectedPayMin: candidate.expected_pay_min,
       availability: candidate.availability,
       summary: candidate.summary,
-      resumeText: candidate.resume_text ? candidate.resume_text.substring(0, 3000) : undefined, // Limit for API
+      resumeText: candidate.resume_text ? candidate.resume_text.substring(0, 3000) : undefined,
       degrees: candidate.degrees || [],
       certifications: candidate.certifications || [],
     };
@@ -247,7 +257,29 @@ export async function rankJobsWithAI(
         input: {
           candidate: candidateData,
           jobs: jobsData,
-          note: `LEDGER-BASED RANKING: These ${jobsData.length} jobs are from the candidate's qualified job ledger. They have ALREADY been approved and MUST NOT be discarded. ${explicitTargetCount} job(s) were EXPLICITLY targeted by a recruiter. Your role is ONLY to: 1) Rank by priority, 2) Explain fit, 3) Recommend actions. You may NOT: remove jobs, add jobs, or suggest external job boards. For explicitly targeted jobs, say "This role was specifically shortlisted for you."`,
+          note: `LEDGER-BASED RANKING WITH SKILL VALIDATION:
+
+These ${jobsData.length} jobs are from the candidate's qualified job ledger. They have ALREADY been approved and MUST NOT be discarded.
+
+SKILL HIERARCHY (CRITICAL FOR RANKING):
+- Primary Skills (${candidateData.primarySkills.join(', ') || 'none defined'}): Define ELIGIBILITY. Platform ownership matters.
+- Secondary Skills: Ecosystem skills within primary stack. Influence ranking.
+- Adjacent Skills: Partial exposure to other platforms. Lower priority.
+- Generic Skills: Cross-platform domain skills.
+
+HARD RULE: Primary stack mismatch = no High priority rating.
+If a job uses a different primary platform than the candidate's primary skills, rate it Medium or Low.
+Example: If candidate's primary is "Oracle HCM" but job requires "Workday", that's a platform mismatch.
+
+SKILL VALIDATION:
+- Candidate-provided skills are INTENT, not FACT
+- Cross-check against resume text when possible
+- Platform ownership always outweighs keyword overlap
+
+${explicitTargetCount} job(s) were EXPLICITLY targeted by a recruiter - always prioritize these.
+
+Your role: 1) Rank by priority considering skill hierarchy, 2) Explain fit clearly, 3) Recommend actions.
+You may NOT: remove jobs, add jobs, or suggest external job boards.`,
         } as any,
       });
 

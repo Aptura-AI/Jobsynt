@@ -53,6 +53,11 @@ export type CandidateProfile = {
   rate_expectation?: string | null;
   visa_status?: string | null;
   skills?: string[] | null;
+  // Structured skills
+  primary_skills?: string[] | null;
+  secondary_skills?: string[] | null;
+  adjacent_skills?: string[] | null;
+  generic_skills?: string[] | null;
   resume_text?: string | null;
   summary?: string | null;
   [key: string]: any;
