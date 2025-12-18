@@ -6,12 +6,17 @@
  * - Insert into candidate_job_matches
  * - DO NOT touch existing rows
  * - DO NOT re-score or re-evaluate
+ * 
+ * AFTER MATCHING:
+ * - Automatically runs AI ranking for candidates with new jobs
+ * - This eliminates the need for a separate rank-jobs cron
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { fetchAndMatchJobs } from '@/lib/matching/getEligibleJobs';
 import { logJobQualified } from '@/lib/matching/jobQualificationLog';
+import { rankJobsWithAI, CandidateProfile } from '@/lib/matching/rankJobsWithAI';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -139,16 +144,91 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    console.log(`[Match Jobs Cron] Matching complete: ${totalNewJobs} new jobs qualified, ${totalSkipped} skipped`);
+
+    // ============================================
+    // PHASE 2: AI RANKING (runs after matching)
+    // ============================================
+    // Only rank candidates who got new jobs in this run
+    // This eliminates the need for a separate cron job
+    
+    const candidatesWithNewJobs = new Set<string>();
+    
+    // Track which candidates received new jobs
+    for (const profile of candidates) {
+      // Check if this candidate got any new jobs in this run
+      const { data: recentJobs } = await supabase
+        .from('candidate_job_matches')
+        .select('job_id')
+        .eq('candidate_id', profile.id)
+        .is('applied_at', null)
+        .is('dismissed_at', null)
+        .or(`last_ranked_at.is.null,qualified_at.gt.${new Date(Date.now() - 60 * 60 * 1000).toISOString()}`); // Qualified in last hour or never ranked
+
+      if (recentJobs && recentJobs.length > 0) {
+        candidatesWithNewJobs.add(profile.id);
+      }
+    }
+
+    let candidatesRanked = 0;
+    let jobsRanked = 0;
+
+    if (candidatesWithNewJobs.size > 0) {
+      console.log(`[Match Jobs Cron] Running AI ranking for ${candidatesWithNewJobs.size} candidates with new/unranked jobs...`);
+
+      for (const candidateId of candidatesWithNewJobs) {
+        try {
+          const profile = candidates.find(p => p.id === candidateId);
+          if (!profile) continue;
+
+          const candidateData: CandidateProfile = {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            title: profile.title,
+            location: profile.location,
+            skills: profile.skills,
+            experience_years: profile.experience_years,
+            preferred_job_types: profile.preferred_job_types,
+            rate_expectation: profile.rate_expectation,
+            expected_pay_min: profile.expected_pay_min,
+            work_mode: profile.work_mode,
+            contract_type: profile.contract_type,
+            visa_status: profile.visa_status,
+            summary: profile.summary,
+            resume_text: profile.resume_text,
+            degrees: profile.degrees,
+            certifications: profile.certifications,
+          };
+
+          const rankingResult = await rankJobsWithAI(profile.id, candidateData);
+          jobsRanked += rankingResult.jobs.length;
+          candidatesRanked++;
+
+          console.log(`[Match Jobs Cron] Ranked ${rankingResult.jobs.length} jobs for ${profile.id.substring(0, 8)}...`);
+        } catch (rankError: any) {
+          console.error(`[Match Jobs Cron] Ranking error for ${candidateId}:`, rankError.message);
+          errors.push(`Ranking ${candidateId}: ${rankError.message}`);
+        }
+      }
+    }
+
     const duration = Date.now() - startTime;
 
     console.log(`[Match Jobs Cron] Completed in ${duration}ms`);
-    console.log(`[Match Jobs Cron] ${totalNewJobs} new jobs qualified, ${totalSkipped} skipped`);
+    console.log(`[Match Jobs Cron] Summary: ${totalNewJobs} jobs qualified, ${candidatesRanked} candidates ranked, ${jobsRanked} jobs prioritized`);
 
     return NextResponse.json({
       success: true,
-      candidatesProcessed,
-      newJobsQualified: totalNewJobs,
-      skipped: totalSkipped,
+      matching: {
+        candidatesProcessed,
+        newJobsQualified: totalNewJobs,
+        skipped: totalSkipped,
+      },
+      ranking: {
+        candidatesRanked,
+        jobsRanked,
+      },
       errors: errors.length > 0 ? errors : undefined,
       durationMs: duration,
       timestamp: new Date().toISOString(),
