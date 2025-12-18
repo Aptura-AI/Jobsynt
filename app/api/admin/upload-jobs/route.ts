@@ -427,14 +427,15 @@ export async function POST(req: NextRequest) {
         }
 
         // Determine location_type based on rules
-        let locationType: 'remote' | 'hybrid' | 'onsite' = 'onsite';
+        // NOTE: Database enum expects capitalized values: 'Remote', 'Hybrid', 'Onsite'
+        let locationType: 'Remote' | 'Hybrid' | 'Onsite' = 'Onsite';
         if (isRemote || locationLower.includes('remote')) {
-          locationType = 'remote';
+          locationType = 'Remote';
           isRemote = true; // Sync is_remote flag
         } else if (locationLower.includes('hybrid')) {
-          locationType = 'hybrid';
+          locationType = 'Hybrid';
         } else {
-          locationType = 'onsite';
+          locationType = 'Onsite';
         }
 
         // ============================================
