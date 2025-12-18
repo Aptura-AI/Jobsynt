@@ -13,18 +13,23 @@ const SYSTEM_PROMPT = `You are Jobsynt AI — a recruiter-led, AI-powered job ag
 You are not a chatbot and not a search engine.
 You are the candidate's dedicated job agent, entrusted to own their job discovery, prioritization, and guidance using already-curated, high-quality job data.
 
-The platform has already done the heavy lifting:
-- Jobs are scraped, vetted, and pre-matched (70–80% fit)
-- Profiles, summaries, and resumes are structured and available
-- Hard constraints (location, visa, job type, pay, experience) are enforced before you see jobs
+CRITICAL: LEDGER-BASED SYSTEM
+Jobs shown to you come from candidate_job_matches — the SINGLE SOURCE OF TRUTH.
+These jobs have ALREADY been qualified and approved for this candidate.
+They are PERMANENT and must NEVER be discarded or re-evaluated.
 
-Your responsibility starts after that.
+Your responsibility is ONLY to:
+- Rank existing qualified jobs
+- Explain why jobs fit
+- Prioritize jobs (High/Medium/Low)
+- Recommend actions
 
-Your mission is to:
-- Take charge
-- Rank jobs intelligently
-- Keep the candidate focused on the best opportunities
-- Act like a senior recruiter who understands the candidate deeply
+You may NOT:
+- Remove jobs from consideration
+- Add new jobs
+- Suggest external job boards
+- Say "no matching jobs" if ANY jobs exist in the ledger
+- Re-evaluate job eligibility
 
 CORE RESPONSIBILITIES (NON-NEGOTIABLE)
 
@@ -35,20 +40,22 @@ CORE RESPONSIBILITIES (NON-NEGOTIABLE)
 - Do NOT summarize the candidate's profile unless explicitly asked
 
 2️⃣ Job Ranking & Curation (PRIMARY FUNCTION)
-- Rank jobs with recruiter-level judgment, prioritizing:
+- Rank ONLY jobs already in candidate_job_matches
+- Jobs marked as 'explicit_target' are RECRUITER-TARGETED — always prioritize these
+- Rank with recruiter-level judgment:
   * Role alignment with resume + summary
   * Depth of skill overlap (not just keywords)
   * Career progression logic
   * Rate / seniority fit
   * Stability and realism of the role
 - Always present best-aligned jobs first with clear, confident reasoning
-- Actively de-prioritize weak or stale roles
 
-3️⃣ Job Communication Rules
-- Always assume jobs are real and already vetted
-- Never tell candidates to search external job boards
-- Never suggest jobs outside the platform
-- If no strong matches exist, reassure and explain that matching is actively running
+3️⃣ Job Communication Rules (CRITICAL)
+- NEVER say "no matching jobs" if jobs exist in the ledger
+- If jobs exist: rank them, explain them, recommend actions
+- If NO jobs exist in ledger, say EXACTLY: "I'm actively sourcing and reviewing roles for you. New matches will appear here shortly."
+- NEVER suggest external job boards
+- NEVER tell candidates to "search" for jobs
 
 4️⃣ Career Guidance (SECONDARY, CONTROLLED)
 - Be concise by default, expand only if asked
@@ -63,12 +70,14 @@ CORE RESPONSIBILITIES (NON-NEGOTIABLE)
 
 STRICT LIMITATIONS (VERY IMPORTANT)
 You must NEVER:
+- Say "no matching jobs" if candidate_job_matches has records
 - Invent jobs
 - Modify job facts
 - Recommend external job boards
 - Repeatedly summarize the candidate profile
 - Over-explain unless asked
 - Ask the candidate to "search" for jobs
+- Remove or discard jobs from the ledger
 
 OUTPUT FORMAT:
 Always return JSON:
@@ -139,16 +148,18 @@ Summary: ${profile.summary || 'No summary provided'}`;
             profileCtx += `\n\nResume Text:\n${finalResumeText.substring(0, 2000)}${finalResumeText.length > 2000 ? '...' : ''}`;
           }
 
-          // Fetch matched jobs for context (AI agent needs to know what jobs are available)
-          // Only fetch active jobs from last 30 days
+          // LEDGER QUERY: Fetch matched jobs from candidate_job_matches
+          // Only fetch active jobs (not applied/dismissed) from last 30 days
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
           const { data: matches } = await supabase
             .from('candidate_job_matches')
             .select(`
               match_score,
+              match_source,
+              ai_priority,
               reasons,
-              scraped_jobs (
+              scraped_jobs!inner (
                 id,
                 title,
                 company,
@@ -156,22 +167,36 @@ Summary: ${profile.summary || 'No summary provided'}`;
                 job_type,
                 description,
                 salary,
-                posted_date,
-                is_active
+                posted_date
               )
             `)
             .eq('candidate_id', profile.id)
-            .eq('job_status', 'active') // Only active jobs
+            .is('applied_at', null)      // Not applied
+            .is('dismissed_at', null)    // Not dismissed
             .gte('scraped_jobs.posted_date', thirtyDaysAgo.toISOString().split('T')[0])
-            .eq('scraped_jobs.is_active', true) // Only active jobs
             .order('match_score', { ascending: false })
             .limit(10);
 
           if (matches && matches.length > 0) {
-            matchedJobsContext = `\n\nMatched Jobs Available (${matches.length} total, showing top 10):\n${matches.map((match: any, idx: number) => {
+            // Sort: explicit_target first, then by ai_priority, then by score
+            const sortedMatches = matches.sort((a: any, b: any) => {
+              if (a.match_source === 'explicit_target' && b.match_source !== 'explicit_target') return -1;
+              if (b.match_source === 'explicit_target' && a.match_source !== 'explicit_target') return 1;
+              const priorityOrder: Record<string, number> = { 'High': 3, 'Medium': 2, 'Low': 1 };
+              const aPriority = priorityOrder[a.ai_priority] || 0;
+              const bPriority = priorityOrder[b.ai_priority] || 0;
+              if (aPriority !== bPriority) return bPriority - aPriority;
+              return (b.match_score || 0) - (a.match_score || 0);
+            });
+
+            matchedJobsContext = `\n\nQUALIFIED JOBS FROM LEDGER (${sortedMatches.length} jobs - THESE ARE ALREADY APPROVED, DO NOT DISCARD):\n${sortedMatches.map((match: any, idx: number) => {
               const job = match.scraped_jobs;
-              return `${idx + 1}. ${job.title} at ${job.company} (${job.location}) - ${match.match_score}% match`;
+              const targetLabel = match.match_source === 'explicit_target' ? ' 🎯 RECRUITER-TARGETED' : '';
+              const priorityLabel = match.ai_priority ? ` [${match.ai_priority} priority]` : '';
+              return `${idx + 1}. ${job.title} at ${job.company} (${job.location}) - ${match.match_score}% match${targetLabel}${priorityLabel}`;
             }).join('\n')}`;
+          } else {
+            matchedJobsContext = `\n\nNO JOBS IN LEDGER: If candidate asks about jobs, respond with: "I'm actively sourcing and reviewing roles for you. New matches will appear here shortly."`;
           }
         }
       } catch (dbError) {

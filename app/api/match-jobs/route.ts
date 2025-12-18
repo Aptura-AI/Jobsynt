@@ -286,6 +286,27 @@ export async function GET(req: NextRequest) {
     // Log feed fetch
     logFeedFetch(profile.id, jobs.length, 'active');
 
+    // Update view tracking for returned jobs
+    if (jobs.length > 0) {
+      const jobIds = jobs.map((j: any) => j.id);
+      const now = new Date().toISOString();
+      
+      // Update last_seen_at for all jobs
+      await supabase
+        .from('candidate_job_matches')
+        .update({ last_seen_at: now })
+        .eq('candidate_id', profile.id)
+        .in('job_id', jobIds);
+      
+      // Set first_seen_at for jobs that haven't been seen before
+      await supabase
+        .from('candidate_job_matches')
+        .update({ first_seen_at: now })
+        .eq('candidate_id', profile.id)
+        .in('job_id', jobIds)
+        .is('first_seen_at', null);
+    }
+
     return NextResponse.json({ 
       jobs,
       total: jobs.length,

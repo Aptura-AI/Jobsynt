@@ -1,3 +1,14 @@
+/**
+ * EMAIL CRON - Runs at 12:00 PM Daily
+ * 
+ * LEDGER RULES:
+ * - Email ONLY if candidate has ≥1 active job
+ * - Include top 3-5 jobs ordered by: explicit_target > ai_priority > fit_score
+ * - Include tracking pixel
+ * - Mark email sent in email_events
+ * - Do NOT re-trigger AI
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendDailyJobDigest } from '@/lib/email';
@@ -8,32 +19,22 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 // Verify this is a cron request (from Vercel Cron or authorized source)
 function verifyCronRequest(req: NextRequest): boolean {
-  // Check for Vercel Cron secret header
   const authHeader = req.headers.get('authorization');
   if (authHeader === `Bearer ${process.env.CRON_SECRET}`) {
     return true;
   }
   
-  // Also allow if CRON_SECRET is not set (for local testing)
   if (!process.env.CRON_SECRET) {
-    return true;
+    return true; // Allow in development
   }
   
   return false;
 }
 
-/**
- * Daily cron job to send job digest emails at 12:00 PM
- * 
- * This endpoint should be called by:
- * - Vercel Cron: Add to vercel.json
- * - External cron service (cron-job.org, etc.)
- * 
- * Sends AI-shortlisted jobs to all candidates (including pending_auth profiles)
- */
 export async function GET(req: NextRequest) {
+  const startTime = Date.now();
+  
   try {
-    // Verify this is a legitimate cron request
     if (!verifyCronRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -44,8 +45,9 @@ export async function GET(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get all candidate profiles (including pending_auth)
-    // Only send to profiles with email and name
+    console.log('[Email Cron] Starting daily job email distribution...');
+
+    // Get all candidate profiles with email
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select('id, email, name, preferred_job_types')
@@ -54,7 +56,7 @@ export async function GET(req: NextRequest) {
       .not('name', 'is', null);
 
     if (profilesError) {
-      console.error('Error fetching profiles:', profilesError);
+      console.error('[Email Cron] Error fetching profiles:', profilesError);
       return NextResponse.json({ error: profilesError.message }, { status: 500 });
     }
 
@@ -66,21 +68,41 @@ export async function GET(req: NextRequest) {
     }
 
     let emailsSent = 0;
+    let emailsSkipped = 0;
     let emailsFailed = 0;
     const errors: string[] = [];
 
-    // Process each profile
+    const thirtyDaysAgo = get30DaysAgoDate();
+    const today = new Date().toISOString().split('T')[0];
+
     for (const profile of profiles) {
       try {
-        // Get matched jobs from candidate_job_matches (single source of truth)
-        // Only fetch active jobs from last 30 days
-        const thirtyDaysAgo = get30DaysAgoDate();
+        // Check if already sent today (idempotent)
+        const { data: existingEmail } = await supabase
+          .from('email_events')
+          .select('id')
+          .eq('candidate_id', profile.id)
+          .eq('email_type', 'daily_jobs')
+          .gte('sent_at', `${today}T00:00:00Z`)
+          .maybeSingle();
+
+        if (existingEmail) {
+          console.log(`[Email Cron] Skipping ${profile.email} - already sent today`);
+          emailsSkipped++;
+          continue;
+        }
+
+        // LEDGER QUERY: Get active jobs from candidate_job_matches
+        // Order: explicit_target > ai_priority > fit_score
         const { data: matches, error: jobsError } = await supabase
           .from('candidate_job_matches')
           .select(`
+            job_id,
             match_score,
+            match_source,
+            ai_priority,
             reasons,
-            scraped_jobs (
+            scraped_jobs!inner (
               id,
               title,
               company,
@@ -92,14 +114,42 @@ export async function GET(req: NextRequest) {
             )
           `)
           .eq('candidate_id', profile.id)
-          .eq('job_status', 'active') // Only active jobs
-          .gte('scraped_jobs.posted_date', thirtyDaysAgo) // Only jobs from last 30 days
-          .eq('scraped_jobs.is_active', true) // Only active jobs
-          .order('match_score', { ascending: false })
-          .limit(5); // Limit to top 5 jobs per email (as per requirements)
+          .is('applied_at', null)      // Not applied
+          .is('dismissed_at', null)    // Not dismissed
+          .gte('scraped_jobs.posted_date', thirtyDaysAgo);
+
+        if (jobsError) {
+          console.error(`[Email Cron] Error fetching jobs for ${profile.email}:`, jobsError);
+          errors.push(`${profile.email}: ${jobsError.message}`);
+          emailsFailed++;
+          continue;
+        }
+
+        // Sort by: explicit_target > ai_priority > fit_score
+        const sortedMatches = (matches || []).sort((a: any, b: any) => {
+          // 1. Explicit targets first
+          if (a.match_source === 'explicit_target' && b.match_source !== 'explicit_target') return -1;
+          if (b.match_source === 'explicit_target' && a.match_source !== 'explicit_target') return 1;
+          
+          // 2. AI priority
+          const priorityOrder: Record<string, number> = { 'High': 3, 'Medium': 2, 'Low': 1 };
+          const aPriority = priorityOrder[a.ai_priority] || 0;
+          const bPriority = priorityOrder[b.ai_priority] || 0;
+          if (aPriority !== bPriority) return bPriority - aPriority;
+          
+          // 3. Fit score
+          return (b.match_score || 0) - (a.match_score || 0);
+        }).slice(0, 5); // Top 5 jobs
+
+        if (sortedMatches.length === 0) {
+          // No active jobs, skip
+          console.log(`[Email Cron] Skipping ${profile.email} - no active jobs`);
+          emailsSkipped++;
+          continue;
+        }
 
         // Transform to job format
-        const jobs = (matches || []).map((match: any) => ({
+        const jobs = sortedMatches.map((match: any) => ({
           id: match.scraped_jobs.id,
           title: match.scraped_jobs.title,
           company: match.scraped_jobs.company,
@@ -108,22 +158,12 @@ export async function GET(req: NextRequest) {
           description: match.scraped_jobs.description,
           url: match.scraped_jobs.url,
           fit_score: match.match_score,
+          match_source: match.match_source,
+          ai_priority: match.ai_priority,
           match_reasons: match.reasons || [],
         }));
 
-        if (jobsError) {
-          console.error(`Error fetching jobs for ${profile.email}:`, jobsError);
-          errors.push(`${profile.email}: ${jobsError.message}`);
-          emailsFailed++;
-          continue;
-        }
-
-        if (!jobs || jobs.length === 0) {
-          // No jobs to send, skip this profile
-          continue;
-        }
-
-        // Extract skills from description (common tech keywords)
+        // Extract skills from description
         const extractSkills = (description: string | null): string[] => {
           if (!description) return [];
           const commonSkills = [
@@ -131,29 +171,12 @@ export async function GET(req: NextRequest) {
             'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'SQL', 'MongoDB', 'PostgreSQL',
             'CI/CD', 'Git', 'Agile', 'Scrum', 'REST API', 'GraphQL', 'Microservices'
           ];
-          const found = commonSkills.filter(skill => 
+          return commonSkills.filter(skill => 
             description.toLowerCase().includes(skill.toLowerCase())
-          );
-          return found.slice(0, 5); // Limit to 5 skills
+          ).slice(0, 5);
         };
 
-        // Check if we've already sent an email to this candidate today
-        const today = new Date().toISOString().split('T')[0];
-        const { data: existingEmail } = await supabase
-          .from('email_events')
-          .select('id')
-          .eq('email', profile.email)
-          .eq('type', 'daily_matches')
-          .gte('sent_at', `${today}T00:00:00Z`)
-          .maybeSingle();
-
-        if (existingEmail) {
-          // Already sent today, skip (idempotent)
-          console.log(`⏭️  Skipping ${profile.email} - already sent today`);
-          continue;
-        }
-
-        // Send email with tracking
+        // Send email
         const result = await sendDailyJobDigest(
           profile.email,
           profile.name || 'Candidate',
@@ -170,36 +193,56 @@ export async function GET(req: NextRequest) {
         );
 
         if (result.success) {
+          // Record email event in ledger
+          await supabase
+            .from('email_events')
+            .insert({
+              candidate_id: profile.id,
+              email_type: 'daily_jobs',
+              job_ids: jobs.map(j => j.id).filter(Boolean),
+              metadata: {
+                jobs_count: jobs.length,
+                explicit_targets: jobs.filter(j => j.match_source === 'explicit_target').length,
+                message_id: result.messageId,
+              }
+            });
+
           emailsSent++;
-          console.log(`✅ Sent job digest to ${profile.email} (${jobs.length} jobs, message_id: ${result.messageId})`);
+          console.log(`[Email Cron] ✅ Sent to ${profile.email} (${jobs.length} jobs)`);
         } else {
           emailsFailed++;
           errors.push(`${profile.email}: Failed to send email`);
         }
       } catch (error: any) {
-        console.error(`Error processing profile ${profile.email}:`, error);
+        console.error(`[Email Cron] Error processing ${profile.email}:`, error);
         emailsFailed++;
         errors.push(`${profile.email}: ${error.message}`);
       }
     }
 
+    const duration = Date.now() - startTime;
+
+    console.log(`[Email Cron] Completed in ${duration}ms`);
+    console.log(`[Email Cron] Sent: ${emailsSent}, Skipped: ${emailsSkipped}, Failed: ${emailsFailed}`);
+
     return NextResponse.json({
-      message: 'Daily job email cron completed',
+      success: true,
       totalProfiles: profiles.length,
       emailsSent,
+      emailsSkipped,
       emailsFailed,
       errors: errors.length > 0 ? errors : undefined,
+      durationMs: duration,
+      timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Daily job email cron error:', error);
+    console.error('[Email Cron] Error:', error);
     return NextResponse.json({ 
       error: error.message || 'Internal server error' 
     }, { status: 500 });
   }
 }
 
-// Also support POST for external cron services
 export async function POST(req: NextRequest) {
   return GET(req);
 }
-
