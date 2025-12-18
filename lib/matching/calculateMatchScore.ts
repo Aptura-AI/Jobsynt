@@ -2,7 +2,14 @@
  * Calculate Match Score
  * 
  * Deterministic scoring engine for job-candidate matching.
- * Returns a score from 0-100 with detailed breakdown.
+ * 
+ * Scoring breakdown (max 80 points):
+ * - Skills: 50 points (40 for must_have_skills, 10 for good_to_have_skills)
+ * - Experience: 10 points (candidate >= required OR within 10% margin)
+ * - Degree: +10 if matches or not mentioned, -10 if required but missing
+ * - Pay Rate: +10 if within 25% or not mentioned, -10 if outside range
+ * 
+ * Threshold: 50 points to pass
  * 
  * NON-NEGOTIABLE: No AI, no embeddings, no ML - pure deterministic logic.
  */
@@ -25,6 +32,8 @@ export type Job = {
 
 export type CandidateProfile = {
   skills?: string[] | null;
+  primary_skills?: string[] | null;
+  secondary_skills?: string[] | null;
   resume_text?: string | null;
   summary?: string | null;
   experience_years?: number | null;
@@ -37,7 +46,6 @@ export type CandidateProfile = {
 
 export type ScoreBreakdown = {
   skills: number;
-  jobTitle: number;
   experience: number;
   degree: number;
   pay: number;
@@ -78,15 +86,28 @@ function extractPayRate(salary: string | null | undefined): number | null {
 }
 
 /**
- * Score: Skill Match (Max 25 points)
+ * Score: Skill Match (Max 50 points)
  * 
  * Rules:
- * - ≥80% match of must_have_skills → +25
- * - Match against: candidate skills list, resume text, summary text
- * - Good-to-have: 50% match → +10, 100% match → +20
+ * - 40 points for matching must_have_skills with candidate's primary/secondary skills
+ * - 10 points for matching good_to_have_skills
+ * - Match against: primary_skills, secondary_skills, legacy skills array
  */
 function scoreSkills(job: Job, candidate: CandidateProfile): number {
   let score = 0;
+
+  // Build candidate skills from primary, secondary, and legacy skills
+  const candidateSkills: string[] = [];
+  
+  if (Array.isArray(candidate.primary_skills)) {
+    candidateSkills.push(...candidate.primary_skills.map(s => String(s).toLowerCase().trim()));
+  }
+  if (Array.isArray(candidate.secondary_skills)) {
+    candidateSkills.push(...candidate.secondary_skills.map(s => String(s).toLowerCase().trim()));
+  }
+  if (Array.isArray(candidate.skills)) {
+    candidateSkills.push(...candidate.skills.map(s => String(s).toLowerCase().trim()));
+  }
 
   // Get must_have_skills (comma-separated string)
   const mustHaveSkillsStr = job.must_have_skills || '';
@@ -102,160 +123,83 @@ function scoreSkills(job: Job, candidate: CandidateProfile): number {
     .map(s => s.trim().toLowerCase())
     .filter(s => s.length > 0);
 
-  // Build candidate skill sources: skills list, resume text, summary text
-  const candidateSkills = Array.isArray(candidate.skills)
-    ? candidate.skills.map(s => String(s).toLowerCase().trim())
-    : [];
-  
-  const resumeText = (candidate.resume_text || '').toLowerCase();
-  const summaryText = (candidate.summary || '').toLowerCase();
-  const allCandidateText = `${resumeText} ${summaryText}`.toLowerCase();
-
-  // Check must_have_skills match (≥80% required)
-  if (mustHaveSkills.length > 0) {
+  // Score must_have_skills (40 points max)
+  if (mustHaveSkills.length > 0 && candidateSkills.length > 0) {
     const matchedMustHave = mustHaveSkills.filter(requiredSkill => {
-      // Check against skills list
-      const inSkillsList = candidateSkills.some(cs => 
+      return candidateSkills.some(cs => 
         cs === requiredSkill || cs.includes(requiredSkill) || requiredSkill.includes(cs)
       );
-      
-      // Check against resume/summary text
-      const inText = allCandidateText.includes(requiredSkill);
-      
-      return inSkillsList || inText;
     });
 
-    const matchPercentage = (matchedMustHave.length / mustHaveSkills.length) * 100;
-    
-    if (matchPercentage >= 80) {
-      score += 25; // Full points for ≥80% match
-    } else {
-      // Partial credit for partial match
-      score += Math.floor((matchPercentage / 80) * 25);
-    }
-  } else {
-    // Fallback to old logic if must_have_skills not available
-    const jobSkills = Array.isArray(job.skills) 
-      ? job.skills.map(s => String(s).toLowerCase().trim())
-      : [];
-
-    if (jobSkills.length > 0 && candidateSkills.length > 0) {
-      const matches = jobSkills.filter(js => 
-        candidateSkills.some(cs => cs === js || cs.includes(js) || js.includes(cs))
-      ).length;
-
-      if (matches >= 3) score += 25;
-      else if (matches === 2) score += 15;
-      else if (matches === 1) score += 5;
-    }
+    const matchPercentage = (matchedMustHave.length / mustHaveSkills.length);
+    // Scale to 40 points based on match percentage
+    score += Math.round(matchPercentage * 40);
   }
 
-  // Check good_to_have_skills match
-  if (goodToHaveSkills.length > 0) {
+  // Score good_to_have_skills (10 points max)
+  if (goodToHaveSkills.length > 0 && candidateSkills.length > 0) {
     const matchedGoodToHave = goodToHaveSkills.filter(optionalSkill => {
-      const inSkillsList = candidateSkills.some(cs => 
+      return candidateSkills.some(cs => 
         cs === optionalSkill || cs.includes(optionalSkill) || optionalSkill.includes(cs)
       );
-      const inText = allCandidateText.includes(optionalSkill);
-      return inSkillsList || inText;
     });
 
-    const matchPercentage = (matchedGoodToHave.length / goodToHaveSkills.length) * 100;
-    
-    if (matchPercentage >= 100) {
-      score += 20; // 100% match → +20
-    } else if (matchPercentage >= 50) {
-      score += 10; // 50% match → +10
+    if (matchedGoodToHave.length > 0) {
+      const matchPercentage = (matchedGoodToHave.length / goodToHaveSkills.length);
+      // Scale to 10 points based on match percentage
+      score += Math.round(matchPercentage * 10);
     }
   }
 
-  return Math.min(score, 25); // Cap at 25 points
+  return Math.min(score, 50); // Cap at 50 points
 }
 
 /**
- * Score: Job Title Match (Max 25 points)
- * Tokenize title, ignore common words, match against candidate skills
- */
-function scoreJobTitle(job: Job, candidate: CandidateProfile): number {
-  if (!job.title) return 0;
-
-  const ignoreWords = new Set([
-    'developer', 'engineer', 'architect', 'consultant', 
-    'lead', 'senior', 'junior', 'manager', 'specialist',
-    'analyst', 'administrator', 'coordinator', 'assistant'
-  ]);
-
-  // Tokenize job title
-  const titleTokens = job.title
-    .toLowerCase()
-    .split(/[\s\-_\/]+/)
-    .map(t => t.trim())
-    .filter(t => t.length > 2 && !ignoreWords.has(t));
-
-  if (titleTokens.length === 0) return 0;
-
-  const candidateSkills = Array.isArray(candidate.skills)
-    ? candidate.skills.map(s => String(s).toLowerCase().trim())
-    : [];
-
-  // Check if any token matches a candidate skill
-  const hasMatch = titleTokens.some(token =>
-    candidateSkills.some(skill => 
-      skill === token || skill.includes(token) || token.includes(skill)
-    )
-  );
-
-  return hasMatch ? 25 : 0;
-}
-
-/**
- * Score: Experience (Max 20 points)
- * Candidate ≥ required → +20
- * Within 20% (pre-filter allows this) → +15
- * Within 1 year → +10
+ * Score: Experience (Max 10 points)
+ * 
+ * Rules:
+ * - +10 if candidate >= required OR within 10% margin
+ * - +10 if no requirement specified
+ * - 0 otherwise
  */
 function scoreExperience(job: Job, candidate: CandidateProfile): number {
   const required = job.required_years_experience;
   const candidateExp = candidate.experience_years || 0;
 
+  // No requirement specified → +10 (default pass)
   if (required === null || required === undefined) {
-    return 10; // No requirement specified - neutral score
-  }
-
-  if (candidateExp >= required) {
-    return 20; // Meets or exceeds
-  }
-
-  // Within 20% margin (which is what pre-filter allows)
-  const minRequired = required * 0.8;
-  if (candidateExp >= minRequired) {
-    return 15;
-  }
-
-  const diff = required - candidateExp;
-  if (diff <= 1) {
     return 10;
   }
 
-  return 5; // Some experience is better than none
+  // Candidate meets or exceeds requirement → +10
+  if (candidateExp >= required) {
+    return 10;
+  }
+
+  // Within 10% margin → +10
+  const minRequired = required * 0.9;
+  if (candidateExp >= minRequired) {
+    return 10;
+  }
+
+  // Below threshold → 0
+  return 0;
 }
 
 /**
- * Score: Degree / Certification (Max 20 points)
+ * Score: Degree / Certification (Can be +10 or -10)
  * 
  * Rules:
- * - Only scored if job specifies education_required or certification_required
- * - Required & present → +20
- * - Required & missing → +5 (partial credit for other qualifications)
- * - No requirement → +10 (neutral)
+ * - +10 if matches OR not mentioned
+ * - -10 if required but missing
  */
 function scoreDegree(job: Job, candidate: CandidateProfile): number {
-  // Check education_required first (new field)
   const educationRequired = job.education_required || job.required_degree;
   const certificationRequired = job.certification_required;
 
+  // No requirement specified → +10 (default pass)
   if (!educationRequired && !certificationRequired) {
-    return 10; // No requirement specified - neutral score
+    return 10;
   }
 
   const candidateDegrees = Array.isArray(candidate.degrees)
@@ -274,7 +218,7 @@ function scoreDegree(job: Job, candidate: CandidateProfile): number {
     const requiredLower = String(educationRequired).toLowerCase().trim();
     hasMatch = allCredentials.some(cred =>
       cred === requiredLower || cred.includes(requiredLower) || requiredLower.includes(cred)
-    ) || (candidate.resume_text || '').toLowerCase().includes(requiredLower.toLowerCase());
+    ) || (candidate.resume_text || '').toLowerCase().includes(requiredLower);
   }
 
   // Check certification requirement
@@ -282,21 +226,24 @@ function scoreDegree(job: Job, candidate: CandidateProfile): number {
     const requiredLower = String(certificationRequired).toLowerCase().trim();
     hasMatch = candidateCerts.some(cert =>
       cert === requiredLower || cert.includes(requiredLower) || requiredLower.includes(cert)
-    ) || (candidate.resume_text || '').toLowerCase().includes(requiredLower.toLowerCase());
+    ) || (candidate.resume_text || '').toLowerCase().includes(requiredLower);
   }
 
+  // Required and present → +10
   if (hasMatch) {
-    return 20; // Required and present
+    return 10;
   }
 
-  return 5; // Missing but may have equivalent experience
+  // Required but missing → -10
+  return -10;
 }
 
 /**
- * Score: Pay Rate (Max 10 points)
- * Meets or exceeds expectation → +10
- * Within 25% margin (pre-filter allows this) → +7
- * Missing data → +5 (neutral)
+ * Score: Pay Rate (Can be +10 or -10)
+ * 
+ * Rules:
+ * - +10 if within 25% range OR not mentioned
+ * - -10 if outside 25% range
  */
 function scorePayRate(job: Job, candidate: CandidateProfile): number {
   // Try to get pay rate from structured fields first
@@ -310,8 +257,9 @@ function scorePayRate(job: Job, candidate: CandidateProfile): number {
     jobPayRate = extractPayRate(job.salary);
   }
 
+  // No pay rate mentioned → +10 (default pass)
   if (jobPayRate === null) {
-    return 5; // No pay rate mentioned - neutral
+    return 10;
   }
 
   // Get candidate expectation
@@ -323,52 +271,49 @@ function scorePayRate(job: Job, candidate: CandidateProfile): number {
     candidateMinPay = extractPayRate(candidate.rate_expectation);
   }
 
+  // No candidate expectation → +10 (default pass)
   if (candidateMinPay === null) {
-    return 5; // No expectation specified - neutral
+    return 10;
   }
 
-  if (jobPayRate >= candidateMinPay) {
-    return 10; // Meets or exceeds expectation
-  }
-
-  // Within 25% margin (which is what pre-filter allows)
+  // Within 25% range (job pays at least 75% of expectation) → +10
   if (jobPayRate >= candidateMinPay * 0.75) {
-    return 7;
+    return 10;
   }
 
-  return 3; // Below expectation but passed filter
+  // Outside 25% range → -10
+  return -10;
 }
 
 /**
  * Calculate total match score for a job-candidate pair
  * 
- * Scoring breakdown (max 100 points):
- * - Skills: 0-25 points
- * - Job Title: 0-25 points
- * - Experience: 0-20 points
- * - Degree/Cert: 0-20 points
- * - Pay Rate: 0-10 points
+ * Scoring breakdown (max 80 points):
+ * - Skills: 0-50 points
+ * - Experience: 0-10 points
+ * - Degree: +10 or -10 points
+ * - Pay Rate: +10 or -10 points
+ * 
+ * Threshold: 50 points to pass
  */
 export function calculateMatchScore(
   job: Job,
   candidate: CandidateProfile
 ): { score: number; breakdown: ScoreBreakdown } {
   const skillsScore = scoreSkills(job, candidate);
-  const jobTitleScore = scoreJobTitle(job, candidate);
   const experienceScore = scoreExperience(job, candidate);
   const degreeScore = scoreDegree(job, candidate);
   const payScore = scorePayRate(job, candidate);
 
-  const total = skillsScore + jobTitleScore + experienceScore + degreeScore + payScore;
+  const total = skillsScore + experienceScore + degreeScore + payScore;
 
-  // Clamp score to 0-100 range
-  const clampedScore = Math.max(0, Math.min(100, total));
+  // Clamp score to 0-80 range (can be negative due to -10 penalties)
+  const clampedScore = Math.max(0, Math.min(80, total));
 
   return {
     score: clampedScore,
     breakdown: {
       skills: skillsScore,
-      jobTitle: jobTitleScore,
       experience: experienceScore,
       degree: degreeScore,
       pay: payScore,
@@ -376,4 +321,3 @@ export function calculateMatchScore(
     },
   };
 }
-

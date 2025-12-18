@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     console.log(`[Match Jobs] Profile location: ${profile.location || 'NOT SET'}`);
     
     const matchingResult = await fetchAndMatchJobs(supabase, profile, {
-      minScore: 70,
+      minScore: 50, // 50 out of 80 points threshold
       logFiltering: true,
     });
     

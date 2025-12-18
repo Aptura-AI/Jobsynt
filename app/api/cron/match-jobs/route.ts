@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
 
         // Fetch and match jobs
         const matchingResult = await fetchAndMatchJobs(supabase, profile, {
-          minScore: 70,
+          minScore: 50, // 50 out of 80 points threshold
           logFiltering: false, // Quiet mode for cron
         });
 

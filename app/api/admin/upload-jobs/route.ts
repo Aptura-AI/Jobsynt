@@ -203,6 +203,40 @@ export async function POST(req: NextRequest) {
         'targetuuids': 'target_candidate_ids',
         'assigned to': 'target_candidate_ids',
         'assignedto': 'target_candidate_ids',
+        // Must Have Skills (required skills for matching)
+        'must have skills': 'must_have_skills',
+        'must_have_skills': 'must_have_skills',
+        'musthaveskills': 'must_have_skills',
+        'required skills': 'must_have_skills',
+        'requiredskills': 'must_have_skills',
+        'must have': 'must_have_skills',
+        'musthave': 'must_have_skills',
+        // Good To Have Skills (optional skills for bonus points)
+        'good to have skills': 'good_to_have_skills',
+        'good_to_have_skills': 'good_to_have_skills',
+        'goodtohaveskills': 'good_to_have_skills',
+        'nice to have': 'good_to_have_skills',
+        'nicetohave': 'good_to_have_skills',
+        'optional skills': 'good_to_have_skills',
+        'optionalskills': 'good_to_have_skills',
+        'good to have': 'good_to_have_skills',
+        'goodtohave': 'good_to_have_skills',
+        // Required Years Experience
+        'required years experience': 'required_years_experience',
+        'required_years_experience': 'required_years_experience',
+        'years experience': 'required_years_experience',
+        'yearsexperience': 'required_years_experience',
+        'experience': 'required_years_experience',
+        'min experience': 'required_years_experience',
+        'minexperience': 'required_years_experience',
+        'years': 'required_years_experience',
+        'exp': 'required_years_experience',
+        // Is Remote
+        'is remote': 'is_remote',
+        'isremote': 'is_remote',
+        'remote': 'is_remote',
+        'work type': 'is_remote',
+        'worktype': 'is_remote',
       };
       return mapping[lower] || null;
     };
@@ -333,6 +367,37 @@ export async function POST(req: NextRequest) {
           ? String(row.target_candidate_ids).trim() 
           : null;
 
+        // Handle must_have_skills and good_to_have_skills
+        const mustHaveSkills = row.must_have_skills 
+          ? String(row.must_have_skills).trim() 
+          : null;
+        const goodToHaveSkills = row.good_to_have_skills 
+          ? String(row.good_to_have_skills).trim() 
+          : null;
+
+        // Handle required_years_experience - parse as number
+        let requiredYearsExp: number | null = null;
+        if (row.required_years_experience) {
+          const expStr = String(row.required_years_experience).trim();
+          // Extract number from strings like "5", "5+", "5 years", "5-7"
+          const expMatch = expStr.match(/(\d+)/);
+          if (expMatch) {
+            requiredYearsExp = parseInt(expMatch[1], 10);
+          }
+        }
+
+        // Handle is_remote - parse as boolean
+        let isRemote = false;
+        if (row.is_remote) {
+          const remoteStr = String(row.is_remote).trim().toLowerCase();
+          isRemote = ['true', 'yes', '1', 'remote', 'y'].includes(remoteStr);
+        }
+        // Also check location for "remote" keyword
+        const locationStr = String(row.location || '').trim().toLowerCase();
+        if (locationStr.includes('remote')) {
+          isRemote = true;
+        }
+
         const jobData = {
           title: jobTitle,
           company: jobCompany,
@@ -347,6 +412,11 @@ export async function POST(req: NextRequest) {
           is_constant_search: false,
           is_real: true,
           target_candidate_ids: targetCandidateIds, // Recruiter-targeted candidate UUIDs
+          must_have_skills: mustHaveSkills, // Required skills for matching
+          good_to_have_skills: goodToHaveSkills, // Optional skills for bonus points
+          required_years_experience: requiredYearsExp, // Minimum experience required
+          is_remote: isRemote, // Remote job flag
+          is_active: true, // Mark as active by default
         };
 
         // Use upsert with onConflict: 'url' for automatic deduplication

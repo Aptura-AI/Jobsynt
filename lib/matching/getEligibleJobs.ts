@@ -56,7 +56,7 @@ export async function getEligibleJobs(
     logFiltering?: boolean;
   } = {}
 ): Promise<MatchingResult> {
-  const minScore = options.minScore ?? 70;
+  const minScore = options.minScore ?? 50; // 50 out of 80 points threshold
   const logFiltering = options.logFiltering ?? false;
 
   const stats = {
