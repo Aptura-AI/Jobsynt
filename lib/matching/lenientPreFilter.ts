@@ -301,13 +301,17 @@ function filterByRate(job: Job, candidate: CandidateProfile): FilterResult {
 }
 
 /**
- * Skills Filter
- * - Pass if ANY Required skill from job is in candidate's PRIMARY or SECONDARY skills
- * - If job has no required skills defined → pass (can't filter without data)
- * - Match against: primary_skills, secondary_skills, and legacy skills array
+ * Skills Filter (CRITICAL)
+ * 
+ * Rules:
+ * - If job has must_have_skills AND zero overlap → REJECT (unless explicit_target)
+ * - If job has no must_have_skills → PASS (can't filter without data)
+ * - Pass if ANY must_have skill matches candidate's primary/secondary/legacy skills
+ * 
+ * NOTE: Explicit targets bypass this filter entirely (handled in main filter loop)
  */
 function filterBySkills(job: Job, candidate: CandidateProfile): FilterResult {
-  // Extract job REQUIRED skills (must_have_skills, required_skills)
+  // Extract job must_have_skills
   const requiredSkillsArray: string[] = [];
   
   if (job.must_have_skills) {
@@ -316,7 +320,7 @@ function filterBySkills(job: Job, candidate: CandidateProfile): FilterResult {
   if (job.required_skills) {
     requiredSkillsArray.push(...job.required_skills.split(/[,;|]/));
   }
-  // Fallback to generic skills array if no required_skills specified
+  // Fallback to generic skills array if no must_have_skills specified
   if (requiredSkillsArray.length === 0 && Array.isArray(job.skills)) {
     requiredSkillsArray.push(...job.skills);
   }
@@ -326,43 +330,43 @@ function filterBySkills(job: Job, candidate: CandidateProfile): FilterResult {
     .map(s => s.toLowerCase().trim())
     .filter(s => s.length > 1);
 
-  // If job has no required skills defined, pass (can't filter without data)
+  // If job has no must_have_skills defined → PASS (can't filter without data)
   if (normalizedRequiredSkills.length === 0) {
     return { passed: true };
   }
 
-  // Build candidate PRIMARY and SECONDARY skills only (not adjacent/generic)
-  const candidateCoreSkills: string[] = [];
+  // Build candidate skills from primary, secondary, and legacy arrays
+  const candidateSkills: string[] = [];
   
   // Primary skills (highest priority)
   if (Array.isArray(candidate.primary_skills)) {
-    candidateCoreSkills.push(...candidate.primary_skills.map(s => s.toLowerCase().trim()));
+    candidateSkills.push(...candidate.primary_skills.map(s => s.toLowerCase().trim()));
   }
   // Secondary skills
   if (Array.isArray(candidate.secondary_skills)) {
-    candidateCoreSkills.push(...candidate.secondary_skills.map(s => s.toLowerCase().trim()));
+    candidateSkills.push(...candidate.secondary_skills.map(s => s.toLowerCase().trim()));
   }
   // Legacy skills array (for backwards compatibility)
   if (Array.isArray(candidate.skills)) {
-    candidateCoreSkills.push(...candidate.skills.map(s => s.toLowerCase().trim()));
+    candidateSkills.push(...candidate.skills.map(s => s.toLowerCase().trim()));
   }
 
-  // If candidate has no core skills defined, reject
-  if (candidateCoreSkills.length === 0) {
+  // If candidate has no skills defined → REJECT
+  // (Job has must_have_skills but candidate has nothing to match)
+  if (candidateSkills.length === 0) {
     return {
       passed: false,
       reason: 'skills_below_threshold',
-      stage: 'Candidate has no primary/secondary skills defined',
+      stage: 'Candidate has no skills defined. Job requires: ' + normalizedRequiredSkills.slice(0, 3).join(', '),
     };
   }
 
-  // Check if ANY required skill matches candidate's primary/secondary skills
+  // Check for ANY skill overlap
   let matchCount = 0;
   const matchedSkills: string[] = [];
   
   for (const requiredSkill of normalizedRequiredSkills) {
-    // Check if any candidate skill contains or matches the required skill
-    const hasMatch = candidateCoreSkills.some(candidateSkill => {
+    const hasMatch = candidateSkills.some(candidateSkill => {
       return candidateSkill === requiredSkill || 
              candidateSkill.includes(requiredSkill) || 
              requiredSkill.includes(candidateSkill);
@@ -374,16 +378,18 @@ function filterBySkills(job: Job, candidate: CandidateProfile): FilterResult {
     }
   }
 
-  // Pass if at least ONE required skill matches
-  if (matchCount >= 1) {
-    return { passed: true };
+  // ZERO OVERLAP = REJECT (this is critical)
+  // Unless explicit_target (which bypasses this filter entirely)
+  if (matchCount === 0) {
+    return {
+      passed: false,
+      reason: 'skills_below_threshold',
+      stage: `Zero skill overlap. Job needs: ${normalizedRequiredSkills.slice(0, 5).join(', ')}. Candidate has: ${candidateSkills.slice(0, 5).join(', ')}`,
+    };
   }
 
-  return {
-    passed: false,
-    reason: 'skills_below_threshold',
-    stage: `No required skills match. Job needs: ${normalizedRequiredSkills.slice(0, 5).join(', ')}. Candidate has: ${candidateCoreSkills.slice(0, 5).join(', ')}`,
-  };
+  // At least one match → PASS
+  return { passed: true };
 }
 
 /**

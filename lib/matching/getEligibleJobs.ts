@@ -127,18 +127,20 @@ export async function getEligibleJobs(
     const { score, breakdown } = calculateMatchScore(job, candidate);
 
     // EXPLICIT TARGETS: Always include regardless of score (recruiter intent)
+    // Score is computed but CANNOT disqualify explicit targets
     if (job.match_source === 'explicit_target') {
       eligible.push({
         ...job,
-        match_score: Math.max(score, 70), // Ensure minimum score of 70 for explicit targets
+        match_score: score, // Keep actual score for transparency
         score_breakdown: breakdown,
         match_source: 'explicit_target',
       });
       stats.passedScoring++;
+      console.log(`[Explicit Target] Job "${job.title}" included with score ${score} (bypasses threshold)`);
       continue;
     }
 
-    // GLOBAL MATCHES: Apply score threshold (70% default)
+    // GLOBAL MATCHES: Apply score threshold (50 out of 80)
     if (score >= minScore) {
       eligible.push({
         ...job,

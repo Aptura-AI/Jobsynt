@@ -367,55 +367,106 @@ export async function POST(req: NextRequest) {
           ? String(row.target_candidate_ids).trim() 
           : null;
 
-        // Handle must_have_skills and good_to_have_skills
-        const mustHaveSkills = row.must_have_skills 
-          ? String(row.must_have_skills).trim() 
-          : null;
-        const goodToHaveSkills = row.good_to_have_skills 
-          ? String(row.good_to_have_skills).trim() 
+        // ============================================
+        // RAW FIELD PRESERVATION (store original values)
+        // ============================================
+        const locationRaw = row.location ? String(row.location).trim() : null;
+        const payRateRaw = row.pay_rate || row.rate ? String(row.pay_rate || row.rate).trim() : null;
+        const descriptionRaw = row.key_requirements || row.description 
+          ? String(row.key_requirements || row.description).trim() 
           : null;
 
-        // Handle required_years_experience - parse as number
+        // ============================================
+        // SKILLS NORMALIZATION (lowercase, tokenized, deduplicated)
+        // Store as comma-separated string, NEVER NULL (use empty string)
+        // ============================================
+        function normalizeSkills(skillsStr: string | null | undefined): string {
+          if (!skillsStr || String(skillsStr).trim() === '') {
+            return ''; // Empty string, NEVER NULL
+          }
+          const skills = String(skillsStr)
+            .split(/[,;|]/) // Split by comma, semicolon, or pipe
+            .map(s => s.trim().toLowerCase())
+            .filter(s => s.length > 0);
+          // Deduplicate
+          const uniqueSkills = [...new Set(skills)];
+          return uniqueSkills.join(', ');
+        }
+
+        const mustHaveSkills = normalizeSkills(row.must_have_skills);
+        const goodToHaveSkills = normalizeSkills(row.good_to_have_skills);
+
+        // ============================================
+        // EXPERIENCE PARSING
+        // ============================================
         let requiredYearsExp: number | null = null;
         if (row.required_years_experience) {
           const expStr = String(row.required_years_experience).trim();
-          // Extract number from strings like "5", "5+", "5 years", "5-7"
+          // Extract number from strings like "5", "5+", "5 years", "5-7", "10+"
           const expMatch = expStr.match(/(\d+)/);
           if (expMatch) {
             requiredYearsExp = parseInt(expMatch[1], 10);
           }
+          // If parsing fails, leave as NULL (do NOT reject job)
         }
 
-        // Handle is_remote - parse as boolean
+        // ============================================
+        // LOCATION & REMOTE NORMALIZATION
+        // ============================================
+        const locationStr = String(row.location || '').trim();
+        const locationLower = locationStr.toLowerCase();
+        
+        // Determine is_remote
         let isRemote = false;
         if (row.is_remote) {
           const remoteStr = String(row.is_remote).trim().toLowerCase();
           isRemote = ['true', 'yes', '1', 'remote', 'y'].includes(remoteStr);
         }
-        // Also check location for "remote" keyword
-        const locationStr = String(row.location || '').trim().toLowerCase();
-        if (locationStr.includes('remote')) {
+        if (locationLower.includes('remote')) {
           isRemote = true;
         }
 
+        // Determine location_type based on rules
+        let locationType: 'remote' | 'hybrid' | 'onsite' = 'onsite';
+        if (isRemote || locationLower.includes('remote')) {
+          locationType = 'remote';
+          isRemote = true; // Sync is_remote flag
+        } else if (locationLower.includes('hybrid')) {
+          locationType = 'hybrid';
+        } else {
+          locationType = 'onsite';
+        }
+
+        // ============================================
+        // BUILD JOB DATA
+        // ============================================
         const jobData = {
           title: jobTitle,
           company: jobCompany,
-          location: String(row.location || '').trim() || 'Remote',
+          location: locationStr || 'Remote',
           url: urlValue, // Required for deduplication (unique index)
           job_type, // Required for job type filtering
-          description: String(row.key_requirements || row.description || '').trim() || null,
-          salary: String(row.pay_rate || row.rate || '').trim() || null,
+          description: descriptionRaw || null,
+          salary: payRateRaw || null,
           posted_date: parsedDate,
           source: String(row.source || 'manual').trim(),
           profile_id: null,
           is_constant_search: false,
           is_real: true,
           target_candidate_ids: targetCandidateIds, // Recruiter-targeted candidate UUIDs
-          must_have_skills: mustHaveSkills, // Required skills for matching
-          good_to_have_skills: goodToHaveSkills, // Optional skills for bonus points
-          required_years_experience: requiredYearsExp, // Minimum experience required
-          is_remote: isRemote, // Remote job flag
+          // Skills (normalized, never NULL)
+          must_have_skills: mustHaveSkills || '', // Empty string if no skills
+          good_to_have_skills: goodToHaveSkills || '', // Empty string if no skills
+          // Experience
+          required_years_experience: requiredYearsExp, // NULL if not specified
+          // Location normalization
+          is_remote: isRemote,
+          location_type: locationType,
+          // Raw fields (preserve original Excel values)
+          location_raw: locationRaw,
+          pay_rate_raw: payRateRaw,
+          description_raw: descriptionRaw,
+          // Status
           is_active: true, // Mark as active by default
         };
 
