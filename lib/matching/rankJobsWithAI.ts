@@ -1,8 +1,16 @@
 /**
- * Rank Jobs with AI
+ * Rank Jobs with AI (Ledger-Based)
  * 
  * Uses OpenAI Responses API (prompt version 3) to rank and curate pre-matched jobs.
  * The AI acts as a recruiter agent, taking charge of job prioritization.
+ * 
+ * LEDGER RULES:
+ * - AI ONLY ranks jobs from candidate_job_matches (the ledger)
+ * - AI NEVER says "no matching jobs" if records exist
+ * - AI NEVER suggests external job boards
+ * - AI NEVER re-evaluates job eligibility
+ * - AI may: rank, explain, prioritize, recommend actions
+ * - AI may NOT: remove jobs, add jobs, discard jobs
  */
 
 import OpenAI from 'openai';
@@ -92,17 +100,25 @@ export async function rankJobsWithAI(
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch matched jobs from candidate_job_matches
-    // Only fetch active jobs (exclude applied, dismissed, expired)
+    // LEDGER QUERY: Fetch jobs from candidate_job_matches
+    // Only fetch jobs that are:
+    // - Not applied (applied_at IS NULL)
+    // - Not dismissed (dismissed_at IS NULL)
+    // - Posted within 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+
     const { data: matches, error: matchesError } = await supabase
       .from('candidate_job_matches')
       .select(`
         job_id,
         match_score,
         match_source,
+        qualified_at,
+        ai_priority,
         reasons,
-        job_status,
-        scraped_jobs (
+        scraped_jobs!inner (
           id,
           title,
           company,
@@ -120,74 +136,60 @@ export async function rankJobsWithAI(
         )
       `)
       .eq('candidate_id', candidateId)
-      .eq('job_status', 'active') // Only active jobs
+      .is('applied_at', null)      // Not applied
+      .is('dismissed_at', null)    // Not dismissed
+      .gte('scraped_jobs.posted_date', thirtyDaysAgoStr) // Within 30 days
       .order('match_score', { ascending: false })
       .limit(20); // Limit to top 20 for AI ranking
 
+    // LEDGER RULE: If no jobs exist in the ledger, return appropriate message
+    // AI NEVER says "no matching jobs" - instead, explain the system is working
     if (matchesError || !matches || matches.length === 0) {
       return {
         jobs: [],
         guidance: {
-          summary: 'I\'ve reviewed your profile and the current job market. No strong matches are available right now, but our matching system is actively running and will surface opportunities as they become available.',
+          summary: "I'm actively sourcing and reviewing roles for you. New matches will appear here shortly.",
           nextSteps: [
             'Your profile is being continuously matched against new job postings',
-            'You\'ll be notified when high-quality matches are found'
+            'Recruiters are actively reviewing opportunities for your profile',
+            'Check back soon for new qualified matches'
           ],
         },
       };
     }
 
     // Transform to MatchedJob format
-    // Filter out inactive jobs and jobs older than 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const matchedJobs: MatchedJob[] = matches
-      .filter((match: any) => {
-        const job = match.scraped_jobs;
-        // Filter out inactive jobs
-        if (job.is_active === false) return false;
-        // Filter out jobs older than 30 days
-        if (job.posted_date) {
-          const postedDate = new Date(job.posted_date);
-          if (postedDate < thirtyDaysAgo) return false;
-        }
-        return true;
-      })
-      .map((match: any) => {
-        const job = match.scraped_jobs;
-        return {
-          id: job.id,
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          job_type: job.job_type,
-          location_type: job.location_type,
-          is_remote: job.is_remote,
-          description: job.description,
-          salary: job.salary,
-          pay_rate_min: job.pay_rate_min,
-          pay_rate_max: job.pay_rate_max,
-          url: job.url,
-          posted_date: job.posted_date,
-          match_score: match.match_score,
-          match_source: match.match_source || 'global_match',
-          reasons: match.reasons || [],
-        };
-      });
-
-    // If all jobs were filtered out, return no jobs response
-    if (matchedJobs.length === 0) {
+    // NO additional filtering - trust the ledger query
+    const matchedJobs: MatchedJob[] = matches.map((match: any) => {
+      const job = match.scraped_jobs;
       return {
-        jobs: [],
-        guidance: {
-          summary: 'I\'ve reviewed your profile and the current job market. No strong matches are available right now, but our matching system is actively running and will surface opportunities as they become available.',
-          nextSteps: [
-            'Your profile is being continuously matched against new job postings',
-            'You\'ll be notified when high-quality matches are found'
-          ],
-        },
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        job_type: job.job_type,
+        location_type: job.location_type,
+        is_remote: job.is_remote,
+        description: job.description,
+        salary: job.salary,
+        pay_rate_min: job.pay_rate_min,
+        pay_rate_max: job.pay_rate_max,
+        url: job.url,
+        posted_date: job.posted_date,
+        match_score: match.match_score,
+        match_source: match.match_source || 'global_match',
+        reasons: match.reasons || [],
       };
+    });
+
+    // Update last_ranked_at for these jobs
+    const jobIds = matchedJobs.map(j => j.id);
+    if (jobIds.length > 0) {
+      await supabase
+        .from('candidate_job_matches')
+        .update({ last_ranked_at: new Date().toISOString() })
+        .eq('candidate_id', candidateId)
+        .in('job_id', jobIds);
     }
 
     // Prepare candidate data for AI
@@ -245,7 +247,7 @@ export async function rankJobsWithAI(
         input: {
           candidate: candidateData,
           jobs: jobsData,
-          note: `These jobs have already passed hard filters and scored ≥70% on deterministic matching. ${explicitTargetCount} job(s) were EXPLICITLY targeted to this candidate by a recruiter - NEVER discard these. Your role is to rank, curate, and provide recruiter-level guidance. For explicitly targeted jobs, say "This role was specifically shortlisted for you."`,
+          note: `LEDGER-BASED RANKING: These ${jobsData.length} jobs are from the candidate's qualified job ledger. They have ALREADY been approved and MUST NOT be discarded. ${explicitTargetCount} job(s) were EXPLICITLY targeted by a recruiter. Your role is ONLY to: 1) Rank by priority, 2) Explain fit, 3) Recommend actions. You may NOT: remove jobs, add jobs, or suggest external job boards. For explicitly targeted jobs, say "This role was specifically shortlisted for you."`,
         } as any,
       });
 
@@ -312,6 +314,18 @@ export async function rankJobsWithAI(
           'Apply to best matches',
         ],
       };
+
+      // Update AI priority in the ledger for ranked jobs
+      for (const rankedJob of rankedJobs) {
+        await supabase
+          .from('candidate_job_matches')
+          .update({ 
+            ai_priority: rankedJob.priority,
+            last_ranked_at: new Date().toISOString(),
+          })
+          .eq('candidate_id', candidateId)
+          .eq('job_id', rankedJob.id);
+      }
 
       return {
         jobs: rankedJobs,
