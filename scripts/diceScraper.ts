@@ -15,6 +15,7 @@ import { chromium, Page } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { inferJobTypeFromDescription, DEFAULT_JOB_TYPE, type JobType } from '@/lib/job-types';
+import { extractPlatformFromJob, extractSecondaryPlatforms } from '@/lib/matching/extractPlatform';
 
 // =========================
 // Manual configuration
@@ -182,8 +183,8 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
     must_have_skills: mustHaveSkills,
     good_to_have_skills: goodToHaveSkills,
     // Platform identity (extracted at ingestion, stored once)
-    primary_platform: primaryPlatform || '',
-    secondary_platforms: secondaryPlatforms,
+    primary_platform: primaryPlatformValue,
+    secondary_platforms: secondaryPlatforms.length > 0 ? secondaryPlatforms : null,
     // Experience - extracted from description
     required_years_experience: requiredYearsExp,
     // Pay rate (optional)
@@ -270,19 +271,26 @@ async function main() {
 
       // Use upsert with onConflict: 'url' for automatic deduplication
       // The database has a unique index on scraped_jobs.url
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('scraped_jobs')
-        .upsert(job, { onConflict: 'url' });
+        .upsert(job, { onConflict: 'url' })
+        .select();
       
       if (error) {
         // Handle unique constraint violations gracefully
         if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
-          console.log(`Skipped duplicate job (URL already exists): ${job.title}`);
+          console.log(`⚠️  Skipped duplicate job (URL already exists): ${job.title}`);
         } else {
-          console.error(`Upsert failed for ${job.title}:`, error.message);
+          console.error(`❌ Upsert FAILED for ${job.title}:`, error.message);
+          console.error(`   Error code: ${error.code}`);
+          console.error(`   Error details:`, error.details);
+          console.error(`   Job data:`, JSON.stringify(job, null, 2));
         }
       } else {
-        console.log(`Saved job: ${job.title} (${job.url})`);
+        console.log(`✅ Saved job: ${job.title} at ${job.company} (${job.url})`);
+        if (data && data.length > 0) {
+          console.log(`   Job ID: ${data[0].id}`);
+        }
       }
     } catch (err) {
       console.error(`Error scraping ${link}:`, (err as Error).message);
