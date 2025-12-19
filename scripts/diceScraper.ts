@@ -162,11 +162,23 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
 // Main scraper flow
 // =========================
 async function main() {
-  console.log('Opening Dice search…');
-  const searchUrl = buildSearchUrl();
+  console.log('========================================');
+  console.log('DICE SCRAPER - SEMI-AUTOMATIC MODE');
+  console.log('========================================');
+  console.log('1. Browser will open Dice.com');
+  console.log('2. Please LOGIN manually to your Dice account');
+  console.log('3. SEARCH for jobs (apply any filters you want)');
+  console.log('4. Once you see the job results, press ENTER in this terminal');
+  console.log('5. The scraper will then scrape all jobs on the current page');
+  console.log('========================================\n');
 
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext();
+  const browser = await chromium.launch({ 
+    headless: false, // Show browser so user can login
+    slowMo: 100 // Slow down for visibility
+  });
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 720 }
+  });
   const page = await context.newPage();
 
   const shutdown = async () => {
@@ -176,10 +188,26 @@ async function main() {
   };
   process.on('SIGINT', shutdown);
 
-  await page.goto(searchUrl, { waitUntil: 'networkidle', timeout: 45_000 });
+  // Navigate to Dice homepage (not search URL - user will search manually)
+  console.log('Opening Dice.com...');
+  await page.goto('https://www.dice.com', { waitUntil: 'networkidle', timeout: 45_000 });
+  
+  console.log('\n⏳ WAITING FOR YOU TO:');
+  console.log('   1. Login to your Dice account');
+  console.log('   2. Search for jobs (use any filters you want)');
+  console.log('   3. Wait for job results to load');
+  console.log('\nPress ENTER when you are ready for the scraper to start...\n');
+  
+  // Wait for user to press Enter
+  await new Promise<void>((resolve) => {
+    process.stdin.once('data', () => {
+      resolve();
+    });
+  });
 
-  // Apply simple client-side filters if possible (best-effort)
-  // NOTE: Dice filters are often query-parameter based; adjust above constants into the URL as needed.
+  console.log('✅ Starting to scrape jobs from current page...\n');
+
+  // Now scrape the current page (whatever the user has navigated to)
   const jobLinks = await collectJobLinks(page);
 
   let processed = 0;
