@@ -70,6 +70,7 @@ export async function GET(req: NextRequest) {
         applied: 0,
         dismissed: 0,
         active: 0,
+        get_endpoint_would_return: 0,
       },
       matches: [] as any[],
     };
