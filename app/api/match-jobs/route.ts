@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
       match_score: job.match_score,
       match_source: job.match_source || 'global_match',
       qualified_at: new Date().toISOString(),
+      ai_visibility: 'visible', // Default to visible, platform gating will update if needed
       reasons: job.score_breakdown ? [
         `Skills: ${job.score_breakdown.skills} points`,
         `Experience: ${job.score_breakdown.experience} points`,
@@ -379,13 +380,14 @@ export async function GET(req: NextRequest) {
     // We fetch all rows and filter in-memory to avoid Supabase null filter issues
     // Filter by BOTH:
     // - visibility_status = 'active' (lifecycle: not applied, not dismissed)
-    // - ai_visibility = 'visible' (AI decision: platform gating passed)
+    // - ai_visibility = 'visible' OR NULL (NULL means not yet gated, treat as visible)
+    // Note: We use .or() to handle NULL ai_visibility for backward compatibility
     const { data: matches, error: matchesError } = await supabase
       .from('candidate_job_matches')
       .select('*')
       .eq('candidate_id', profile.id)
       .eq('visibility_status', 'active')  // Lifecycle: not applied, not dismissed
-      .eq('ai_visibility', 'visible');    // AI decision: platform gating passed
+      .or('ai_visibility.eq.visible,ai_visibility.is.null'); // AI decision: visible OR not yet set
 
     if (matchesError) {
       console.error('[Active Feed] Ledger fetch failed:', matchesError);
