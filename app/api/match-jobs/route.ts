@@ -16,6 +16,7 @@ import { fetchAndMatchJobs } from '@/lib/matching/getEligibleJobs';
 import { get30DaysAgoDate } from '@/lib/job-filters';
 import { logJobQualified, logFeedFetch } from '@/lib/matching/jobQualificationLog';
 import { rankJobsWithAI, CandidateProfile } from '@/lib/matching/rankJobsWithAI';
+import { applyPlatformGating } from '@/lib/matching/platformGating';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -152,6 +153,71 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ============================================
+    // PLATFORM GATING (after job insertion)
+    // ============================================
+    // Apply deterministic platform gating to newly inserted jobs
+    // This prevents cross-platform recommendations (e.g., PeopleSoft + Oracle Fusion)
+    let platformConflictsHidden = 0;
+    
+    if (insertedCount > 0) {
+      // Fetch job platforms for newly inserted jobs
+      const insertedJobIds = matchesToSave
+        .filter((_, index) => {
+          // Only include jobs that were actually inserted (not skipped)
+          return index < insertedCount;
+        })
+        .map(m => m.job_id);
+
+      if (insertedJobIds.length > 0) {
+        const { data: jobPlatforms } = await supabase
+          .from('scraped_jobs')
+          .select('id, primary_platform')
+          .in('id', insertedJobIds);
+
+        // Create platform map
+        const jobPlatformMap = new Map<string, string | null>();
+        (jobPlatforms || []).forEach((job: any) => {
+          jobPlatformMap.set(job.id, job.primary_platform);
+        });
+
+        // Get candidate platform info
+        const candidatePrimaryPlatform = profile.primary_platform;
+        const candidateSecondaryPlatforms = profile.secondary_platforms || [];
+
+        // Apply platform gating
+        const insertedMatches = matchesToSave
+          .slice(0, insertedCount)
+          .map(m => ({ job_id: m.job_id }));
+
+        const platformUpdates = applyPlatformGating(
+          insertedMatches,
+          candidatePrimaryPlatform,
+          candidateSecondaryPlatforms,
+          jobPlatformMap
+        );
+
+        // Update visibility_status for platform mismatches
+        for (const update of platformUpdates) {
+          if (update.visibility_status === 'hidden_by_ai') {
+            platformConflictsHidden++;
+            
+            await supabase
+              .from('candidate_job_matches')
+              .update({
+                visibility_status: 'hidden_by_ai',
+                hidden_reason: update.hidden_reason,
+                hidden_at: update.hidden_at,
+              })
+              .eq('candidate_id', profile.id)
+              .eq('job_id', update.job_id);
+
+            console.log(`[Match Jobs] Platform mismatch: Hidden job ${update.job_id.substring(0, 8)}... (${update.hidden_reason})`);
+          }
+        }
+      }
+    }
+
     // Count by source
     const explicitTargets = newEligibleJobs.filter(j => j.match_source === 'explicit_target').length;
     const globalMatches = newEligibleJobs.filter(j => j.match_source === 'global_match').length;
@@ -237,13 +303,14 @@ export async function POST(req: NextRequest) {
       skipped: skippedCount,
       explicitTargets,
       globalMatches,
+      platform_conflicts_hidden: platformConflictsHidden,
       stats: matchingResult.stats,
       diagnostics, // Include diagnostic info
       ranking: {
         triggered: rankingTriggered,
         error: rankingError || undefined,
       },
-      message: `Qualified ${insertedCount} new jobs (${explicitTargets} targeted, ${globalMatches} global). ${existingJobIds.size} already in ledger.${rankingTriggered ? ' AI ranking triggered.' : ''}`,
+      message: `Qualified ${insertedCount} new jobs (${explicitTargets} targeted, ${globalMatches} global). ${existingJobIds.size} already in ledger.${platformConflictsHidden > 0 ? ` ${platformConflictsHidden} hidden due to platform mismatch.` : ''}${rankingTriggered ? ' AI ranking triggered.' : ''}`,
     });
   } catch (error: any) {
     console.error('Job matching error:', error);
@@ -299,10 +366,12 @@ export async function GET(req: NextRequest) {
     // LEDGER QUERY: Fetch from candidate_job_matches
     // NO reprocessing, NO AI, NO modification
     // We fetch all rows and filter in-memory to avoid Supabase null filter issues
+    // Only fetch visible jobs (platform gating applied)
     const { data: matches, error: matchesError } = await supabase
       .from('candidate_job_matches')
       .select('*')
-      .eq('candidate_id', profile.id);
+      .eq('candidate_id', profile.id)
+      .eq('visibility_status', 'visible');
 
     if (matchesError) {
       console.error('[Active Feed] Ledger fetch failed:', matchesError);

@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { ALLOWED_JOB_TYPES, isValidJobType, DEFAULT_JOB_TYPE, type JobType } from '@/lib/job-types';
+import { extractPlatformFromJob, extractSecondaryPlatforms } from '@/lib/matching/extractPlatform';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -433,6 +434,10 @@ export async function POST(req: NextRequest) {
         // Combined skills array (for legacy compatibility)
         const allSkills = [...new Set([...mustHaveSkills, ...goodToHaveSkills])];
         
+        // Extract platform from title and skills (deterministic, stored once at ingestion)
+        const primaryPlatform = extractPlatformFromJob(jobTitle, allSkills);
+        const secondaryPlatforms = extractSecondaryPlatforms(jobTitle, allSkills);
+        
         // Experience - ALWAYS integer, NEVER null
         const requiredYearsExp = parseExperience(normalized.required_years_experience);
         
@@ -477,6 +482,10 @@ export async function POST(req: NextRequest) {
           must_have_skills: mustHaveSkills.join(', '), // Store as comma-separated string
           good_to_have_skills: goodToHaveSkills.join(', '), // Store as comma-separated string
           skills: allSkills, // Store as array for legacy compatibility
+          
+          // Platform identity (extracted at ingestion, stored once)
+          primary_platform: primaryPlatform,
+          secondary_platforms: secondaryPlatforms,
           
           // Experience - GUARANTEED INTEGER, NEVER NULL
           required_years_experience: requiredYearsExp,
