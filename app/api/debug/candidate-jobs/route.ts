@@ -28,7 +28,14 @@ export async function GET(req: NextRequest) {
       .select('*')
       .eq('candidate_id', candidateId);
 
-    // Step 2: Get the scraped_jobs for these job_ids
+    // Step 2: Get candidate platform info
+    const { data: candidateProfile } = await supabase
+      .from('profiles')
+      .select('id, email, name, primary_platform, secondary_platforms')
+      .eq('id', candidateId)
+      .single();
+
+    // Step 3: Get the scraped_jobs for these job_ids
     const jobIds = (allMatches || []).map(m => m.job_id);
     
     let scrapedJobs: any[] = [];
@@ -40,7 +47,7 @@ export async function GET(req: NextRequest) {
       scrapedJobs = jobs || [];
     }
 
-    // Step 3: Try the exact query from the dashboard (WITHOUT date filter)
+    // Step 4: Try the exact query from the dashboard (WITHOUT date filter)
     const { data: dashboardMatches, error: dashboardError } = await supabase
       .from('candidate_job_matches')
       .select(`
@@ -135,6 +142,74 @@ export async function GET(req: NextRequest) {
             ? 'Jobs filtered out - check applied_at, dismissed_at, or join issue'
             : 'No obvious issue found',
       },
+      visibility_analysis: (() => {
+        const analysis = (allMatches || []).map((match: any) => {
+          const job = scrapedJobs.find(j => j.id === match.job_id);
+          const result: any = {
+            job_id: match.job_id,
+            job_title: job?.title || 'NOT FOUND',
+            job_platform: job?.primary_platform || 'NOT SET',
+            match_score: match.match_score,
+            visibility_status: match.visibility_status || 'UNKNOWN',
+            ai_visibility: match.ai_visibility || 'NOT SET',
+            hidden_reason: match.hidden_reason,
+            applied_at: match.applied_at,
+            dismissed_at: match.dismissed_at,
+            not_visible_reasons: [] as string[],
+          };
+
+          // Check why not visible
+          if (match.visibility_status !== 'active') {
+            if (match.applied_at) result.not_visible_reasons.push('Applied');
+            if (match.dismissed_at) result.not_visible_reasons.push('Dismissed');
+          }
+
+          if (match.ai_visibility === 'hidden_by_ai') {
+            result.not_visible_reasons.push(`Hidden by AI: ${match.hidden_reason || 'unknown'}`);
+          }
+
+          // Platform gating check
+          if (candidateProfile?.primary_platform && job?.primary_platform) {
+            const candidatePlatform = candidateProfile.primary_platform.toLowerCase();
+            const jobPlatform = job.primary_platform.toLowerCase();
+            const secondaryPlatforms = (candidateProfile.secondary_platforms || []).map((p: string) => p.toLowerCase());
+            
+            if (candidatePlatform !== jobPlatform && !secondaryPlatforms.includes(jobPlatform)) {
+              result.not_visible_reasons.push(`Platform mismatch: candidate=${candidatePlatform}, job=${jobPlatform}`);
+            }
+          }
+
+          // Final visibility check (matches GET endpoint logic)
+          result.would_be_visible = 
+            match.visibility_status === 'active' && 
+            (match.ai_visibility === 'visible' || !match.ai_visibility) &&
+            !match.applied_at &&
+            !match.dismissed_at;
+
+          return result;
+        });
+
+        return {
+          candidate: {
+            email: candidateProfile?.email,
+            name: candidateProfile?.name,
+            primary_platform: candidateProfile?.primary_platform || 'NOT SET',
+            secondary_platforms: candidateProfile?.secondary_platforms || [],
+          },
+          summary: {
+            total_matches: allMatches?.length || 0,
+            visible_count: analysis.filter((a: any) => a.would_be_visible).length,
+            hidden_count: analysis.filter((a: any) => !a.would_be_visible).length,
+            hidden_by_platform: analysis.filter((a: any) => 
+              a.not_visible_reasons.some((r: string) => r.includes('Platform mismatch'))
+            ).length,
+            hidden_by_ai: analysis.filter((a: any) => a.ai_visibility === 'hidden_by_ai').length,
+            applied: analysis.filter((a: any) => a.applied_at).length,
+            dismissed: analysis.filter((a: any) => a.dismissed_at).length,
+          },
+          matches: analysis,
+        };
+      })(),
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
