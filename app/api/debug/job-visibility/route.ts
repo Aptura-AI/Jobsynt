@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
       if (candidateProfile?.primary_platform && job?.primary_platform) {
         const candidatePlatform = candidateProfile.primary_platform.toLowerCase();
         const jobPlatform = job.primary_platform.toLowerCase();
-        const secondaryPlatforms = (candidateProfile.secondary_platforms || []).map(p => p.toLowerCase());
+        const secondaryPlatforms = (candidateProfile.secondary_platforms || []).map((p: string) => p.toLowerCase());
         
         if (candidatePlatform === jobPlatform) {
           matchAnalysis.platform_match = 'PRIMARY_MATCH';
@@ -152,9 +152,10 @@ export async function GET(req: NextRequest) {
       }
 
       // Final visibility check (what GET endpoint would return)
+      // Note: GET endpoint uses .or('ai_visibility.eq.visible,ai_visibility.is.null') for backward compatibility
       const wouldBeVisible = 
         match.visibility_status === 'active' && 
-        match.ai_visibility === 'visible' &&
+        (match.ai_visibility === 'visible' || !match.ai_visibility) && // NULL treated as visible
         !match.applied_at &&
         !match.dismissed_at;
 
@@ -164,12 +165,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Step 5: Check what GET endpoint would return
+    // Note: GET endpoint uses .or() to handle NULL ai_visibility
     const { data: getEndpointMatches } = await supabase
       .from('candidate_job_matches')
       .select('*')
       .eq('candidate_id', targetCandidateId)
       .eq('visibility_status', 'active')
-      .eq('ai_visibility', 'visible');
+      .or('ai_visibility.eq.visible,ai_visibility.is.null');
 
     analysis.summary.get_endpoint_would_return = getEndpointMatches?.length || 0;
 
