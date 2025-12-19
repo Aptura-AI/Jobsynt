@@ -500,9 +500,11 @@ export async function POST(req: NextRequest) {
           // Experience - GUARANTEED INTEGER, NEVER NULL
           required_years_experience: requiredYearsExp,
           
-          // Pay rate (nullable OK)
-          salary: payRateRaw, // Store raw pay rate string (e.g., "$80/hr", "$100k")
-          pay_rate_raw: payRateRaw, // Duplicate for raw field preservation
+          // Pay rate (nullable OK - optional field)
+          // salary: Optional, used for full-time jobs (annual salary, e.g., "$100k/year")
+          // pay_rate_min/max: Used for contract jobs (hourly rate)
+          salary: payRateRaw, // Optional: for full-time jobs (e.g., "$100k/year", "$80k-120k")
+          pay_rate_raw: payRateRaw, // Raw field preservation
           
           // Dates and metadata
           posted_date: parsedDate,
