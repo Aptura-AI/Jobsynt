@@ -140,21 +140,32 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
   // Infer job_type from description, default to w2-contract if cannot be determined
   const job_type: JobType = inferJobTypeFromDescription(description);
 
+  // Determine location_type and is_remote
+  const locationLower = location.toLowerCase();
+  const isRemote = locationLower.includes('remote') || work_mode === 'Remote';
+  const locationType = isRemote ? 'Remote' : (work_mode === 'Hybrid' ? 'Hybrid' : 'Onsite');
+
+  // Parse skills into must_have_skills and good_to_have_skills
+  const mustHaveSkills = skills.length > 0 ? skills.join(', ') : '';
+  const goodToHaveSkills = ''; // Dice doesn't separate, so we put all in must_have
+
   return {
     source: 'Dice',
     source_job_id: source_job_id || dedupHash,
     title,
     company,
     location,
-    work_mode,
-    employment_type,
-    skills,
+    location_type: locationType,
+    is_remote: isRemote,
     description,
     url: jobUrl, // Use 'url' column for deduplication (unique index)
-    job_url: jobUrl, // Keep for backward compatibility if needed
     job_type, // Required for job type filtering
+    must_have_skills: mustHaveSkills,
+    good_to_have_skills: goodToHaveSkills,
     scraped_at: new Date().toISOString(),
-    hash: dedupHash,
+    posted_date: new Date().toISOString().split('T')[0], // Today's date as default
+    is_active: true,
+    is_real: true,
   };
 }
 
