@@ -27,21 +27,24 @@ WHERE
 -- PART 2: Extract and set primary_platform
 -- ============================================
 -- Extract platform from title and skills
+-- IMPORTANT: Order matters - check Oracle Fusion BEFORE PeopleSoft to avoid false matches
 UPDATE scraped_jobs
 SET primary_platform = 
   CASE
-    -- PeopleSoft
-    WHEN LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%peoplesoft%' 
-      OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%psft%'
-      OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%ps %' THEN 'PeopleSoft'
-    
-    -- Oracle Fusion
+    -- Oracle Fusion (check FIRST - more specific)
     WHEN LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%oracle fusion%'
       OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%fusion hcm%'
       OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%fusion erp%'
       OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%oracle cloud hcm%'
       OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%oracle cloud erp%'
-      OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%fusion cloud%' THEN 'Oracle Fusion'
+      OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%fusion cloud%'
+      OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%oracle hcm cloud%' THEN 'Oracle Fusion'
+    
+    -- PeopleSoft (check AFTER Oracle to avoid false matches)
+    WHEN LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%peoplesoft%' 
+      OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%psft%'
+      OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%ps %'
+      OR LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%people soft%' THEN 'PeopleSoft'
     
     -- Oracle EBS
     WHEN LOWER(title || ' ' || COALESCE(must_have_skills, '')) LIKE '%oracle ebs%'
@@ -78,12 +81,22 @@ WHERE
 -- ============================================
 -- PART 3: Extract and set required_years_experience
 -- ============================================
--- Extract experience from description (patterns like "5+ years", "10 years experience")
+-- Extract experience from description (multiple patterns)
 UPDATE scraped_jobs
 SET required_years_experience = 
   CASE
+    -- Pattern 1: "5+ years", "10 years experience", "5 yrs"
     WHEN description ~* '(\d+)\+?\s*(?:years?|yrs?|year[''\s]+of|year[''\s]+experience)' THEN
       CAST((regexp_match(description, '(\d+)\+?\s*(?:years?|yrs?|year[''\s]+of|year[''\s]+experience)', 'i'))[1] AS INTEGER)
+    -- Pattern 2: "5-7 years", "10-12 years" (take the first number)
+    WHEN description ~* '(\d+)\s*-\s*\d+\s*(?:years?|yrs?)' THEN
+      CAST((regexp_match(description, '(\d+)\s*-\s*\d+\s*(?:years?|yrs?)', 'i'))[1] AS INTEGER)
+    -- Pattern 3: "minimum 5 years", "at least 10 years"
+    WHEN description ~* '(?:minimum|at least|min\.?)\s*(\d+)\s*(?:years?|yrs?)' THEN
+      CAST((regexp_match(description, '(?:minimum|at least|min\.?)\s*(\d+)\s*(?:years?|yrs?)', 'i'))[1] AS INTEGER)
+    -- Pattern 4: "5+ YOE", "10 YOE" (years of experience)
+    WHEN description ~* '(\d+)\+?\s*YOE' THEN
+      CAST((regexp_match(description, '(\d+)\+?\s*YOE', 'i'))[1] AS INTEGER)
     ELSE 0
   END
 WHERE 
@@ -94,23 +107,41 @@ WHERE
 -- ============================================
 -- PART 4: Extract and set salary / pay_rate_raw
 -- ============================================
--- Extract salary from description (patterns like "$80/hr", "$100k", "$80-100/hr")
+-- Extract salary from description (multiple patterns)
 UPDATE scraped_jobs
 SET 
   salary = 
     CASE
-      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|annually|yearly|per year)' THEN
-        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|annually|yearly|per year)', 'i'))[0]
-      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K)?)\s*-\s*\$(\d+(?:,\d{3})*(?:k|K)?)' THEN
-        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K)?)\s*-\s*\$(\d+(?:,\d{3})*(?:k|K)?)', 'i'))[0]
+      -- Pattern 1: "$80/hr", "$100/hour", "$80 per hour"
+      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|hr\.?)' THEN
+        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|hr\.?)', 'i'))[0]
+      -- Pattern 2: "$80-100/hr", "$80-$100/hr"
+      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K)?)\s*-\s*\$?(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour)' THEN
+        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K)?)\s*-\s*\$?(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour)', 'i'))[0]
+      -- Pattern 3: "$100k", "$150k/year", "$100k annually"
+      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K))\s*(?:\/year|annually|yearly|per year|yr\.?)?' THEN
+        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K))\s*(?:\/year|annually|yearly|per year|yr\.?)?', 'i'))[0]
+      -- Pattern 4: "$100,000", "$150,000/year"
+      WHEN description ~* '\$(\d{1,3}(?:,\d{3})+)\s*(?:\/year|annually|yearly|per year)?' THEN
+        (regexp_match(description, '\$(\d{1,3}(?:,\d{3})+)\s*(?:\/year|annually|yearly|per year)?', 'i'))[0]
+      -- Pattern 5: "80/hr", "100/hour" (without $ sign)
+      WHEN description ~* '(?:^|\s)(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|hr\.?)(?:\s|$)' THEN
+        '$' || (regexp_match(description, '(?:^|\s)(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|hr\.?)(?:\s|$)', 'i'))[1] || '/hr'
       ELSE NULL
     END,
   pay_rate_raw = 
     CASE
-      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|annually|yearly|per year)' THEN
-        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|annually|yearly|per year)', 'i'))[0]
-      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K)?)\s*-\s*\$(\d+(?:,\d{3})*(?:k|K)?)' THEN
-        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K)?)\s*-\s*\$(\d+(?:,\d{3})*(?:k|K)?)', 'i'))[0]
+      -- Same patterns as salary
+      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|hr\.?)' THEN
+        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|hr\.?)', 'i'))[0]
+      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K)?)\s*-\s*\$?(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour)' THEN
+        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K)?)\s*-\s*\$?(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour)', 'i'))[0]
+      WHEN description ~* '\$(\d+(?:,\d{3})*(?:k|K))\s*(?:\/year|annually|yearly|per year|yr\.?)?' THEN
+        (regexp_match(description, '\$(\d+(?:,\d{3})*(?:k|K))\s*(?:\/year|annually|yearly|per year|yr\.?)?', 'i'))[0]
+      WHEN description ~* '\$(\d{1,3}(?:,\d{3})+)\s*(?:\/year|annually|yearly|per year)?' THEN
+        (regexp_match(description, '\$(\d{1,3}(?:,\d{3})+)\s*(?:\/year|annually|yearly|per year)?', 'i'))[0]
+      WHEN description ~* '(?:^|\s)(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|hr\.?)(?:\s|$)' THEN
+        '$' || (regexp_match(description, '(?:^|\s)(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|hr\.?)(?:\s|$)', 'i'))[1] || '/hr'
       ELSE NULL
     END
 WHERE 
