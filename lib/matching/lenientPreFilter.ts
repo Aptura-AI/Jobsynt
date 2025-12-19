@@ -33,7 +33,7 @@ export type Job = {
   pay_rate_min?: number | null;
   pay_rate_max?: number | null;
   visa_requirement?: string | null;
-  skills?: string[] | null;
+  // Note: skills column removed - use must_have_skills and good_to_have_skills instead
   required_skills?: string | null;
   must_have_skills?: string | null;
   description?: string | null;
@@ -326,9 +326,9 @@ function filterBySkills(job: Job, candidate: CandidateProfile): FilterResult {
   if (job.required_skills) {
     requiredSkillsArray.push(...job.required_skills.split(/[,;|]/));
   }
-  // Fallback to generic skills array if no must_have_skills specified
-  if (requiredSkillsArray.length === 0 && Array.isArray(job.skills)) {
-    requiredSkillsArray.push(...job.skills);
+  // Fallback: If no must_have_skills, check good_to_have_skills
+  if (requiredSkillsArray.length === 0 && job.good_to_have_skills) {
+    requiredSkillsArray.push(...job.good_to_have_skills.split(/[,;|]/));
   }
 
   // Normalize required skills

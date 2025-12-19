@@ -491,7 +491,7 @@ export async function POST(req: NextRequest) {
           // Skills - GUARANTEED ARRAYS, NEVER NULL
           must_have_skills: mustHaveSkills.join(', '), // Store as comma-separated string
           good_to_have_skills: goodToHaveSkills.join(', '), // Store as comma-separated string
-          skills: allSkills, // Store as array for legacy compatibility
+          // Note: skills column removed - use must_have_skills and good_to_have_skills instead
           
           // Platform identity (extracted at ingestion, stored once)
           primary_platform: primaryPlatform,
