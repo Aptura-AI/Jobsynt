@@ -8,7 +8,7 @@
  * - job.primary_platform === candidate.primary_platform OR
  * - job.primary_platform IN candidate.secondary_platforms
  * 
- * If mismatch: Set visibility_status = 'hidden_by_ai', hidden_reason = 'platform_mismatch'
+ * If mismatch: Set ai_visibility = 'hidden_by_ai', hidden_reason = 'platform_mismatch'
  * DO NOT delete ledger rows - preserve for auditability
  */
 
