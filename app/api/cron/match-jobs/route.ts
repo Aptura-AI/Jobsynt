@@ -148,34 +148,56 @@ export async function GET(req: NextRequest) {
     // ============================================
     // PHASE 2: AI RANKING (runs after matching)
     // ============================================
-    // Only rank candidates who got new jobs in this run
-    // This eliminates the need for a separate cron job
+    // Rank candidates who:
+    // 1. Got new jobs in this run, OR
+    // 2. Have never been ranked (last_ranked_at IS NULL), OR
+    // 3. Haven't been ranked in 24+ hours (safety net)
+    // This ensures no candidate remains unranked
     
-    const candidatesWithNewJobs = new Set<string>();
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+    const twentyFourHoursAgoStr = twentyFourHoursAgo.toISOString();
     
-    // Track which candidates received new jobs
+    const candidatesNeedingRanking = new Set<string>();
+    
+    // Track which candidates need ranking
     for (const profile of candidates) {
-      // Check if this candidate got any new jobs in this run
-      const { data: recentJobs } = await supabase
+      // Check if candidate has active jobs
+      const { data: activeMatches } = await supabase
         .from('candidate_job_matches')
-        .select('job_id')
+        .select('last_ranked_at, qualified_at')
         .eq('candidate_id', profile.id)
         .is('applied_at', null)
         .is('dismissed_at', null)
-        .or(`last_ranked_at.is.null,qualified_at.gt.${new Date(Date.now() - 60 * 60 * 1000).toISOString()}`); // Qualified in last hour or never ranked
+        .limit(1);
 
-      if (recentJobs && recentJobs.length > 0) {
-        candidatesWithNewJobs.add(profile.id);
+      if (!activeMatches || activeMatches.length === 0) {
+        continue; // No active jobs, skip
+      }
+
+      // Check if ranking is needed:
+      // - Never ranked (last_ranked_at IS NULL), OR
+      // - Stale ranking (last_ranked_at < 24 hours ago), OR
+      // - Got new jobs in this run (qualified_at in last hour)
+      const needsRanking = activeMatches.some((match: any) => {
+        const neverRanked = !match.last_ranked_at;
+        const staleRanking = match.last_ranked_at && match.last_ranked_at < twentyFourHoursAgoStr;
+        const newJobs = match.qualified_at && match.qualified_at > new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        return neverRanked || staleRanking || newJobs;
+      });
+
+      if (needsRanking) {
+        candidatesNeedingRanking.add(profile.id);
       }
     }
 
     let candidatesRanked = 0;
     let jobsRanked = 0;
 
-    if (candidatesWithNewJobs.size > 0) {
-      console.log(`[Match Jobs Cron] Running AI ranking for ${candidatesWithNewJobs.size} candidates with new/unranked jobs...`);
+    if (candidatesNeedingRanking.size > 0) {
+      console.log(`[Match Jobs Cron] Running AI ranking for ${candidatesNeedingRanking.size} candidates (new jobs, unranked, or stale rankings)...`);
 
-      for (const candidateId of candidatesWithNewJobs) {
+      for (const candidateId of candidatesNeedingRanking) {
         try {
           const profile = candidates.find(p => p.id === candidateId);
           if (!profile) continue;
@@ -186,7 +208,12 @@ export async function GET(req: NextRequest) {
             email: profile.email,
             title: profile.title,
             location: profile.location,
+            phone: profile.phone,
             skills: profile.skills,
+            primary_skills: profile.primary_skills,
+            secondary_skills: profile.secondary_skills,
+            adjacent_skills: profile.adjacent_skills,
+            generic_skills: profile.generic_skills,
             experience_years: profile.experience_years,
             preferred_job_types: profile.preferred_job_types,
             rate_expectation: profile.rate_expectation,
@@ -194,6 +221,7 @@ export async function GET(req: NextRequest) {
             work_mode: profile.work_mode,
             contract_type: profile.contract_type,
             visa_status: profile.visa_status,
+            availability: profile.availability,
             summary: profile.summary,
             resume_text: profile.resume_text,
             degrees: profile.degrees,

@@ -348,16 +348,44 @@ export async function rankJobsWithAI(
         ],
       };
 
-      // Update AI priority in the ledger for ranked jobs
+      // Update AI priority and fit_score in the ledger for ranked jobs
+      const now = new Date().toISOString();
       for (const rankedJob of rankedJobs) {
+        // Find original job to check if it's explicit_target
+        const originalJob = matchedJobs.find(j => j.id === rankedJob.id);
+        const isExplicitTarget = originalJob?.match_source === 'explicit_target';
+        
+        // Explicit target jobs: default to High priority if AI didn't rank them
+        const finalPriority = rankedJob.priority || (isExplicitTarget ? 'High' : 'Medium');
+        
         await supabase
           .from('candidate_job_matches')
           .update({ 
-            ai_priority: rankedJob.priority,
-            last_ranked_at: new Date().toISOString(),
+            ai_priority: finalPriority,
+            match_score: rankedJob.fitScore, // Update fit_score if AI provided it
+            last_ranked_at: now,
           })
           .eq('candidate_id', candidateId)
           .eq('job_id', rankedJob.id);
+      }
+      
+      // Also update last_ranked_at for any explicit_target jobs that weren't in rankedJobs
+      // (ensures they're marked as ranked even if AI didn't return them)
+      const rankedJobIds = new Set(rankedJobs.map(j => j.id));
+      const unrankedExplicitTargets = matchedJobs.filter(j => 
+        j.match_source === 'explicit_target' && !rankedJobIds.has(j.id)
+      );
+      
+      if (unrankedExplicitTargets.length > 0) {
+        const unrankedIds = unrankedExplicitTargets.map(j => j.id);
+        await supabase
+          .from('candidate_job_matches')
+          .update({ 
+            ai_priority: 'High', // Default explicit targets to High
+            last_ranked_at: now,
+          })
+          .eq('candidate_id', candidateId)
+          .in('job_id', unrankedIds);
       }
 
       return {
@@ -369,15 +397,36 @@ export async function rankJobsWithAI(
       console.warn('OpenAI Responses API error, using fallback ranking:', responsesError.message);
       
       // Fallback: Deterministic ranking based on match score (stable anchor)
-      const rankedJobs: RankedJob[] = matchedJobs.map(job => ({
-        id: job.id,
-        title: job.title,
-        company: job.company,
-        priority: job.match_score >= 85 ? 'High' : job.match_score >= 75 ? 'Medium' : 'Low',
-        fitScore: job.match_score, // Deterministic score as stable anchor
-        whyItFits: job.reasons || [],
-        recommendedAction: job.match_score >= 85 ? 'Apply now' : 'Review carefully',
-      }));
+      // Explicit target jobs default to High priority
+      const rankedJobs: RankedJob[] = matchedJobs.map(job => {
+        const isExplicitTarget = job.match_source === 'explicit_target';
+        const priority = isExplicitTarget 
+          ? 'High' 
+          : (job.match_score >= 85 ? 'High' : job.match_score >= 75 ? 'Medium' : 'Low');
+        
+        return {
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          priority,
+          fitScore: job.match_score, // Deterministic score as stable anchor
+          whyItFits: job.reasons || [],
+          recommendedAction: job.match_score >= 85 ? 'Apply now' : 'Review carefully',
+        };
+      });
+
+      // Update ledger with fallback rankings
+      const now = new Date().toISOString();
+      for (const rankedJob of rankedJobs) {
+        await supabase
+          .from('candidate_job_matches')
+          .update({ 
+            ai_priority: rankedJob.priority,
+            last_ranked_at: now,
+          })
+          .eq('candidate_id', candidateId)
+          .eq('job_id', rankedJob.id);
+      }
 
       return {
         jobs: rankedJobs,

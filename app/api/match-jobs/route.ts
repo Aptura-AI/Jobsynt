@@ -15,6 +15,7 @@ import { getServerSession } from '@/lib/auth';
 import { fetchAndMatchJobs } from '@/lib/matching/getEligibleJobs';
 import { get30DaysAgoDate } from '@/lib/job-filters';
 import { logJobQualified, logFeedFetch } from '@/lib/matching/jobQualificationLog';
+import { rankJobsWithAI, CandidateProfile } from '@/lib/matching/rankJobsWithAI';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -155,6 +156,67 @@ export async function POST(req: NextRequest) {
     const explicitTargets = newEligibleJobs.filter(j => j.match_source === 'explicit_target').length;
     const globalMatches = newEligibleJobs.filter(j => j.match_source === 'global_match').length;
 
+    // ============================================
+    // TRIGGER 1: AI RANKING (after job insertion)
+    // ============================================
+    // If new jobs were inserted, immediately trigger AI ranking
+    // This ensures ai_priority is set ASAP
+    let rankingTriggered = false;
+    let rankingError: string | null = null;
+    
+    if (insertedCount > 0) {
+      console.log(`[Match Jobs] Triggering AI ranking for candidate ${profile.id.substring(0, 8)}... (${insertedCount} new jobs)`);
+      
+      try {
+        // Prepare candidate profile for AI
+        const candidateData: CandidateProfile = {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          title: profile.title,
+          location: profile.location,
+          phone: profile.phone,
+          skills: profile.skills,
+          primary_skills: profile.primary_skills,
+          secondary_skills: profile.secondary_skills,
+          adjacent_skills: profile.adjacent_skills,
+          generic_skills: profile.generic_skills,
+          experience_years: profile.experience_years,
+          preferred_job_types: profile.preferred_job_types,
+          rate_expectation: profile.rate_expectation,
+          expected_pay_min: profile.expected_pay_min,
+          work_mode: profile.work_mode,
+          contract_type: profile.contract_type,
+          visa_status: profile.visa_status,
+          availability: profile.availability,
+          summary: profile.summary,
+          resume_text: profile.resume_text,
+          degrees: profile.degrees,
+          certifications: profile.certifications,
+        };
+
+        // Trigger AI ranking asynchronously (fire-and-forget, don't block response)
+        // AI ranking will update ai_priority, fit_score, and last_ranked_at
+        // This runs AFTER all inserts complete, as required
+        (async () => {
+          try {
+            const rankingResult = await rankJobsWithAI(profile.id, candidateData);
+            console.log(`[Match Jobs] AI ranking completed: ${rankingResult.jobs.length} jobs ranked for ${profile.id.substring(0, 8)}...`);
+          } catch (err: any) {
+            console.error(`[Match Jobs] AI ranking error (non-blocking):`, err.message);
+            // Don't throw - ranking failure shouldn't block job insertion
+            // Ranking will retry via cron safety net
+          }
+        })();
+        
+        rankingTriggered = true;
+      } catch (err: any) {
+        rankingError = err.message;
+        console.error(`[Match Jobs] Failed to trigger AI ranking:`, err);
+        // Don't block response - ranking can retry via cron
+      }
+    }
+
     // Build diagnostic info
     const diagnostics = {
       totalJobsInDB: matchingResult.stats.total,
@@ -177,7 +239,11 @@ export async function POST(req: NextRequest) {
       globalMatches,
       stats: matchingResult.stats,
       diagnostics, // Include diagnostic info
-      message: `Qualified ${insertedCount} new jobs (${explicitTargets} targeted, ${globalMatches} global). ${existingJobIds.size} already in ledger.`,
+      ranking: {
+        triggered: rankingTriggered,
+        error: rankingError || undefined,
+      },
+      message: `Qualified ${insertedCount} new jobs (${explicitTargets} targeted, ${globalMatches} global). ${existingJobIds.size} already in ledger.${rankingTriggered ? ' AI ranking triggered.' : ''}`,
     });
   } catch (error: any) {
     console.error('Job matching error:', error);
