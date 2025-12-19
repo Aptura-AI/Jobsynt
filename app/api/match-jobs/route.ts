@@ -306,7 +306,7 @@ export async function GET(req: NextRequest) {
         qualified_at,
         ai_priority,
         reasons,
-        scraped_jobs!inner (
+        scraped_jobs (
           id,
           title,
           company,
