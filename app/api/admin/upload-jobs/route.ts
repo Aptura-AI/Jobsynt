@@ -450,9 +450,11 @@ export async function POST(req: NextRequest) {
         const requiredYearsExp = parseExperience(normalized.required_years_experience);
         
         // Location handling
-        const location = String(normalized.location || '').trim() || 'Remote';
+        // IMPORTANT: If is_remote is explicitly set to "Yes", it overrides location string
+        const location = String(normalized.location || '').trim() || '';
         const isRemote = parseIsRemote(normalized.is_remote, location);
-        const locationType = determineLocationType(isRemote, location);
+        // If is_remote is true, force location_type to Remote (overrides location string)
+        const locationType = isRemote ? 'Remote' : determineLocationType(isRemote, location);
         
         // Job type
         const jobType = normalizeJobType(normalized.job_type);
@@ -499,8 +501,8 @@ export async function POST(req: NextRequest) {
           required_years_experience: requiredYearsExp,
           
           // Pay rate (nullable OK)
-          salary: payRateRaw,
-          pay_rate_raw: payRateRaw,
+          salary: payRateRaw, // Store raw pay rate string (e.g., "$80/hr", "$100k")
+          pay_rate_raw: payRateRaw, // Duplicate for raw field preservation
           
           // Dates and metadata
           posted_date: parsedDate,
