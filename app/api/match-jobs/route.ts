@@ -393,23 +393,13 @@ export async function GET(req: NextRequest) {
     }
 
     if (!matches || matches.length === 0) {
-      console.log('[Active Feed] No ledger rows found for candidate');
+      console.log('[Active Feed] No active visible jobs found for candidate');
       return NextResponse.json({ jobs: [] });
     }
 
-    // Filter out applied and dismissed jobs in-memory
-    const activeMatches = matches.filter((match: any) => {
-      // Skip applied jobs
-      if (match.applied_at) return false;
-      // Skip dismissed jobs
-      if (match.dismissed_at) return false;
-      return true;
-    });
-
-    if (activeMatches.length === 0) {
-      console.log('[Active Feed] All jobs are applied or dismissed');
-      return NextResponse.json({ jobs: [] });
-    }
+    // Note: No need to filter applied/dismissed in-memory since visibility_status = 'active'
+    // already excludes them (visibility_status is a GENERATED column from applied_at/dismissed_at)
+    const activeMatches = matches;
 
     // ============================================
     // STEP 2: Fetch jobs explicitly (no nested joins)
