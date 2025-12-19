@@ -72,18 +72,36 @@ export default function CandidatesListClient() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 space-y-6">
+      {/* Navigation Tabs */}
+      <div className="border-b border-slate-200">
+        <nav className="flex gap-4">
+          <a
+            href="/admin"
+            className="px-4 py-2 text-muted hover:text-ink hover:border-b-2 hover:border-slate-300"
+          >
+            Dashboard
+          </a>
+          <a
+            href="/admin/jobs"
+            className="px-4 py-2 text-muted hover:text-ink hover:border-b-2 hover:border-slate-300"
+          >
+            Jobs
+          </a>
+          <a
+            href="/admin/candidates"
+            className="px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-semibold"
+          >
+            Candidates
+          </a>
+        </nav>
+      </div>
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-ink">Candidate Management</h1>
           <p className="text-muted mt-2">View all candidates, profiles, and download resumes</p>
         </div>
-        <Link
-          href="/admin"
-          className="px-4 py-2 bg-slate-200 text-ink rounded hover:bg-slate-300"
-        >
-          ← Back to Dashboard
-        </Link>
       </div>
 
       {/* Search and Filters */}
