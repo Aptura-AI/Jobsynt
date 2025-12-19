@@ -42,7 +42,9 @@ type DashboardContentProps = {
 
 export default function DashboardContent({ profile, isAdmin, userEmail }: DashboardContentProps) {
   const [recommendedJobs, setRecommendedJobs] = useState<Job[]>([]);
+  const [allRecommendedJobs, setAllRecommendedJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAllJobs, setShowAllJobs] = useState(false);
 
   useEffect(() => {
     fetchRecommendedJobs();
@@ -57,7 +59,11 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
         const data = await res.json();
         console.log('[Dashboard] Jobs received:', data.jobs?.length || 0, 'jobs');
         console.log('[Dashboard] Full response:', data);
-        setRecommendedJobs(data.jobs || []);
+        const jobs = data.jobs || [];
+        setAllRecommendedJobs(jobs);
+        // Show only first 5 jobs initially
+        setRecommendedJobs(jobs.slice(0, 5));
+        setShowAllJobs(false);
       } else {
         console.error('[Dashboard] API error:', res.status, res.statusText);
       }
@@ -146,13 +152,13 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
         </div>
         <div className="card p-3 sm:p-4">
           <p className="text-xs sm:text-sm text-muted">Recommended Jobs</p>
-          <p className="text-xl sm:text-2xl font-bold text-ink">{recommendedJobs.length}</p>
+          <p className="text-xl sm:text-2xl font-bold text-ink">{allRecommendedJobs.length}</p>
         </div>
         <div className="card p-3 sm:p-4">
           <p className="text-xs sm:text-sm text-muted">Match Score</p>
           <p className="text-xl sm:text-2xl font-bold text-ink">
-            {recommendedJobs.length > 0 
-              ? `${Math.round(recommendedJobs.reduce((sum, j) => sum + (j.fit_score || 0), 0) / recommendedJobs.length)}%`
+            {allRecommendedJobs.length > 0 
+              ? `${Math.round(allRecommendedJobs.reduce((sum, j) => sum + (j.fit_score || 0), 0) / allRecommendedJobs.length)}%`
               : 'N/A'}
           </p>
         </div>
@@ -232,9 +238,10 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
             </Link>
           </div>
         </div>
-        {recommendedJobs.length > 0 ? (
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {recommendedJobs.map((job: any) => (
+        {allRecommendedJobs.length > 0 ? (
+          <>
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {(showAllJobs ? allRecommendedJobs : recommendedJobs).map((job: any) => (
               <div key={job.id} className="card p-4">
                 <div className="mb-2 flex items-start justify-between">
                   <div>
@@ -301,8 +308,21 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
                   </label>
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+            {allRecommendedJobs.length > 5 && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={() => setShowAllJobs(!showAllJobs)}
+                  className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 text-sm font-semibold"
+                >
+                  {showAllJobs 
+                    ? `Show Less (Showing ${allRecommendedJobs.length} jobs)` 
+                    : `Show ${allRecommendedJobs.length - 5} More Jobs`}
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
             <div className="text-4xl mb-3">🔍</div>

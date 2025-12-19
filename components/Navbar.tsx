@@ -10,7 +10,7 @@ const navItems: NavItem[] = [
   { href: '/', label: 'Home' },
   { href: '/jobs', label: 'Jobs' },
   { href: '/talent-pool', label: 'Talent Pool' },
-  { href: '/candidates', label: 'For Candidates' },
+  { href: '/dashboard', label: 'For Candidates' },
 ];
 
 export default function Navbar() {
