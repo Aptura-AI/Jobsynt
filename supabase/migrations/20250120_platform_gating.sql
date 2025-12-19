@@ -180,5 +180,9 @@ ON public.scraped_jobs(primary_platform);
 CREATE INDEX IF NOT EXISTS idx_profiles_primary_platform 
 ON public.profiles(primary_platform);
 
-RAISE NOTICE '✅ Platform gating migration complete';
+-- Migration complete
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Platform gating migration complete';
+END $$;
 
