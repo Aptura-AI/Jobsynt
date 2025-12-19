@@ -87,15 +87,21 @@ export type PassedJob = Job & {
  * - Non-remote jobs → Pass only if same city match
  */
 function filterByLocation(job: Job, candidate: CandidateProfile): FilterResult {
-  // Remote jobs always pass
-  if (job.location_type === 'Remote' || job.is_remote === true) {
-    return { passed: true };
+  // PRIORITY 1: is_remote flag (explicit flag overrides location string)
+  // If is_remote = true, job is ALWAYS treated as Remote regardless of location
+  if (job.is_remote === true) {
+    return { passed: true, reason: 'Remote job (is_remote flag set)' };
   }
 
-  // Check location string for remote keywords
+  // PRIORITY 2: location_type enum
+  if (job.location_type === 'Remote') {
+    return { passed: true, reason: 'Remote job (location_type = Remote)' };
+  }
+
+  // PRIORITY 3: Check location string for remote keywords (fallback)
   const jobLocation = (job.location || '').toLowerCase().trim();
   if (jobLocation.includes('remote') || jobLocation.includes('anywhere') || jobLocation.includes('work from home')) {
-    return { passed: true };
+    return { passed: true, reason: 'Remote job (location string contains remote keywords)' };
   }
 
   // If job has no location info, pass (can't filter without data)

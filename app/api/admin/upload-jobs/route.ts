@@ -153,19 +153,27 @@ function parseExperience(expValue: any): number {
 
 /**
  * Parse boolean value for is_remote
+ * Priority: Explicit is_remote flag > location string
+ * If is_remote is "Yes", "true", "1", etc. → always Remote
  */
 function parseIsRemote(remoteValue: any, location: string): boolean {
-  // Check explicit is_remote value
-  if (remoteValue) {
+  // PRIORITY 1: Check explicit is_remote value first (highest priority)
+  // If is_remote is explicitly set to "Yes", "true", "1", etc. → ALWAYS Remote
+  if (remoteValue !== null && remoteValue !== undefined && remoteValue !== '') {
     const remoteStr = String(remoteValue).trim().toLowerCase();
-    if (['true', 'yes', '1', 'remote', 'y'].includes(remoteStr)) {
-      return true;
+    // Accept: "yes", "true", "1", "y", "remote"
+    if (['yes', 'true', '1', 'y', 'remote'].includes(remoteStr)) {
+      return true; // Explicit remote flag overrides location string
+    }
+    // Explicit "no", "false", "0" → not remote
+    if (['no', 'false', '0', 'n'].includes(remoteStr)) {
+      return false;
     }
   }
   
-  // Check location string for remote keywords
-  const locationLower = location.toLowerCase();
-  if (locationLower.includes('remote')) {
+  // PRIORITY 2: Check location string for remote keywords (fallback)
+  const locationLower = (location || '').toLowerCase();
+  if (locationLower.includes('remote') || locationLower.includes('anywhere') || locationLower.includes('work from home')) {
     return true;
   }
   
