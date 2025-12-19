@@ -1,6 +1,8 @@
 /**
  * Debug endpoint to check a specific candidate's job matches
  * GET /api/debug/candidate-jobs?id=6c697a80-5b01-43c1-ba3e-e0085295164e
+ * 
+ * Enhanced to show visibility analysis including platform gating and ai_visibility
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
