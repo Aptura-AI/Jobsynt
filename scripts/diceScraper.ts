@@ -152,19 +152,43 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
   const mustHaveSkills = skills.length > 0 ? skills.join(', ') : '';
   const goodToHaveSkills = ''; // Dice doesn't separate, so we put all in must_have
 
+  // Extract platform from title and skills
+  const allSkills = skills; // Combined skills for platform extraction
+  const primaryPlatform = extractPlatformFromJob(title, allSkills) || '';
+  const secondaryPlatforms = extractSecondaryPlatforms(title, allSkills) || [];
+
+  // Extract experience years from description (look for patterns like "5+ years", "10 years experience")
+  const experienceMatch = description.match(/(\d+)\+?\s*(?:years?|yrs?|year['\s]+of|year['\s]+experience)/i);
+  const requiredYearsExp = experienceMatch ? parseInt(experienceMatch[1], 10) : 0;
+
+  // Extract salary/pay rate from description (look for patterns like "$80/hr", "$100k", "$80-100/hr")
+  const salaryMatch = description.match(/\$(\d+(?:,\d{3})*(?:k|K)?)\s*(?:\/hr|\/hour|per hour|annually|yearly|per year)/i) 
+    || description.match(/\$(\d+(?:,\d{3})*(?:k|K)?)\s*-\s*\$(\d+(?:,\d{3})*(?:k|K)?)/i);
+  const salaryRaw = salaryMatch ? (salaryMatch[0] || '') : null;
+
   return {
     source: 'Dice',
     source_job_id: source_job_id || dedupHash,
     title,
     company,
     location,
+    location_raw: location, // Preserve original location
     location_type: locationType,
     is_remote: isRemote,
     description,
+    description_raw: description, // Preserve original description
     url: jobUrl, // Use 'url' column for deduplication (unique index)
     job_type, // Required for job type filtering
     must_have_skills: mustHaveSkills,
     good_to_have_skills: goodToHaveSkills,
+    // Platform identity (extracted at ingestion, stored once)
+    primary_platform: primaryPlatform || '',
+    secondary_platforms: secondaryPlatforms,
+    // Experience - extracted from description
+    required_years_experience: requiredYearsExp,
+    // Pay rate (optional)
+    salary: salaryRaw,
+    pay_rate_raw: salaryRaw,
     scraped_at: new Date().toISOString(),
     posted_date: new Date().toISOString().split('T')[0], // Today's date as default
     is_active: true,
@@ -212,19 +236,16 @@ async function main() {
   console.log('   3. Wait for job results to load');
   console.log('\nPress ENTER when you are ready for the scraper to start...\n');
   
-  // Wait for user to press Enter (works on Windows and Unix)
-  process.stdin.setRawMode(true);
-  process.stdin.resume();
-  process.stdin.setEncoding('utf8');
-  
+  // Wait for user to press Enter (simple approach that works on Windows)
   await new Promise<void>((resolve) => {
-    process.stdin.once('data', (key: string) => {
-      if (key === '\r' || key === '\n' || key === '\u0003') {
-        process.stdin.setRawMode(false);
-        process.stdin.pause();
-        resolve();
-      }
+    process.stdin.once('data', () => {
+      resolve();
     });
+    // Also handle if stdin is not available
+    if (!process.stdin.isTTY) {
+      console.log('⚠️  Running in non-interactive mode, starting in 5 seconds...');
+      setTimeout(resolve, 5000);
+    }
   });
 
   console.log('✅ Starting to scrape jobs from current page...\n');
