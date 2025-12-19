@@ -1,14 +1,16 @@
 /**
  * Semi-manual Dice.com scraper for internal JobSynth use.
- * Run manually:  npx ts-node scripts/diceScraper.ts
- * (or)          node --loader ts-node/esm scripts/diceScraper.ts
- *
+ * 
+ * Run with: npx tsx scripts/diceScraper.ts
+ * 
  * Requirements:
- *   npm install playwright @supabase/supabase-js
+ *   npm install playwright @supabase/supabase-js dotenv
  *   npx playwright install
  */
 
-import 'dotenv/config';
+// Load environment variables
+import { config } from 'dotenv';
+config();
 import { chromium, Page } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
@@ -27,11 +29,12 @@ const MAX_JOBS_TO_SCRAPE = 20;
 // =========================
 // Supabase setup
 // =========================
-const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseServiceRoleKey) {
-  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables.');
+  console.error('Missing NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_URL) or SUPABASE_SERVICE_ROLE_KEY environment variables.');
+  console.error('Make sure you have a .env.local file with these variables.');
   process.exit(1);
 }
 
@@ -209,10 +212,18 @@ async function main() {
   console.log('   3. Wait for job results to load');
   console.log('\nPress ENTER when you are ready for the scraper to start...\n');
   
-  // Wait for user to press Enter
+  // Wait for user to press Enter (works on Windows and Unix)
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.setEncoding('utf8');
+  
   await new Promise<void>((resolve) => {
-    process.stdin.once('data', () => {
-      resolve();
+    process.stdin.once('data', (key: string) => {
+      if (key === '\r' || key === '\n' || key === '\u0003') {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        resolve();
+      }
     });
   });
 
