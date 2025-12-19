@@ -69,7 +69,9 @@ export function checkPlatformMatch(
  * @param candidatePrimaryPlatform - Candidate's primary platform
  * @param candidateSecondaryPlatforms - Candidate's secondary platforms
  * @param jobPlatformMap - Map of job_id -> primary_platform
- * @returns Array of updates to apply (visibility_status, hidden_reason, hidden_at)
+ * @returns Array of updates to apply (ai_visibility, hidden_reason, hidden_at)
+ * 
+ * NOTE: Uses ai_visibility (writable) NOT visibility_status (generated/read-only)
  */
 export function applyPlatformGating(
   matches: Array<{ job_id: string }>,
@@ -78,13 +80,13 @@ export function applyPlatformGating(
   jobPlatformMap: Map<string, string | null>
 ): Array<{
   job_id: string;
-  visibility_status: 'visible' | 'hidden_by_ai';
+  ai_visibility: 'visible' | 'hidden_by_ai';
   hidden_reason: string | null;
   hidden_at: string | null;
 }> {
   const updates: Array<{
     job_id: string;
-    visibility_status: 'visible' | 'hidden_by_ai';
+    ai_visibility: 'visible' | 'hidden_by_ai';
     hidden_reason: string | null;
     hidden_at: string | null;
   }> = [];
@@ -100,14 +102,14 @@ export function applyPlatformGating(
     if (result.isVisible) {
       updates.push({
         job_id: match.job_id,
-        visibility_status: 'visible',
+        ai_visibility: 'visible',
         hidden_reason: null,
         hidden_at: null,
       });
     } else {
       updates.push({
         job_id: match.job_id,
-        visibility_status: 'hidden_by_ai',
+        ai_visibility: 'hidden_by_ai',
         hidden_reason: result.reason || 'platform_mismatch',
         hidden_at: new Date().toISOString(),
       });

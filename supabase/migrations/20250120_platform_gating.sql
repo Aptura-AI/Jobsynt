@@ -98,24 +98,26 @@ BEGIN
 END $$;
 
 -- ============================================
--- PART 3: Add Visibility Status to candidate_job_matches
+-- PART 3: Add AI Visibility to candidate_job_matches
 -- ============================================
+-- NOTE: visibility_status is a GENERATED column (read-only lifecycle fact)
+-- AI decisions MUST use ai_visibility (writable column for AI logic)
 
--- Add visibility_status (stores visibility state, not derived)
+-- Add ai_visibility (writable column for AI-based filtering/gating)
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' 
     AND table_name = 'candidate_job_matches' 
-    AND column_name = 'visibility_status'
+    AND column_name = 'ai_visibility'
   ) THEN
     ALTER TABLE public.candidate_job_matches 
-    ADD COLUMN visibility_status TEXT DEFAULT 'visible' 
-    CHECK (visibility_status IN ('visible', 'hidden_by_ai', 'dismissed_by_user'));
-    RAISE NOTICE '✅ Added visibility_status column to candidate_job_matches';
+    ADD COLUMN ai_visibility TEXT DEFAULT 'visible' 
+    CHECK (ai_visibility IN ('visible', 'hidden_by_ai'));
+    RAISE NOTICE '✅ Added ai_visibility column to candidate_job_matches';
   ELSE
-    RAISE NOTICE 'ℹ️  visibility_status column already exists in candidate_job_matches';
+    RAISE NOTICE 'ℹ️  ai_visibility column already exists in candidate_job_matches';
   END IF;
 END $$;
 
@@ -157,19 +159,19 @@ END $$;
 -- PART 4: Backfill Existing Rows
 -- ============================================
 
--- Set default visibility_status for existing rows
+-- Set default ai_visibility for existing rows
 UPDATE public.candidate_job_matches
-SET visibility_status = 'visible'
-WHERE visibility_status IS NULL;
+SET ai_visibility = 'visible'
+WHERE ai_visibility IS NULL;
 
 -- ============================================
 -- PART 5: Create Index for Performance
 -- ============================================
 
--- Index for visibility_status queries
-CREATE INDEX IF NOT EXISTS idx_candidate_job_matches_visibility 
-ON public.candidate_job_matches(candidate_id, visibility_status) 
-WHERE visibility_status = 'visible';
+-- Index for ai_visibility queries (AI filtering)
+CREATE INDEX IF NOT EXISTS idx_candidate_job_matches_ai_visibility 
+ON public.candidate_job_matches(candidate_id, ai_visibility) 
+WHERE ai_visibility = 'visible';
 
 -- Index for platform queries
 CREATE INDEX IF NOT EXISTS idx_scraped_jobs_primary_platform 

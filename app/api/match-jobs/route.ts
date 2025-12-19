@@ -197,15 +197,15 @@ export async function POST(req: NextRequest) {
           jobPlatformMap
         );
 
-        // Update visibility_status for platform mismatches
+        // Update ai_visibility for platform mismatches (writable column for AI decisions)
         for (const update of platformUpdates) {
-          if (update.visibility_status === 'hidden_by_ai') {
+          if (update.ai_visibility === 'hidden_by_ai') {
             platformConflictsHidden++;
             
             await supabase
               .from('candidate_job_matches')
               .update({
-                visibility_status: 'hidden_by_ai',
+                ai_visibility: 'hidden_by_ai',
                 hidden_reason: update.hidden_reason,
                 hidden_at: update.hidden_at,
               })
@@ -213,6 +213,17 @@ export async function POST(req: NextRequest) {
               .eq('job_id', update.job_id);
 
             console.log(`[Match Jobs] Platform mismatch: Hidden job ${update.job_id.substring(0, 8)}... (${update.hidden_reason})`);
+          } else {
+            // Ensure visible jobs are marked as visible
+            await supabase
+              .from('candidate_job_matches')
+              .update({
+                ai_visibility: 'visible',
+                hidden_reason: null,
+                hidden_at: null,
+              })
+              .eq('candidate_id', profile.id)
+              .eq('job_id', update.job_id);
           }
         }
       }
@@ -366,12 +377,15 @@ export async function GET(req: NextRequest) {
     // LEDGER QUERY: Fetch from candidate_job_matches
     // NO reprocessing, NO AI, NO modification
     // We fetch all rows and filter in-memory to avoid Supabase null filter issues
-    // Only fetch visible jobs (platform gating applied)
+    // Filter by BOTH:
+    // - visibility_status = 'active' (lifecycle: not applied, not dismissed)
+    // - ai_visibility = 'visible' (AI decision: platform gating passed)
     const { data: matches, error: matchesError } = await supabase
       .from('candidate_job_matches')
       .select('*')
       .eq('candidate_id', profile.id)
-      .eq('visibility_status', 'visible');
+      .eq('visibility_status', 'active')  // Lifecycle: not applied, not dismissed
+      .eq('ai_visibility', 'visible');    // AI decision: platform gating passed
 
     if (matchesError) {
       console.error('[Active Feed] Ledger fetch failed:', matchesError);
