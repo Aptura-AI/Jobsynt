@@ -297,6 +297,8 @@ export async function GET(req: NextRequest) {
     // NO reprocessing, NO AI, NO modification
     // NOTE: We fetch ALL matches first, then filter by date client-side
     // This is because .gte() on posted_date excludes jobs where posted_date is NULL
+    // NOTE: We do NOT use .is(column, null) filters as they silently exclude rows
+    // Instead, we fetch all rows and filter in-memory
     const { data: rawMatches, error: matchesError } = await supabase
       .from('candidate_job_matches')
       .select(`
@@ -306,6 +308,8 @@ export async function GET(req: NextRequest) {
         qualified_at,
         ai_priority,
         reasons,
+        applied_at,
+        dismissed_at,
         scraped_jobs (
           id,
           title,
@@ -323,22 +327,26 @@ export async function GET(req: NextRequest) {
           is_active
         )
       `)
-      .eq('candidate_id', profile.id)
-      .is('applied_at', null)      // Not applied
-      .is('dismissed_at', null);   // Not dismissed
+      .eq('candidate_id', profile.id);
     
-    // Filter by date CLIENT-SIDE to handle NULL posted_date properly
+    // Filter by applied/dismissed and date CLIENT-SIDE to handle NULL values properly
     // NULL posted_date = treat as recent (job was just uploaded without date)
     const matches = (rawMatches || []).filter((match: any) => {
+      // Skip applied jobs
+      if (match.applied_at) return false;
+
+      // Skip dismissed jobs
+      if (match.dismissed_at) return false;
+
       const job = match.scraped_jobs;
       if (!job) return false;
-      
-      // If posted_date is NULL, treat as recent (within 30 days)
+
+      // Treat NULL posted_date as recent
       if (!job.posted_date) {
         console.log(`[Active Feed] Job ${job.id?.substring(0, 8)} has NULL posted_date - including as recent`);
         return true;
       }
-      
+
       // Check if within 30 days
       return job.posted_date >= thirtyDaysAgo;
     });
