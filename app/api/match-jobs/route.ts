@@ -444,7 +444,14 @@ export async function GET(req: NextRequest) {
 
     if (jobsError) {
       console.error('[Active Feed] Job fetch failed:', jobsError);
-      return NextResponse.json({ jobs: [] });
+      return NextResponse.json({ 
+        jobs: [],
+        diagnostics: {
+          total_visible: 0,
+          total_hidden_by_platform: totalHiddenByPlatform,
+          total_active_matches: matches.length,
+        },
+      });
     }
 
     // Create job lookup map
