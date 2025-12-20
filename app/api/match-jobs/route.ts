@@ -17,6 +17,14 @@ import { get30DaysAgoDate } from '@/lib/job-filters';
 import { logJobQualified, logFeedFetch } from '@/lib/matching/jobQualificationLog';
 import { rankJobsWithAI, CandidateProfile } from '@/lib/matching/rankJobsWithAI';
 import { applyPlatformGating } from '@/lib/matching/platformGating';
+import {
+  fetchCandidateMatches,
+  applyVisibilityRules,
+  fetchJobsByIds,
+  mergeMatchesWithJobs,
+  sortJobsByPriority,
+  buildDashboardResponse,
+} from '@/lib/matching/dashboardHelpers';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -375,160 +383,72 @@ export async function GET(req: NextRequest) {
     // ============================================
     // STEP 1: Fetch ledger rows ONLY (no nested joins)
     // ============================================
-    // LEDGER QUERY: Fetch from candidate_job_matches
-    // NO reprocessing, NO AI, NO modification
-    // We fetch all rows and filter in-memory to avoid Supabase null filter issues
-    // Filter by BOTH:
-    // - visibility_status = 'active' (lifecycle: not applied, not dismissed)
-    // - ai_visibility = 'visible' OR NULL (NULL means not yet gated, treat as visible)
-    // Note: We use .or() to handle NULL ai_visibility for backward compatibility
-    const { data: matches, error: matchesError } = await supabase
-      .from('candidate_job_matches')
-      .select('*')
-      .eq('candidate_id', profile.id)
-      .eq('visibility_status', 'active')  // Lifecycle: not applied, not dismissed
-      .or('ai_visibility.eq.visible,ai_visibility.is.null'); // AI decision: visible OR not yet set
+    const { matches, error: matchesError } = await fetchCandidateMatches(profile.id);
 
     if (matchesError) {
       console.error('[Active Feed] Ledger fetch failed:', matchesError);
-      return NextResponse.json({ jobs: [] });
-    }
-
-    // PART D: Count hidden jobs for diagnostics (before filtering)
-    const { data: hiddenMatches } = await supabase
-      .from('candidate_job_matches')
-      .select('id')
-      .eq('candidate_id', profile.id)
-      .eq('visibility_status', 'active')
-      .eq('ai_visibility', 'hidden_by_ai');
-    
-    const totalHiddenByPlatform: number = hiddenMatches?.length || 0;
-
-    if (!matches || matches.length === 0) {
-      console.log('[Active Feed] No active visible jobs found for candidate');
       return NextResponse.json({ 
         jobs: [],
         diagnostics: {
           total_visible: 0,
-          total_hidden_by_platform: totalHiddenByPlatform,
+          total_hidden_by_platform: 0,
           total_active_matches: 0,
         },
       });
     }
 
-    // Note: No need to filter applied/dismissed in-memory since visibility_status = 'active'
-    // already excludes them (visibility_status is a GENERATED column from applied_at/dismissed_at)
-    const activeMatches = matches;
-    const totalVisible: number = activeMatches.length;
-
-    // PART D: Count hidden jobs for diagnostics
-    const { data: hiddenMatches } = await supabase
-      .from('candidate_job_matches')
-      .select('id')
-      .eq('candidate_id', profile.id)
-      .eq('visibility_status', 'active')
-      .eq('ai_visibility', 'hidden_by_ai');
-    
-    const totalHiddenByPlatform = hiddenMatches?.length || 0;
-    const totalVisible = activeMatches.length;
+    if (!matches || matches.length === 0) {
+      console.log('[Active Feed] No active visible jobs found for candidate');
+      const diagnostics = await applyVisibilityRules(profile.id, []);
+      return NextResponse.json({ 
+        jobs: [],
+        diagnostics,
+      });
+    }
 
     // ============================================
-    // STEP 2: Fetch jobs explicitly (no nested joins)
+    // STEP 2: Apply visibility rules and get diagnostics
     // ============================================
-    const jobIds = activeMatches.map((m: any) => m.job_id);
+    const diagnostics = await applyVisibilityRules(profile.id, matches);
 
-    const { data: jobsData, error: jobsError } = await supabase
-      .from('scraped_jobs')
-      .select('*')
-      .in('id', jobIds);
+    // ============================================
+    // STEP 3: Fetch jobs explicitly (no nested joins)
+    // ============================================
+    const jobIds: string[] = matches.map((m) => m.job_id);
+    const { jobs: jobsData, error: jobsError } = await fetchJobsByIds(jobIds);
 
     if (jobsError) {
       console.error('[Active Feed] Job fetch failed:', jobsError);
       return NextResponse.json({ 
         jobs: [],
-        diagnostics: {
-          total_visible: 0,
-          total_hidden_by_platform: totalHiddenByPlatform,
-          total_active_matches: matches.length,
-        },
+        diagnostics,
       });
     }
 
-    // Create job lookup map
-    const jobMap = new Map((jobsData || []).map((j: any) => [j.id, j]));
+    if (!jobsData) {
+      return NextResponse.json({ 
+        jobs: [],
+        diagnostics,
+      });
+    }
 
     // ============================================
-    // STEP 3: Merge + filter (no silent drops)
+    // STEP 4: Merge matches with jobs and filter
     // ============================================
-    const merged = activeMatches
-      .map((match: any) => {
-        const job = jobMap.get(match.job_id);
-        if (!job) {
-          console.warn(`[Active Feed] Missing job for job_id: ${match.job_id} (ledger row exists but job not found)`);
-          return null;
-        }
-
-        // Filter by date: NULL posted_date = treat as recent
-        if (job.posted_date && job.posted_date < thirtyDaysAgo) {
-          return null;
-        }
-
-        return {
-          id: job.id,
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          job_type: job.job_type,
-          location_type: job.location_type,
-          is_remote: job.is_remote,
-          url: job.url,
-          salary: job.salary,
-          pay_rate_min: job.pay_rate_min,
-          pay_rate_max: job.pay_rate_max,
-          description: job.description,
-          posted_date: job.posted_date,
-          fit_score: match.match_score,
-          match_source: match.match_source,
-          ai_priority: match.ai_priority,
-          qualified_at: match.qualified_at,
-          match_reasons: match.reasons || [],
-          is_recruiter_targeted: match.match_source === 'explicit_target',
-        };
-      })
-      .filter(Boolean);
+    const merged = mergeMatchesWithJobs(matches, jobsData, thirtyDaysAgo);
 
     // ============================================
-    // STEP 4: Sort (preserve intent)
+    // STEP 5: Sort by priority
     // ============================================
-    merged.sort((a: any, b: any) => {
-      // 1. Explicit targets first
-      if (a.match_source === 'explicit_target' && b.match_source !== 'explicit_target') return -1;
-      if (b.match_source === 'explicit_target' && a.match_source !== 'explicit_target') return 1;
-
-      // 2. AI priority (High > Medium > Low > null)
-      const priorityOrder: Record<string, number> = { 'High': 3, 'Medium': 2, 'Low': 1 };
-      const aPriority = priorityOrder[a.ai_priority] || 0;
-      const bPriority = priorityOrder[b.ai_priority] || 0;
-      if (aPriority !== bPriority) return bPriority - aPriority;
-
-      // 3. Fit score
-      if ((b.fit_score || 0) !== (a.fit_score || 0)) {
-        return (b.fit_score || 0) - (a.fit_score || 0);
-      }
-
-      // 4. Qualified at (newest first)
-      return new Date(b.qualified_at || 0).getTime() - new Date(a.qualified_at || 0).getTime();
-    });
+    const sorted = sortJobsByPriority(merged);
 
     // ============================================
-    // STEP 5: Log and update view tracking
+    // STEP 6: Log and update view tracking
     // ============================================
-    // Log feed fetch
-    logFeedFetch(profile.id, merged.length, 'active');
+    logFeedFetch(profile.id, sorted.length, 'active');
 
-    // Update view tracking for returned jobs
-    if (merged.length > 0) {
-      const returnedJobIds = merged.map((j: any) => j.id);
+    if (sorted.length > 0) {
+      const returnedJobIds: string[] = sorted.map((j) => j.id);
       const now = new Date().toISOString();
       
       // Update last_seen_at for all jobs
@@ -548,15 +468,10 @@ export async function GET(req: NextRequest) {
     }
 
     // ============================================
-    // STEP 6: Return response
+    // STEP 7: Build and return response
     // ============================================
-    return NextResponse.json({
-      jobs: merged,
-      total: merged.length,
-      message: merged.length > 0
-        ? `${merged.length} qualified jobs in your feed`
-        : 'No active jobs in feed. New matches will appear as they are qualified.',
-    });
+    const response = buildDashboardResponse(sorted, diagnostics);
+    return NextResponse.json(response);
   } catch (error: any) {
     console.error('[Active Feed] Error:', error);
     return NextResponse.json({ jobs: [] });
