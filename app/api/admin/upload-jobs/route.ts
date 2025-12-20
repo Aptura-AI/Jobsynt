@@ -564,7 +564,7 @@ export async function POST(req: NextRequest) {
           // Note: skills column removed - use must_have_skills and good_to_have_skills instead
           
           // Platform identity (extracted at ingestion, stored once) - PART B: NEVER NULL
-          primary_platform: primaryPlatform, // Guaranteed non-null by checks above
+          primary_platform: primaryPlatform as string, // PART B: Guaranteed non-null by checks above
           secondary_platforms: secondaryPlatforms.length > 0 ? secondaryPlatforms : null,
           
           // Experience - GUARANTEED INTEGER, NEVER NULL
