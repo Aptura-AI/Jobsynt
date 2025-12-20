@@ -84,7 +84,7 @@ async function collectJobLinks(page: any): Promise<string[]> {
   );
 
   const unique = Array.from(new Set(links));
-  return unique;
+  return unique.filter((v): v is string => typeof v === 'string' && v.length > 0);
 }
 
 async function scrapeJobDetail(browserPage: any, jobUrl: string) {
