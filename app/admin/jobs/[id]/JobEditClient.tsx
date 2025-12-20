@@ -9,11 +9,12 @@ type Job = {
   title: string;
   company: string;
   location: string;
-  location_type: string | null;
-  is_remote: boolean;
+  work_location_type: string | null; // Remote, Hybrid, Onsite
+  location_type: string | null; // Legacy - deprecated
+  is_remote: boolean; // Legacy - deprecated
   url: string;
   description: string;
-  job_type: string;
+  job_type: string; // Employment type: full-time, w2-contract, etc.
   must_have_skills: string;
   good_to_have_skills: string;
   required_years_experience: number;
@@ -66,8 +67,25 @@ export default function JobEditClient({ jobId }: { jobId: string }) {
       setError(null);
       setSuccess(false);
 
+      // Validation: Hybrid/Onsite require location
+      const workLocationType = formData.work_location_type || formData.location_type || (formData.is_remote ? 'Remote' : 'Remote');
+      if ((workLocationType === 'Hybrid' || workLocationType === 'Onsite') && !formData.location?.trim()) {
+        setError(`${workLocationType} jobs require a location. Please provide a location.`);
+        setSaving(false);
+        return;
+      }
+
       // Prepare update payload
       const updatePayload: any = { ...formData };
+      
+      // Set work_location_type (PART 1)
+      if (formData.work_location_type) {
+        updatePayload.work_location_type = formData.work_location_type;
+      } else if (formData.location_type) {
+        updatePayload.work_location_type = formData.location_type;
+      } else if (formData.is_remote !== undefined) {
+        updatePayload.work_location_type = formData.is_remote ? 'Remote' : 'Onsite';
+      }
       
       // Handle target candidate IDs
       if (targetCandidateIds.trim()) {
@@ -94,9 +112,10 @@ export default function JobEditClient({ jobId }: { jobId: string }) {
 
       if (res.ok) {
         setSuccess(true);
-        setJob(data.job);
-        setFormData(data.job);
-        setTimeout(() => setSuccess(false), 3000);
+        // PART 2: Redirect to jobs list after successful save
+        setTimeout(() => {
+          router.push('/admin/jobs');
+        }, 1000);
       } else {
         setError(data.error || 'Failed to save job');
       }
@@ -211,32 +230,33 @@ export default function JobEditClient({ jobId }: { jobId: string }) {
                 />
               </div>
 
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-semibold mb-1">Location Type</label>
-                  <select
-                    value={formData.location_type || ''}
-                    onChange={(e) => setFormData({ ...formData, location_type: e.target.value })}
-                    className="w-full px-3 py-2 border rounded"
-                  >
-                    <option value="">Select...</option>
-                    <option value="Remote">Remote</option>
-                    <option value="Hybrid">Hybrid</option>
-                    <option value="Onsite">Onsite</option>
-                  </select>
-                </div>
-
-                <div className="flex items-end">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_remote || false}
-                      onChange={(e) => setFormData({ ...formData, is_remote: e.target.checked })}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Remote</span>
-                  </label>
-                </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1">Work Location Type *</label>
+                <select
+                  value={formData.work_location_type || formData.location_type || (formData.is_remote ? 'Remote' : '') || 'Remote'}
+                  onChange={(e) => {
+                    const workLocationType = e.target.value;
+                    setFormData({ ...formData, work_location_type: workLocationType });
+                    
+                    // Validation: Hybrid/Onsite require location
+                    if ((workLocationType === 'Hybrid' || workLocationType === 'Onsite') && !formData.location?.trim()) {
+                      setError(`${workLocationType} jobs require a location. Please provide a location.`);
+                    } else {
+                      setError(null);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border rounded"
+                  required
+                >
+                  <option value="Remote">Remote</option>
+                  <option value="Hybrid">Hybrid</option>
+                  <option value="Onsite">Onsite</option>
+                </select>
+                <p className="text-xs text-muted mt-1">
+                  {formData.work_location_type === 'Hybrid' || formData.work_location_type === 'Onsite' 
+                    ? 'Location is required for Hybrid and Onsite jobs'
+                    : 'Remote jobs do not require a location'}
+                </p>
               </div>
 
               <div>

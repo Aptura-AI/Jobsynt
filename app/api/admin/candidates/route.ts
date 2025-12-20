@@ -46,9 +46,12 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit;
 
     // Build query - GET ALL CANDIDATES (not just admin-created)
+    // PART 4: Hide Jobsynt Admin internal profile from candidate lists
+    // PART 5: Include secondary_platforms in select
     let query = supabase
       .from('profiles')
-      .select('id, name, email, phone, location, experience_years, title, primary_skills, secondary_skills, primary_platform, resume_url, created_at, created_by_admin', { count: 'exact' });
+      .select('id, name, email, phone, location, experience_years, title, primary_skills, secondary_skills, primary_platform, secondary_platforms, resume_url, created_at, created_by_admin', { count: 'exact' })
+      .or('email.neq.info@jobsynt.com,email.is.null'); // PART 4: Filter out admin candidate
 
     // Apply filters
     if (search) {

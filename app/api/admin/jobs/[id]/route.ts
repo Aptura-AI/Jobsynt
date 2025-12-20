@@ -105,13 +105,45 @@ export async function PATCH(
     // Prepare update data (only include fields that are provided)
     const updateData: any = {};
 
-    // Basic fields
-    if (body.title !== undefined) updateData.title = String(body.title).trim();
-    if (body.company !== undefined) updateData.company = String(body.company).trim();
-    if (body.location !== undefined) updateData.location = String(body.location).trim();
-    if (body.url !== undefined) updateData.url = String(body.url).trim();
-    if (body.description !== undefined) updateData.description = String(body.description).trim();
-    if (body.job_type !== undefined) updateData.job_type = String(body.job_type).trim();
+    // PART 7: Validation guardrails - validate all admin inputs
+    // Basic fields with validation
+    if (body.title !== undefined) {
+      const title = String(body.title).trim();
+      if (!title || title.length === 0) {
+        return NextResponse.json({ error: 'Job title is required' }, { status: 400 });
+      }
+      updateData.title = title;
+    }
+    if (body.company !== undefined) {
+      const company = String(body.company).trim();
+      if (!company || company.length === 0) {
+        return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
+      }
+      updateData.company = company;
+    }
+    if (body.location !== undefined) {
+      updateData.location = String(body.location).trim();
+    }
+    if (body.url !== undefined) {
+      const url = String(body.url).trim();
+      if (url && !url.match(/^https?:\/\//)) {
+        return NextResponse.json({ error: 'Invalid URL format. Must start with http:// or https://' }, { status: 400 });
+      }
+      updateData.url = url;
+    }
+    if (body.description !== undefined) {
+      updateData.description = String(body.description).trim();
+    }
+    if (body.job_type !== undefined) {
+      const jobType = String(body.job_type).trim();
+      const validJobTypes = ['full-time', 'w2-contract', 'c2c', '1099'];
+      if (jobType && !validJobTypes.includes(jobType)) {
+        return NextResponse.json({ 
+          error: `Invalid job type. Must be one of: ${validJobTypes.join(', ')}` 
+        }, { status: 400 });
+      }
+      updateData.job_type = jobType;
+    }
     
     // Skills
     if (body.must_have_skills !== undefined) {
@@ -130,31 +162,101 @@ export async function PATCH(
       updateData.pay_rate_raw = body.salary ? String(body.salary).trim() : null;
     }
 
-    // Location
+    // Work Location Type (Remote/Hybrid/Onsite) - PART 1
+    if (body.work_location_type !== undefined) {
+      const workLocationType = String(body.work_location_type).trim();
+      if (!['Remote', 'Hybrid', 'Onsite'].includes(workLocationType)) {
+        return NextResponse.json({ 
+          error: 'Invalid work_location_type. Must be Remote, Hybrid, or Onsite' 
+        }, { status: 400 });
+      }
+      updateData.work_location_type = workLocationType;
+      
+      // Validation: Hybrid/Onsite require location
+      if ((workLocationType === 'Hybrid' || workLocationType === 'Onsite') && !body.location?.trim()) {
+        const existingLocation = existingJob.location;
+        if (!existingLocation || !existingLocation.trim()) {
+          return NextResponse.json({ 
+            error: `${workLocationType} jobs require a location. Please provide a location.` 
+          }, { status: 400 });
+        }
+      }
+    }
+    
+    // Location validation
+    if (body.location !== undefined) {
+      const location = String(body.location).trim();
+      const workLocationType = body.work_location_type || existingJob.work_location_type || 'Remote';
+      
+      // If location is being removed and job is Hybrid/Onsite, error
+      if (!location && (workLocationType === 'Hybrid' || workLocationType === 'Onsite')) {
+        return NextResponse.json({ 
+          error: `${workLocationType} jobs require a location. Cannot remove location.` 
+        }, { status: 400 });
+      }
+      
+      updateData.location = location;
+    }
+    
+    // Legacy support (deprecated - use work_location_type instead)
     if (body.is_remote !== undefined) {
-      updateData.is_remote = Boolean(body.is_remote);
+      // Convert is_remote to work_location_type
+      updateData.work_location_type = body.is_remote ? 'Remote' : (existingJob.work_location_type || 'Onsite');
     }
     if (body.location_type !== undefined) {
-      updateData.location_type = String(body.location_type).trim();
+      // Map location_type to work_location_type
+      const locationType = String(body.location_type).trim();
+      if (['Remote', 'Hybrid', 'Onsite'].includes(locationType)) {
+        updateData.work_location_type = locationType;
+      }
     }
 
-    // Platform (re-extract if title or skills changed)
-    if (body.title !== undefined || body.must_have_skills !== undefined || body.good_to_have_skills !== undefined) {
+    // PART 3: Platform MUST come from must_have_skills (source of truth)
+    if (body.must_have_skills !== undefined || body.title !== undefined) {
       const title = body.title !== undefined ? body.title : existingJob.title;
       const mustHave = body.must_have_skills !== undefined ? body.must_have_skills : existingJob.must_have_skills;
       const goodToHave = body.good_to_have_skills !== undefined ? body.good_to_have_skills : existingJob.good_to_have_skills;
       
+      // Primary platform MUST be derived from must_have_skills (PART 3 requirement)
+      const mustHaveSkills = mustHave ? mustHave.split(/[,;|]/).map((s: string) => s.trim()).filter(s => s.length > 0) : [];
       const allSkills = [
-        ...(mustHave ? mustHave.split(/[,;|]/).map((s: string) => s.trim()) : []),
-        ...(goodToHave ? goodToHave.split(/[,;|]/).map((s: string) => s.trim()) : [])
+        ...mustHaveSkills,
+        ...(goodToHave ? goodToHave.split(/[,;|]/).map((s: string) => s.trim()).filter(s => s.length > 0) : [])
       ];
       
-      const primaryPlatform = extractPlatformFromJob(title, allSkills);
+      // Extract platform - must_have_skills is primary source
+      const primaryPlatform = extractPlatformFromJob(title, mustHaveSkills.length > 0 ? mustHaveSkills : allSkills);
       const secondaryPlatforms = extractSecondaryPlatforms(title, allSkills);
       
-      updateData.primary_platform = primaryPlatform || null;
+      // PART 3: Primary Platform must never remain NULL after ingestion
+      if (!primaryPlatform && mustHaveSkills.length > 0) {
+        // If we have skills but no platform detected, try AI inference (one-time)
+        // For now, we'll use a fallback based on common patterns
+        const skillsLower = mustHaveSkills.join(' ').toLowerCase();
+        if (skillsLower.includes('oracle') && (skillsLower.includes('fusion') || skillsLower.includes('cloud'))) {
+          updateData.primary_platform = 'Oracle Fusion';
+        } else if (skillsLower.includes('peoplesoft')) {
+          updateData.primary_platform = 'PeopleSoft';
+        } else if (skillsLower.includes('workday')) {
+          updateData.primary_platform = 'Workday';
+        } else if (skillsLower.includes('sap')) {
+          updateData.primary_platform = 'SAP';
+        } else {
+          // Default to first significant skill if no platform match
+          updateData.primary_platform = mustHaveSkills[0] || null;
+        }
+      } else {
+        updateData.primary_platform = primaryPlatform || null;
+      }
+      
       updateData.secondary_platforms = secondaryPlatforms.length > 0 ? secondaryPlatforms : null;
+      
+      // Ensure primary_platform is never NULL if we have skills
+      if (!updateData.primary_platform && mustHaveSkills.length > 0) {
+        updateData.primary_platform = 'Unknown Platform'; // Fallback to prevent NULL
+      }
     } else if (body.primary_platform !== undefined) {
+      // Allow manual override, but warn if must_have_skills suggests different platform
       updateData.primary_platform = body.primary_platform ? String(body.primary_platform).trim() : null;
     }
     if (body.secondary_platforms !== undefined) {

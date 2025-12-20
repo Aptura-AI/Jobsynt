@@ -9,11 +9,12 @@ type Job = {
   title: string;
   company: string;
   location: string;
-  location_type: string | null;
-  is_remote: boolean;
+  work_location_type: string | null; // Remote, Hybrid, Onsite
+  location_type: string | null; // Legacy
+  is_remote: boolean; // Legacy
   primary_platform: string | null;
   source: string;
-  job_type: string;
+  job_type: string; // Employment type
   is_active: boolean;
   created_at: string;
   target_candidate_ids: string | null;
@@ -201,6 +202,7 @@ export default function JobsListClient() {
                     <th className="px-4 py-3 text-left text-sm font-semibold">Title</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Company</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Location</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Job Type</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Platform</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Source</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Targeted</th>
@@ -217,10 +219,21 @@ export default function JobsListClient() {
                       </td>
                       <td className="px-4 py-3">{job.company}</td>
                       <td className="px-4 py-3">
-                        {job.is_remote ? (
-                          <span className="text-green-600">Remote</span>
+                        {job.location || (job.work_location_type === 'Remote' ? 'Remote' : 'N/A')}
+                      </td>
+                      <td className="px-4 py-3">
+                        {job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite') ? (
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            (job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite')) === 'Remote' 
+                              ? 'bg-green-100 text-green-800' 
+                              : (job.work_location_type || job.location_type) === 'Hybrid'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite')}
+                          </span>
                         ) : (
-                          job.location || 'N/A'
+                          <span className="text-muted text-xs">Not set</span>
                         )}
                       </td>
                       <td className="px-4 py-3">

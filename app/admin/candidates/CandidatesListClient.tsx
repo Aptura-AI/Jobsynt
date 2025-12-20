@@ -15,6 +15,7 @@ type Candidate = {
   primary_skills: string[] | null;
   secondary_skills: string[] | null;
   primary_platform: string | null;
+  secondary_platforms: string[] | null; // PART 5: Add secondary_platforms
   resume_url: string | null;
   created_at: string;
   created_by_admin: boolean;
@@ -177,8 +178,8 @@ export default function CandidatesListClient() {
                     <th className="px-4 py-3 text-left text-sm font-semibold">Email</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Location</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Experience</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">Platform</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">Skills</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Primary Platform</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Secondary Platforms</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Resume</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Actions</th>
                   </tr>
@@ -210,10 +211,20 @@ export default function CandidatesListClient() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-xs text-muted max-w-xs truncate">
-                          {candidate.primary_skills?.slice(0, 3).join(', ') || 'N/A'}
-                          {candidate.primary_skills && candidate.primary_skills.length > 3 && '...'}
-                        </div>
+                        {candidate.secondary_platforms && candidate.secondary_platforms.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {candidate.secondary_platforms.slice(0, 2).map((platform, idx) => (
+                              <span key={idx} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">
+                                {platform}
+                              </span>
+                            ))}
+                            {candidate.secondary_platforms.length > 2 && (
+                              <span className="text-xs text-muted">+{candidate.secondary_platforms.length - 2}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted text-xs">None</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {candidate.resume_url ? (

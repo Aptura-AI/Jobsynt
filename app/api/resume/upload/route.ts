@@ -111,7 +111,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Profile not found. Please complete your profile first.' }, { status: 400 });
     }
 
-    // Extract text from PDF
+    // PART 6: Resume Upload Flow (MANDATORY ORDER)
+    // Step 1: Extract text from PDF
     const { text: extractedText, confidence } = await extractTextFromPDF(file);
 
     // Warn user if confidence is low
@@ -119,7 +120,8 @@ export async function POST(req: NextRequest) {
       console.warn(`[Resume Upload] Low confidence text extraction for ${file.name}. Extracted ${extractedText.length} characters.`);
     }
 
-    // Generate unique file path
+    // Step 2: Upload to Supabase Storage bucket 'resumes' FIRST
+    // If this fails, abort entire operation (PART 6 requirement)
     const timestamp = Date.now();
     const filePath = `${profile.id}/${timestamp}_resume.pdf`;
 
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);
 
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage - MUST succeed before proceeding
     const supabaseAdmin = createClient(
       supabaseUrl,
       process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseServiceKey
@@ -140,23 +142,42 @@ export async function POST(req: NextRequest) {
         upsert: true,
       });
 
+    // PART 6: If step 2 fails → abort the entire operation
     if (uploadError) {
-      console.error('Upload error:', uploadError);
+      console.error('[Resume Upload] Storage upload failed:', uploadError);
       if (uploadError.message.includes('Bucket') || uploadError.message.includes('not found')) {
         return NextResponse.json({ 
-          error: 'Resume storage not configured. Please contact support or run the resumes table migration.',
+          error: 'Resume storage bucket not configured. Please contact support.',
           details: uploadError.message 
         }, { status: 500 });
       }
-      return NextResponse.json({ error: 'Failed to upload resume', details: uploadError.message }, { status: 500 });
+      return NextResponse.json({ 
+        error: 'Failed to upload resume to storage. Operation aborted.', 
+        details: uploadError.message 
+      }, { status: 500 });
     }
 
-    // Get public URL
+    // Verify upload succeeded
+    if (!uploadData || !uploadData.path) {
+      return NextResponse.json({ 
+        error: 'Resume upload failed - no upload data returned. Operation aborted.' 
+      }, { status: 500 });
+    }
+
+    // Step 3: Get public URL (after successful upload)
     const { data: urlData } = supabaseAdmin.storage
       .from('resumes')
       .getPublicUrl(filePath);
 
-    // Save resume record to database with extracted text
+    if (!urlData || !urlData.publicUrl) {
+      // Cleanup uploaded file if URL generation fails
+      await supabaseAdmin.storage.from('resumes').remove([filePath]);
+      return NextResponse.json({ 
+        error: 'Failed to generate resume URL. Operation aborted.' 
+      }, { status: 500 });
+    }
+
+    // Step 4: Save resume record to database with extracted text
     const { data: resumeRecord, error: dbError } = await supabase
       .from('resumes')
       .upsert({
@@ -173,19 +194,35 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (dbError) {
-      console.error('Database error:', dbError);
-      await supabase.storage.from('resumes').remove([filePath]);
-      return NextResponse.json({ error: 'Failed to save resume record', details: dbError.message }, { status: 500 });
+      console.error('[Resume Upload] Database error:', dbError);
+      // Cleanup uploaded file if database save fails
+      await supabaseAdmin.storage.from('resumes').remove([filePath]);
+      return NextResponse.json({ 
+        error: 'Failed to save resume record. File removed from storage.', 
+        details: dbError.message 
+      }, { status: 500 });
     }
 
-    // Update profile with resume URL and resume_text (for matching)
-    await supabase
+    // Step 5: Update profile with resume_url and resume_text (PART 6 requirement)
+    const { error: profileUpdateError } = await supabase
       .from('profiles')
       .update({ 
         resume_url: urlData.publicUrl,
-        resume_text: extractedText,
+        resume_text: extractedText, // PART 6: Parsed text saved to profiles.resume_text
       })
       .eq('id', profile.id);
+
+    if (profileUpdateError) {
+      console.error('[Resume Upload] Profile update error:', profileUpdateError);
+      // Don't cleanup file - it's already uploaded and saved to resumes table
+      // But log the error for admin review
+      return NextResponse.json({ 
+        error: 'Resume uploaded but failed to update profile. Please contact support.',
+        details: profileUpdateError.message,
+        resume: resumeRecord,
+        url: urlData.publicUrl,
+      }, { status: 500 });
+    }
 
     return NextResponse.json({
       message: 'Resume uploaded successfully',
