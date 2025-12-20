@@ -37,14 +37,14 @@ function normalizeTargetIds(input: string | string[] | null | undefined): string
   if (typeof input === 'string') {
     return input
       .split(',')
-      .map(id => id.trim())
-      .filter(id => id.length > 0);
+      .map((id: string) => id.trim())
+      .filter((id: string) => id.length > 0);
   }
   
   if (Array.isArray(input)) {
     return input
-      .map(id => String(id).trim())
-      .filter(id => id.length > 0);
+      .map((id: any) => String(id).trim())
+      .filter((id: string) => id.length > 0);
   }
   
   return [];

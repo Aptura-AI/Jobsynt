@@ -183,7 +183,7 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
     must_have_skills: mustHaveSkills,
     good_to_have_skills: goodToHaveSkills,
     // Platform identity (extracted at ingestion, stored once)
-    primary_platform: primaryPlatformValue,
+    primary_platform: primaryPlatform || null,
     secondary_platforms: secondaryPlatforms.length > 0 ? secondaryPlatforms : null,
     // Experience - extracted from description
     required_years_experience: requiredYearsExp,
