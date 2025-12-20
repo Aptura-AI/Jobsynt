@@ -68,7 +68,7 @@ export default function JobEditClient({ jobId }: { jobId: string }) {
       setSuccess(false);
 
       // Validation: Hybrid/Onsite require location
-      const workLocationType = formData.work_location_type || formData.location_type || (formData.is_remote ? 'Remote' : 'Remote');
+      const workLocationType = formData.work_location_type || formData.location_type || (formData.is_remote !== undefined ? (formData.is_remote ? 'Remote' : 'Onsite') : 'Remote');
       if ((workLocationType === 'Hybrid' || workLocationType === 'Onsite') && !formData.location?.trim()) {
         setError(`${workLocationType} jobs require a location. Please provide a location.`);
         setSaving(false);

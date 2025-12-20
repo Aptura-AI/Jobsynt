@@ -222,19 +222,23 @@ export default function JobsListClient() {
                         {job.location || (job.work_location_type === 'Remote' ? 'Remote' : 'N/A')}
                       </td>
                       <td className="px-4 py-3">
-                        {job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite') ? (
-                          <span className={`px-2 py-1 rounded text-xs ${
-                            (job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite')) === 'Remote' 
-                              ? 'bg-green-100 text-green-800' 
-                              : (job.work_location_type || job.location_type) === 'Hybrid'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite')}
-                          </span>
-                        ) : (
-                          <span className="text-muted text-xs">Not set</span>
-                        )}
+                        {(() => {
+                          const workLocationType = job.work_location_type || job.location_type || (job.is_remote !== undefined ? (job.is_remote ? 'Remote' : 'Onsite') : null);
+                          if (!workLocationType) {
+                            return <span className="text-muted text-xs">Not set</span>;
+                          }
+                          return (
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              workLocationType === 'Remote' 
+                                ? 'bg-green-100 text-green-800' 
+                                : workLocationType === 'Hybrid'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {workLocationType}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         {job.primary_platform || (

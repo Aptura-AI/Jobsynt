@@ -201,7 +201,10 @@ export async function PATCH(
     // Legacy support (deprecated - use work_location_type instead)
     if (body.is_remote !== undefined) {
       // Convert is_remote to work_location_type
-      updateData.work_location_type = body.is_remote ? 'Remote' : (existingJob.work_location_type || 'Onsite');
+      // If is_remote is explicitly false, set to Onsite (don't preserve existing Remote)
+      // If is_remote is true, set to Remote
+      // Only use existing value if is_remote is not explicitly set
+      updateData.work_location_type = body.is_remote ? 'Remote' : 'Onsite';
     }
     if (body.location_type !== undefined) {
       // Map location_type to work_location_type
