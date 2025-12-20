@@ -174,8 +174,8 @@ export async function PATCH(
         updateData.target_candidate_ids = ids.length > 0 ? ids.join(',') : null;
       } else if (Array.isArray(body.target_candidate_ids)) {
         const ids = body.target_candidate_ids
-          .map(id => String(id).trim())
-          .filter(id => id.length > 0);
+          .map((id: any) => String(id).trim())
+          .filter((id: string) => id.length > 0);
         updateData.target_candidate_ids = ids.length > 0 ? ids.join(',') : null;
       } else {
         updateData.target_candidate_ids = null;
