@@ -17,6 +17,7 @@ import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
 import crypto from 'crypto';
 import { inferJobTypeFromDescription, DEFAULT_JOB_TYPE, type JobType } from '@/lib/job-types';
+import { uniqueStringArray } from '@/lib/utils/typeGuards';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -83,8 +84,7 @@ async function collectJobLinks(page: any): Promise<string[]> {
     anchors.map((a: any) => a.href).filter(Boolean)
   );
 
-  const unique = Array.from(new Set(links));
-  return unique.filter((v): v is string => typeof v === 'string' && v.length > 0);
+  return uniqueStringArray(links);
 }
 
 async function scrapeJobDetail(browserPage: any, jobUrl: string) {
