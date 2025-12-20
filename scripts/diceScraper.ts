@@ -111,8 +111,9 @@ async function collectJobLinks(page: Page): Promise<string[]> {
   );
 
   const unique = Array.from(new Set(links));
-  console.log(`Found ${unique.length} job links`);
-  return unique.slice(0, MAX_JOBS_TO_SCRAPE);
+  const validLinks = unique.filter((v): v is string => typeof v === 'string' && v.length > 0);
+  console.log(`Found ${validLinks.length} job links`);
+  return validLinks.slice(0, MAX_JOBS_TO_SCRAPE);
 }
 
 async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
