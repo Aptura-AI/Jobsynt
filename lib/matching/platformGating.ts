@@ -35,9 +35,12 @@ export function checkPlatformMatch(
     return { isVisible: true, reason: 'candidate_platform_not_set' };
   }
 
-  // If job has no platform set, allow it (backward compatibility)
+  // PART D: If job has no platform set → ERROR, not hidden
+  // Jobs with missing platform should never reach this point (enforced at ingestion)
   if (!jobPrimaryPlatform) {
-    return { isVisible: true, reason: 'job_platform_not_set' };
+    console.error('[Platform Gating] Job has NULL primary_platform - this should never happen');
+    // Return visible but log error - platform should be enforced at DB level
+    return { isVisible: true, reason: 'job_platform_missing_error' };
   }
 
   // Normalize platforms (case-insensitive, trim whitespace)

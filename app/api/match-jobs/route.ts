@@ -394,14 +394,43 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ jobs: [] });
     }
 
+    // PART D: Count hidden jobs for diagnostics (before filtering)
+    const { data: hiddenMatches } = await supabase
+      .from('candidate_job_matches')
+      .select('id')
+      .eq('candidate_id', profile.id)
+      .eq('visibility_status', 'active')
+      .eq('ai_visibility', 'hidden_by_ai');
+    
+    const totalHiddenByPlatform: number = hiddenMatches?.length || 0;
+
     if (!matches || matches.length === 0) {
       console.log('[Active Feed] No active visible jobs found for candidate');
-      return NextResponse.json({ jobs: [] });
+      return NextResponse.json({ 
+        jobs: [],
+        diagnostics: {
+          total_visible: 0,
+          total_hidden_by_platform: totalHiddenByPlatform,
+          total_active_matches: 0,
+        },
+      });
     }
 
     // Note: No need to filter applied/dismissed in-memory since visibility_status = 'active'
     // already excludes them (visibility_status is a GENERATED column from applied_at/dismissed_at)
     const activeMatches = matches;
+    const totalVisible: number = activeMatches.length;
+
+    // PART D: Count hidden jobs for diagnostics
+    const { data: hiddenMatches } = await supabase
+      .from('candidate_job_matches')
+      .select('id')
+      .eq('candidate_id', profile.id)
+      .eq('visibility_status', 'active')
+      .eq('ai_visibility', 'hidden_by_ai');
+    
+    const totalHiddenByPlatform = hiddenMatches?.length || 0;
+    const totalVisible = activeMatches.length;
 
     // ============================================
     // STEP 2: Fetch jobs explicitly (no nested joins)

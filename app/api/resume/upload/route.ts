@@ -195,8 +195,13 @@ export async function POST(req: NextRequest) {
 
     if (dbError) {
       console.error('[Resume Upload] Database error:', dbError);
-      // Cleanup uploaded file if database save fails
-      await supabaseAdmin.storage.from('resumes').remove([filePath]);
+      // PART E: Cleanup uploaded file if database save fails
+      try {
+        await supabaseAdmin.storage.from('resumes').remove([filePath]);
+        console.log(`[Resume Upload] Cleaned up file after DB error: ${filePath}`);
+      } catch (cleanupError: any) {
+        console.error('[Resume Upload] Failed to cleanup file after DB error:', cleanupError);
+      }
       return NextResponse.json({ 
         error: 'Failed to save resume record. File removed from storage.', 
         details: dbError.message 
@@ -214,14 +219,18 @@ export async function POST(req: NextRequest) {
 
     if (profileUpdateError) {
       console.error('[Resume Upload] Profile update error:', profileUpdateError);
-      // Don't cleanup file - it's already uploaded and saved to resumes table
-      // But log the error for admin review
-      return NextResponse.json({ 
-        error: 'Resume uploaded but failed to update profile. Please contact support.',
-        details: profileUpdateError.message,
+      // PART E: Log error but don't cleanup - file is already in storage and resumes table
+      // This is a non-critical failure (resume is stored, just profile not updated)
+      console.warn(`[Resume Upload] Resume stored but profile not updated for ${profile.id}. Resume URL: ${urlData.publicUrl}`);
+      // Return success with warning - resume is stored, profile update can be retried
+      return NextResponse.json({
+        message: 'Resume uploaded successfully, but profile update failed. Resume is stored and accessible.',
         resume: resumeRecord,
         url: urlData.publicUrl,
-      }, { status: 500 });
+        textExtracted: extractedText.length > 0,
+        confidence,
+        warning: 'Profile update failed - resume is stored but profile.resume_url may not be updated.',
+      });
     }
 
     return NextResponse.json({

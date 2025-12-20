@@ -27,8 +27,9 @@ export type Job = {
   company: string;
   location: string;
   job_type?: string | null;
-  is_remote?: boolean | null;
-  location_type?: 'Onsite' | 'Hybrid' | 'Remote' | null;
+  work_location_type?: 'Onsite' | 'Hybrid' | 'Remote' | null; // PART C: Authoritative field
+  is_remote?: boolean | null; // Legacy - read-only, deprecated
+  location_type?: 'Onsite' | 'Hybrid' | 'Remote' | null; // Legacy - read-only, deprecated
   required_years_experience?: number | null;
   pay_rate_min?: number | null;
   pay_rate_max?: number | null;
@@ -87,15 +88,16 @@ export type PassedJob = Job & {
  * - Non-remote jobs → Pass only if same city match
  */
 function filterByLocation(job: Job, candidate: CandidateProfile): FilterResult {
-  // PRIORITY 1: is_remote flag (explicit flag overrides location string)
-  // If is_remote = true, job is ALWAYS treated as Remote regardless of location
-  if (job.is_remote === true) {
-    return { passed: true, reason: 'Remote job (is_remote flag set)' };
-  }
+  // PART C: Use work_location_type as authoritative field
+  // Priority: work_location_type > location_type > is_remote (legacy)
+  const workLocationType: 'Remote' | 'Hybrid' | 'Onsite' | null = 
+    job.work_location_type || 
+    job.location_type || 
+    (job.is_remote === true ? 'Remote' : job.is_remote === false ? 'Onsite' : null);
 
-  // PRIORITY 2: location_type enum
-  if (job.location_type === 'Remote') {
-    return { passed: true, reason: 'Remote job (location_type = Remote)' };
+  // Remote jobs → ALWAYS PASS
+  if (workLocationType === 'Remote') {
+    return { passed: true, reason: 'Remote job (work_location_type = Remote)' };
   }
 
   // PRIORITY 3: Check location string for remote keywords (fallback)

@@ -221,10 +221,10 @@ export async function PATCH(
       const goodToHave = body.good_to_have_skills !== undefined ? body.good_to_have_skills : existingJob.good_to_have_skills;
       
       // Primary platform MUST be derived from must_have_skills (PART 3 requirement)
-      const mustHaveSkills = mustHave ? mustHave.split(/[,;|]/).map((s: string) => s.trim()).filter(s => s.length > 0) : [];
-      const allSkills = [
+      const mustHaveSkills: string[] = mustHave ? mustHave.split(/[,;|]/).map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [];
+      const allSkills: string[] = [
         ...mustHaveSkills,
-        ...(goodToHave ? goodToHave.split(/[,;|]/).map((s: string) => s.trim()).filter(s => s.length > 0) : [])
+        ...(goodToHave ? goodToHave.split(/[,;|]/).map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [])
       ];
       
       // Extract platform - must_have_skills is primary source

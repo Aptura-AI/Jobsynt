@@ -442,19 +442,88 @@ export async function POST(req: NextRequest) {
         // Combined skills array (for legacy compatibility)
         const allSkills = [...new Set([...mustHaveSkills, ...goodToHaveSkills])];
         
-        // Extract platform from title and skills (deterministic, stored once at ingestion)
-        const primaryPlatform = extractPlatformFromJob(jobTitle, allSkills);
-        const secondaryPlatforms = extractSecondaryPlatforms(jobTitle, allSkills);
+        // PART B: Extract platform from must_have_skills (source of truth)
+        // Platform MUST be derived from must_have_skills, not all skills
+        let primaryPlatform: string | null = extractPlatformFromJob(jobTitle, mustHaveSkills.length > 0 ? mustHaveSkills : allSkills);
+        const secondaryPlatforms: string[] = extractSecondaryPlatforms(jobTitle, allSkills);
+        
+        // PART B: If platform extraction fails → THROW ERROR (do NOT allow NULL)
+        if (!primaryPlatform) {
+          if (mustHaveSkills.length > 0) {
+            // Try fallback based on common patterns
+            const skillsLower = mustHaveSkills.join(' ').toLowerCase();
+            
+            if (skillsLower.includes('oracle') && (skillsLower.includes('fusion') || skillsLower.includes('cloud'))) {
+              primaryPlatform = 'Oracle Fusion';
+            } else if (skillsLower.includes('peoplesoft')) {
+              primaryPlatform = 'PeopleSoft';
+            } else if (skillsLower.includes('workday')) {
+              primaryPlatform = 'Workday';
+            } else if (skillsLower.includes('sap')) {
+              primaryPlatform = 'SAP';
+            }
+            
+            if (primaryPlatform) {
+              console.log(`[Job Upload] Fallback platform used for job: ${primaryPlatform}`);
+            } else {
+              // PART B: THROW ERROR if platform cannot be determined
+              console.error(`[Job Upload] Platform extraction failed. Must have skills: ${mustHaveSkills.join(', ')}`);
+              results.push({
+                title: jobTitle,
+                company: jobCompany,
+                status: 'error',
+                message: `Cannot determine primary platform from must_have_skills: ${mustHaveSkills.join(', ')}. Please ensure skills include platform keywords (e.g., Oracle Fusion, PeopleSoft, Workday, SAP).`,
+              });
+              continue; // Skip this job
+            }
+          } else {
+            // PART B: THROW ERROR if no must_have_skills provided
+            console.error(`[Job Upload] No must_have_skills provided for job: ${jobTitle}`);
+            results.push({
+              title: jobTitle,
+              company: jobCompany,
+              status: 'error',
+              message: 'Primary platform cannot be determined: must_have_skills is required and must contain platform keywords.',
+            });
+            continue; // Skip this job
+          }
+        } else {
+          console.log(`[Job Upload] Extracted platform: ${primaryPlatform} for job: ${jobTitle}`);
+        }
+        
+        // PART B: Ensure platform is never NULL (should be guaranteed by checks above)
+        if (!primaryPlatform) {
+          results.push({
+            title: jobTitle,
+            company: jobCompany,
+            status: 'error',
+            message: 'Platform extraction failed - internal error.',
+          });
+          continue;
+        }
         
         // Experience - ALWAYS integer, NEVER null
         const requiredYearsExp = parseExperience(normalized.required_years_experience);
         
-        // Location handling
-        // IMPORTANT: If is_remote is explicitly set to "Yes", it overrides location string
-        const location = String(normalized.location || '').trim() || '';
-        const isRemote = parseIsRemote(normalized.is_remote, location);
-        // If is_remote is true, force location_type to Remote (overrides location string)
-        const locationType = isRemote ? 'Remote' : determineLocationType(isRemote, location);
+        // PART C: Location handling - use work_location_type as authoritative
+        const location: string = String(normalized.location || '').trim() || '';
+        const isRemote: boolean = parseIsRemote(normalized.is_remote, location);
+        // PART C: Determine work_location_type (authoritative field)
+        let workLocationType: 'Remote' | 'Hybrid' | 'Onsite' = 'Remote'; // Default
+        if (isRemote || location.toLowerCase().includes('remote')) {
+          workLocationType = 'Remote';
+        } else if (location.toLowerCase().includes('hybrid')) {
+          workLocationType = 'Hybrid';
+        } else if (location) {
+          workLocationType = 'Onsite';
+        }
+        // PART C: Validation - Hybrid/Onsite require location
+        if ((workLocationType === 'Hybrid' || workLocationType === 'Onsite') && !location) {
+          console.warn(`[Job Upload] ${workLocationType} job missing location, defaulting to Remote: ${jobTitle}`);
+          workLocationType = 'Remote'; // Default to Remote if location missing
+        }
+        // Legacy fields (deprecated)
+        const locationType = workLocationType;
         
         // Job type
         const jobType = normalizeJobType(normalized.job_type);
@@ -477,11 +546,12 @@ export async function POST(req: NextRequest) {
           company: jobCompany,
           url: urlValue,
           
-          // Location
+          // Location - PART C: Use work_location_type as authoritative
           location: location,
           location_raw: normalized.location ? String(normalized.location).trim() : null,
-          is_remote: isRemote,
-          location_type: locationType,
+          work_location_type: workLocationType, // PART C: Authoritative field
+          is_remote: isRemote, // Legacy - deprecated
+          location_type: locationType, // Legacy - deprecated
           
           // Job details
           job_type: jobType,
@@ -493,9 +563,9 @@ export async function POST(req: NextRequest) {
           good_to_have_skills: goodToHaveSkills.join(', '), // Store as comma-separated string
           // Note: skills column removed - use must_have_skills and good_to_have_skills instead
           
-          // Platform identity (extracted at ingestion, stored once)
-          primary_platform: primaryPlatform,
-          secondary_platforms: secondaryPlatforms,
+          // Platform identity (extracted at ingestion, stored once) - PART B: NEVER NULL
+          primary_platform: primaryPlatform, // Guaranteed non-null by checks above
+          secondary_platforms: secondaryPlatforms.length > 0 ? secondaryPlatforms : null,
           
           // Experience - GUARANTEED INTEGER, NEVER NULL
           required_years_experience: requiredYearsExp,
