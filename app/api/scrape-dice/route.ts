@@ -110,10 +110,11 @@ async function scrapeJobDetail(browserPage: any, jobUrl: string) {
   // Infer job_type from description
   const job_type: JobType = inferJobTypeFromDescription(description);
 
-  // Determine location_type and is_remote
+  // Determine work_location_type (authoritative field), location_type and is_remote (legacy)
   const locationLower = location.toLowerCase();
   const isRemote = locationLower.includes('remote') || work_mode === 'Remote';
   const locationType = isRemote ? 'Remote' : (work_mode === 'Hybrid' ? 'Hybrid' : 'Onsite');
+  const workLocationType = locationType; // Use same value for work_location_type
 
   // Parse skills into must_have_skills and good_to_have_skills
   const mustHaveSkills = skills.length > 0 ? skills.join(', ') : '';
@@ -125,8 +126,9 @@ async function scrapeJobDetail(browserPage: any, jobUrl: string) {
     title,
     company,
     location,
-    location_type: locationType,
-    is_remote: isRemote,
+    work_location_type: workLocationType, // Authoritative field
+    location_type: locationType, // Legacy - deprecated
+    is_remote: isRemote, // Legacy - deprecated
     description,
     url: jobUrl,
     job_type,

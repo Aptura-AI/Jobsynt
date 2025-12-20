@@ -13,8 +13,9 @@ export type Job = {
   company: string;
   location: string;
   job_type?: string | null;
-  is_remote?: boolean | null;
-  location_type?: 'Onsite' | 'Hybrid' | 'Remote' | null;
+  work_location_type?: 'Onsite' | 'Hybrid' | 'Remote' | null; // Authoritative field
+  is_remote?: boolean | null; // Legacy - deprecated
+  location_type?: 'Onsite' | 'Hybrid' | 'Remote' | null; // Legacy - deprecated
   required_years_experience?: number | null;
   pay_rate_min?: number | null;
   pay_rate_max?: number | null;
@@ -45,12 +46,17 @@ export type FilterResult = {
  * - Hybrid/Onsite → must match candidate city
  */
 function filterByLocation(job: Job, candidate: CandidateProfile): FilterResult {
-  // Check location_type first (new field)
+  // Check work_location_type first (authoritative field)
+  if (job.work_location_type === 'Remote') {
+    return { passed: true };
+  }
+
+  // Fallback to location_type (legacy)
   if (job.location_type === 'Remote') {
     return { passed: true };
   }
 
-  // Fallback to is_remote flag
+  // Fallback to is_remote flag (legacy)
   if (job.is_remote === true) {
     return { passed: true };
   }
@@ -78,9 +84,10 @@ function filterByLocation(job: Job, candidate: CandidateProfile): FilterResult {
     return { passed: true };
   }
 
+  const jobLocationType = job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite');
   return {
     passed: false,
-    reason: `Location mismatch: job is ${job.location_type || 'Onsite'} in "${job.location}" but candidate is in "${candidate.location}"`,
+    reason: `Location mismatch: job is ${jobLocationType} in "${job.location}" but candidate is in "${candidate.location}"`,
   };
 }
 

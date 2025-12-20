@@ -27,8 +27,9 @@ export type ScrapedJob = {
   company: string;
   location: string | null;
   job_type: string | null;
-  location_type: string | null;
-  is_remote: boolean | null;
+  work_location_type: 'Onsite' | 'Hybrid' | 'Remote' | null; // Authoritative field
+  location_type: string | null; // Legacy - deprecated
+  is_remote: boolean | null; // Legacy - deprecated
   url: string | null;
   salary: string | null;
   pay_rate_min: number | null;
@@ -43,8 +44,9 @@ export type DashboardJob = {
   company: string;
   location: string | null;
   job_type: string | null;
-  location_type: string | null;
-  is_remote: boolean | null;
+  work_location_type: 'Onsite' | 'Hybrid' | 'Remote' | null; // Authoritative field
+  location_type: string | null; // Legacy - deprecated
+  is_remote: boolean | null; // Legacy - deprecated
   url: string | null;
   salary: string | null;
   pay_rate_min: number | null;
@@ -176,6 +178,7 @@ export function mergeMatchesWithJobs(
         company: job.company,
         location: job.location,
         job_type: job.job_type,
+        work_location_type: job.work_location_type,
         location_type: job.location_type,
         is_remote: job.is_remote,
         url: job.url,

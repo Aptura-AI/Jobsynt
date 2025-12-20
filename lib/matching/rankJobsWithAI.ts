@@ -58,8 +58,9 @@ export type MatchedJob = {
   company: string;
   location: string;
   job_type?: string | null;
-  location_type?: string | null;
-  is_remote?: boolean | null;
+  work_location_type?: 'Onsite' | 'Hybrid' | 'Remote' | null; // Authoritative field
+  location_type?: string | null; // Legacy - deprecated
+  is_remote?: boolean | null; // Legacy - deprecated
   description?: string | null;
   salary?: string | null;
   pay_rate_min?: number | null;
@@ -130,6 +131,7 @@ export async function rankJobsWithAI(
           company,
           location,
           job_type,
+          work_location_type,
           location_type,
           is_remote,
           description,
@@ -184,6 +186,7 @@ export async function rankJobsWithAI(
         company: job.company,
         location: job.location,
         job_type: job.job_type,
+        work_location_type: job.work_location_type,
         location_type: job.location_type,
         is_remote: job.is_remote,
         description: job.description,
@@ -241,8 +244,9 @@ export async function rankJobsWithAI(
       company: job.company,
       location: job.location,
       jobType: job.job_type,
-      locationType: job.location_type,
-      isRemote: job.is_remote,
+      workLocationType: job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite'),
+      locationType: job.location_type, // Legacy
+      isRemote: job.is_remote, // Legacy
       description: job.description ? job.description.substring(0, 1000) : undefined,
       salary: job.salary,
       payRateMin: job.pay_rate_min,
