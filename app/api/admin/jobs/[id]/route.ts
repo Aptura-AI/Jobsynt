@@ -145,8 +145,8 @@ export async function PATCH(
       const goodToHave = body.good_to_have_skills !== undefined ? body.good_to_have_skills : existingJob.good_to_have_skills;
       
       const allSkills = [
-        ...(mustHave ? mustHave.split(/[,;|]/).map(s => s.trim()) : []),
-        ...(goodToHave ? goodToHave.split(/[,;|]/).map(s => s.trim()) : [])
+        ...(mustHave ? mustHave.split(/[,;|]/).map((s: string) => s.trim()) : []),
+        ...(goodToHave ? goodToHave.split(/[,;|]/).map((s: string) => s.trim()) : [])
       ];
       
       const primaryPlatform = extractPlatformFromJob(title, allSkills);
