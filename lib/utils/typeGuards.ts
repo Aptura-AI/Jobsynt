@@ -28,9 +28,12 @@ export function ensureStringArrayAllowEmpty(values: unknown[]): string[] {
 /**
  * Creates a unique array of strings from an unknown array
  * Combines Set deduplication with type narrowing
+ * Filters out non-strings and empty strings (without trimming)
  */
 export function uniqueStringArray(values: unknown[]): string[] {
   const unique = Array.from(new Set(values));
-  return ensureStringArray(unique);
+  return unique.filter(
+    (v): v is string => typeof v === 'string' && v.length > 0
+  );
 }
 
