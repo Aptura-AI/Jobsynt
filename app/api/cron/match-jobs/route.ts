@@ -36,6 +36,8 @@ function verifyCronSecret(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   const startTime = Date.now();
+  const cronName = 'match-jobs';
+  let cronRunId: string | null = null;
   
   try {
     // Security check
@@ -49,6 +51,24 @@ export async function GET(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // PART 2: Create cron run tracking record
+    const { data: cronRun, error: cronRunError } = await supabase
+      .from('cron_runs')
+      .insert({
+        cron_name: cronName,
+        started_at: new Date().toISOString(),
+        status: 'success',
+        summary: {}
+      })
+      .select('id')
+      .single();
+
+    if (cronRunError) {
+      console.error('[Match Jobs Cron] Failed to create cron run record:', cronRunError);
+    } else {
+      cronRunId = cronRun.id;
+    }
+
     console.log('[Match Jobs Cron] Starting job qualification for all candidates...');
 
     // Get all active candidates with complete profiles
@@ -60,17 +80,76 @@ export async function GET(req: NextRequest) {
 
     if (candidatesError || !candidates) {
       console.error('[Match Jobs Cron] Error fetching candidates:', candidatesError);
+      if (cronRunId) {
+        await supabase
+          .from('cron_runs')
+          .update({
+            finished_at: new Date().toISOString(),
+            status: 'failed',
+            summary: { error: candidatesError?.message || 'Failed to fetch candidates' }
+          })
+          .eq('id', cronRunId);
+      }
       return NextResponse.json({ 
         error: 'Failed to fetch candidates',
         details: candidatesError?.message 
       }, { status: 500 });
     }
 
+    // PART 4: Hard Safety Guard - No candidates found
+    if (candidates.length === 0) {
+      console.log('[Match Jobs Cron] No candidates — exiting');
+      if (cronRunId) {
+        await supabase
+          .from('cron_runs')
+          .update({
+            finished_at: new Date().toISOString(),
+            status: 'success',
+            summary: { candidates_processed: 0, jobs_qualified: 0, jobs_ranked: 0, skipped: 0, failures: 0 }
+          })
+          .eq('id', cronRunId);
+      }
+      return NextResponse.json({
+        success: true,
+        matching: { candidatesProcessed: 0, newJobsQualified: 0, skipped: 0 },
+        ranking: { candidatesRanked: 0, jobsRanked: 0 },
+        message: 'No candidates found'
+      });
+    }
+
     console.log(`[Match Jobs Cron] Processing ${candidates.length} candidates`);
+
+    // PART 4: Hard Safety Guard - Check if any jobs exist in database
+    const { count: jobsCount } = await supabase
+      .from('scraped_jobs')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .limit(1);
+
+    if (jobsCount === 0) {
+      console.log('[Match Jobs Cron] No jobs found — exiting');
+      if (cronRunId) {
+        await supabase
+          .from('cron_runs')
+          .update({
+            finished_at: new Date().toISOString(),
+            status: 'success',
+            summary: { candidates_processed: 0, jobs_qualified: 0, jobs_ranked: 0, skipped: 0, failures: 0, message: 'No active jobs in database' }
+          })
+          .eq('id', cronRunId);
+      }
+      return NextResponse.json({
+        success: true,
+        matching: { candidatesProcessed: 0, newJobsQualified: 0, skipped: 0 },
+        ranking: { candidatesRanked: 0, jobsRanked: 0 },
+        message: 'No active jobs found in database'
+      });
+    }
 
     let totalNewJobs = 0;
     let totalSkipped = 0;
     let candidatesProcessed = 0;
+    let aiFallbackCount = 0;
     const errors: string[] = [];
 
     for (const profile of candidates) {
@@ -88,6 +167,12 @@ export async function GET(req: NextRequest) {
           minScore: 50, // 50 out of 80 points threshold
           logFiltering: false, // Quiet mode for cron
         });
+
+        // PART 4: Hard Safety Guard - No qualified jobs for this candidate
+        if (!matchingResult.eligible || matchingResult.eligible.length === 0) {
+          // Log but continue to next candidate (not an error)
+          continue;
+        }
 
         // Filter to ONLY NEW jobs
         const newJobs = matchingResult.eligible.filter(job => 
@@ -232,6 +317,11 @@ export async function GET(req: NextRequest) {
           jobsRanked += rankingResult.jobs.length;
           candidatesRanked++;
 
+          // PART 3: Track AI fallback usage
+          if (rankingResult.used_ai_fallback) {
+            aiFallbackCount++;
+          }
+
           console.log(`[Match Jobs Cron] Ranked ${rankingResult.jobs.length} jobs for ${profile.id.substring(0, 8)}...`);
         } catch (rankError: any) {
           console.error(`[Match Jobs Cron] Ranking error for ${candidateId}:`, rankError.message);
@@ -241,6 +331,27 @@ export async function GET(req: NextRequest) {
     }
 
     const duration = Date.now() - startTime;
+
+    // PART 2: Update cron run summary
+    const status = errors.length > 0 && totalNewJobs === 0 && candidatesRanked === 0 ? 'failed' : (errors.length > 0 ? 'partial' : 'success');
+    if (cronRunId) {
+      await supabase
+        .from('cron_runs')
+        .update({
+          finished_at: new Date().toISOString(),
+          status,
+          summary: {
+            candidates_processed: candidatesProcessed,
+            jobs_qualified: totalNewJobs,
+            jobs_ranked: jobsRanked,
+            skipped: totalSkipped,
+            failures: errors.length,
+            ai_fallback_count: aiFallbackCount,
+            errors: errors.length > 0 ? errors : undefined
+          }
+        })
+        .eq('id', cronRunId);
+    }
 
     console.log(`[Match Jobs Cron] Completed in ${duration}ms`);
     console.log(`[Match Jobs Cron] Summary: ${totalNewJobs} jobs qualified, ${candidatesRanked} candidates ranked, ${jobsRanked} jobs prioritized`);
@@ -262,6 +373,20 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('[Match Jobs Cron] Error:', error);
+    
+    // PART 2: Mark cron run as failed
+    if (cronRunId) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      await supabase
+        .from('cron_runs')
+        .update({
+          finished_at: new Date().toISOString(),
+          status: 'failed',
+          summary: { error: error.message || 'Internal server error' }
+        })
+        .eq('id', cronRunId);
+    }
+    
     return NextResponse.json({ 
       error: error.message || 'Internal server error' 
     }, { status: 500 });

@@ -89,6 +89,7 @@ export type RankingResult = {
     nextSteps: string[];
   };
   explanation?: string; // Natural language explanation
+  used_ai_fallback?: boolean; // PART 3: Track if fallback was used
 };
 
 /**
@@ -398,6 +399,8 @@ export async function rankJobsWithAI(
         explanation: result.explanation,
       };
     } catch (responsesError: any) {
+      // PART 3: AI Fallback Visibility - Log explicitly
+      console.log(`[AI Ranking] Fallback used for candidate ${candidateId}`);
       console.warn('OpenAI Responses API error, using fallback ranking:', responsesError.message);
       
       // Fallback: Deterministic ranking based on match score (stable anchor)
@@ -442,6 +445,7 @@ export async function rankJobsWithAI(
             'Consider Low priority jobs if needed',
           ],
         },
+        used_ai_fallback: true, // PART 3: Mark that fallback was used
       };
     }
   } catch (error: any) {

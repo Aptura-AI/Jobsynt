@@ -33,6 +33,8 @@ function verifyCronRequest(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   const startTime = Date.now();
+  const cronName = 'daily-job-email';
+  let cronRunId: string | null = null;
   
   try {
     if (!verifyCronRequest(req)) {
@@ -45,22 +47,61 @@ export async function GET(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Create cron run tracking record
+    const { data: cronRun, error: cronRunError } = await supabase
+      .from('cron_runs')
+      .insert({
+        cron_name: cronName,
+        started_at: new Date().toISOString(),
+        status: 'success',
+        summary: {}
+      })
+      .select('id')
+      .single();
+
+    if (cronRunError) {
+      console.error('[Email Cron] Failed to create cron run record:', cronRunError);
+    } else {
+      cronRunId = cronRun.id;
+    }
+
     console.log('[Email Cron] Starting daily job email distribution...');
 
     // Get all candidate profiles with email
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, email, name, preferred_job_types')
+      .select('id, email, name, preferred_job_types, daily_email_sent_at')
       .eq('role', 'candidate')
       .not('email', 'is', null)
       .not('name', 'is', null);
 
     if (profilesError) {
       console.error('[Email Cron] Error fetching profiles:', profilesError);
+      if (cronRunId) {
+        await supabase
+          .from('cron_runs')
+          .update({
+            finished_at: new Date().toISOString(),
+            status: 'failed',
+            summary: { error: profilesError.message }
+          })
+          .eq('id', cronRunId);
+      }
       return NextResponse.json({ error: profilesError.message }, { status: 500 });
     }
 
     if (!profiles || profiles.length === 0) {
+      console.log('[Email Cron] No candidates — exiting');
+      if (cronRunId) {
+        await supabase
+          .from('cron_runs')
+          .update({
+            finished_at: new Date().toISOString(),
+            status: 'success',
+            summary: { candidates_processed: 0, emails_sent: 0, skipped: 0, failures: 0 }
+          })
+          .eq('id', cronRunId);
+      }
       return NextResponse.json({ 
         message: 'No profiles found',
         emailsSent: 0 
@@ -77,7 +118,18 @@ export async function GET(req: NextRequest) {
 
     for (const profile of profiles) {
       try {
-        // Check if already sent today (idempotent)
+        // PART 1: Email Idempotency Guard - Check daily_email_sent_at
+        const todayUTC = new Date().toISOString().split('T')[0];
+        if (profile.daily_email_sent_at) {
+          const sentDate = new Date(profile.daily_email_sent_at).toISOString().split('T')[0];
+          if (sentDate === todayUTC) {
+            console.log(`[Email Cron] Skipping ${profile.email} — already sent today`);
+            emailsSkipped++;
+            continue;
+          }
+        }
+
+        // Also check email_events as backup (legacy check)
         const { data: existingEmail } = await supabase
           .from('email_events')
           .select('id')
@@ -87,7 +139,7 @@ export async function GET(req: NextRequest) {
           .maybeSingle();
 
         if (existingEmail) {
-          console.log(`[Email Cron] Skipping ${profile.email} - already sent today`);
+          console.log(`[Email Cron] Skipping ${profile.email} - already sent today (email_events)`);
           emailsSkipped++;
           continue;
         }
@@ -150,8 +202,8 @@ export async function GET(req: NextRequest) {
         }).slice(0, 5); // Top 5 jobs
 
         if (sortedMatches.length === 0) {
-          // No active jobs, skip
-          console.log(`[Email Cron] Skipping ${profile.email} - no active jobs`);
+          // PART 4: Hard Safety Guard - No eligible jobs
+          console.log(`[Email Cron] No eligible jobs — skipping email for ${profile.email}`);
           emailsSkipped++;
           continue;
         }
@@ -201,6 +253,14 @@ export async function GET(req: NextRequest) {
         );
 
         if (result.success) {
+          // PART 1: Update daily_email_sent_at after successful send
+          await supabase
+            .from('profiles')
+            .update({ daily_email_sent_at: new Date().toISOString() })
+            .eq('id', profile.id);
+
+          console.log(`[Email Cron] Marked sent_at for ${profile.email}`);
+
           // Record email event in ledger
           await supabase
             .from('email_events')
@@ -218,6 +278,7 @@ export async function GET(req: NextRequest) {
           emailsSent++;
           console.log(`[Email Cron] ✅ Sent to ${profile.email} (${jobs.length} jobs)`);
         } else {
+          // PART 1: Do NOT update daily_email_sent_at on failure
           emailsFailed++;
           errors.push(`${profile.email}: Failed to send email`);
         }
@@ -229,6 +290,25 @@ export async function GET(req: NextRequest) {
     }
 
     const duration = Date.now() - startTime;
+
+    // PART 2: Update cron run summary
+    const status = emailsFailed > 0 && emailsSent === 0 ? 'failed' : (emailsFailed > 0 ? 'partial' : 'success');
+    if (cronRunId) {
+      await supabase
+        .from('cron_runs')
+        .update({
+          finished_at: new Date().toISOString(),
+          status,
+          summary: {
+            candidates_processed: profiles.length,
+            emails_sent: emailsSent,
+            skipped: emailsSkipped,
+            failures: emailsFailed,
+            errors: errors.length > 0 ? errors : undefined
+          }
+        })
+        .eq('id', cronRunId);
+    }
 
     console.log(`[Email Cron] Completed in ${duration}ms`);
     console.log(`[Email Cron] Sent: ${emailsSent}, Skipped: ${emailsSkipped}, Failed: ${emailsFailed}`);
@@ -245,6 +325,20 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('[Email Cron] Error:', error);
+    
+    // PART 2: Mark cron run as failed
+    if (cronRunId) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      await supabase
+        .from('cron_runs')
+        .update({
+          finished_at: new Date().toISOString(),
+          status: 'failed',
+          summary: { error: error.message || 'Internal server error' }
+        })
+        .eq('id', cronRunId);
+    }
+    
     return NextResponse.json({ 
       error: error.message || 'Internal server error' 
     }, { status: 500 });
