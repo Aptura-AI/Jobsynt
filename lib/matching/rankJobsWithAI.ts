@@ -179,60 +179,47 @@ export async function rankJobsWithAI(
     const previouslyRecommended = (historicalMatches || [])
       .filter(m => !m.applied_at && !m.dismissed_at)
       .slice(0, 10)
-      .map(m => ({
-        id: m.job_id,
-        title: m.scraped_jobs?.title || 'Unknown',
-        company: m.scraped_jobs?.company || 'Unknown',
-        platform: m.scraped_jobs?.primary_platform || null,
-        matchScore: m.match_score,
-        aiPriority: m.ai_priority,
-      }));
+      .map((m: any) => {
+        const job = Array.isArray(m.scraped_jobs) ? m.scraped_jobs[0] : m.scraped_jobs;
+        return {
+          id: m.job_id,
+          title: job?.title || 'Unknown',
+          company: job?.company || 'Unknown',
+          platform: job?.primary_platform || null,
+          matchScore: m.match_score,
+          aiPriority: m.ai_priority,
+        };
+      });
 
     const appliedJobs = (historicalMatches || [])
       .filter(m => m.applied_at)
       .slice(0, 10)
-      .map(m => ({
-        id: m.job_id,
-        title: m.scraped_jobs?.title || 'Unknown',
-        company: m.scraped_jobs?.company || 'Unknown',
-        platform: m.scraped_jobs?.primary_platform || null,
-        matchScore: m.match_score,
-        appliedAt: m.applied_at,
-      }));
+      .map((m: any) => {
+        const job = Array.isArray(m.scraped_jobs) ? m.scraped_jobs[0] : m.scraped_jobs;
+        return {
+          id: m.job_id,
+          title: job?.title || 'Unknown',
+          company: job?.company || 'Unknown',
+          platform: job?.primary_platform || null,
+          matchScore: m.match_score,
+          appliedAt: m.applied_at,
+        };
+      });
 
     const dismissedJobs = (historicalMatches || [])
       .filter(m => m.dismissed_at)
       .slice(0, 10)
-      .map(m => ({
-        id: m.job_id,
-        title: m.scraped_jobs?.title || 'Unknown',
-        company: m.scraped_jobs?.company || 'Unknown',
-        platform: m.scraped_jobs?.primary_platform || null,
-        matchScore: m.match_score,
-        dismissedAt: m.dismissed_at,
-      }));
-    
-    // LEARNING SIGNAL: Fetch previously recommended/applied/dismissed jobs for context
-    const { data: historicalMatches } = await supabase
-      .from('candidate_job_matches')
-      .select(`
-        job_id,
-        match_score,
-        match_source,
-        ai_priority,
-        applied_at,
-        dismissed_at,
-        qualified_at,
-        scraped_jobs!inner (
-          id,
-          title,
-          company,
-          primary_platform
-        )
-      `)
-      .eq('candidate_id', candidateId)
-      .order('qualified_at', { ascending: false })
-      .limit(50); // Get recent history for context
+      .map((m: any) => {
+        const job = Array.isArray(m.scraped_jobs) ? m.scraped_jobs[0] : m.scraped_jobs;
+        return {
+          id: m.job_id,
+          title: job?.title || 'Unknown',
+          company: job?.company || 'Unknown',
+          platform: job?.primary_platform || null,
+          matchScore: m.match_score,
+          dismissedAt: m.dismissed_at,
+        };
+      });
 
     // Filter by date CLIENT-SIDE to handle NULL posted_date properly
     // NULL posted_date = treat as recent (job was just uploaded without date)
@@ -260,43 +247,6 @@ export async function rankJobsWithAI(
         },
       };
     }
-
-    // Separate historical matches into categories for AI context
-    const previouslyRecommended = (historicalMatches || [])
-      .filter(m => !m.applied_at && !m.dismissed_at)
-      .slice(0, 10)
-      .map(m => ({
-        id: m.job_id,
-        title: m.scraped_jobs?.title || 'Unknown',
-        company: m.scraped_jobs?.company || 'Unknown',
-        platform: m.scraped_jobs?.primary_platform || null,
-        matchScore: m.match_score,
-        aiPriority: m.ai_priority,
-      }));
-
-    const appliedJobs = (historicalMatches || [])
-      .filter(m => m.applied_at)
-      .slice(0, 10)
-      .map(m => ({
-        id: m.job_id,
-        title: m.scraped_jobs?.title || 'Unknown',
-        company: m.scraped_jobs?.company || 'Unknown',
-        platform: m.scraped_jobs?.primary_platform || null,
-        matchScore: m.match_score,
-        appliedAt: m.applied_at,
-      }));
-
-    const dismissedJobs = (historicalMatches || [])
-      .filter(m => m.dismissed_at)
-      .slice(0, 10)
-      .map(m => ({
-        id: m.job_id,
-        title: m.scraped_jobs?.title || 'Unknown',
-        company: m.scraped_jobs?.company || 'Unknown',
-        platform: m.scraped_jobs?.primary_platform || null,
-        matchScore: m.match_score,
-        dismissedAt: m.dismissed_at,
-      }));
 
     // Transform to MatchedJob format
     // NO additional filtering - trust the ledger query
@@ -369,7 +319,9 @@ export async function rankJobsWithAI(
     const jobsData = matchedJobs.map((job, index) => {
       // Find job metadata from filteredMatches
       const match = filteredMatches[index];
-      const jobMetadata = match?.scraped_jobs;
+      const jobMetadata = match?.scraped_jobs 
+        ? (Array.isArray(match.scraped_jobs) ? match.scraped_jobs[0] : match.scraped_jobs)
+        : null;
       
       return {
         id: job.id,

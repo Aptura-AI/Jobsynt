@@ -151,8 +151,10 @@ async function collectJobLinks(page: Page): Promise<string[]> {
 }
 
 async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
-  await browserPage.goto(jobUrl, { waitUntil: 'networkidle', timeout: 45_000 });
-  await sleep(1500);
+  // Use 'load' instead of 'networkidle' - Dice.com has continuous network activity
+  // 'load' waits for page to load, which is sufficient for scraping
+  // Note: If called from main loop, page.goto is already done, so this is just extraction
+  await sleep(2000); // Give page time to render dynamic content
 
   const title = (await browserPage.textContent('h1'))?.trim() || 'Unknown Title';
   const company = (await browserPage.textContent('[data-testid="job-company-name"], a[href*="/company/"]'))?.trim() || 'Unknown Company';
@@ -303,17 +305,23 @@ async function main() {
   const jobLinks = await collectJobLinks(page);
 
   let processed = 0;
+  let savedCount = 0;
+  let skippedCount = 0;
+  let errorCount = 0;
+
   for (const link of jobLinks) {
     processed += 1;
     console.log(`Scraping job ${processed} of ${jobLinks.length}: ${link}`);
     try {
-      const detailPage = await context.newPage();
-      const job = await scrapeJobDetail(detailPage, link);
-      await detailPage.close();
+      // Navigate to job detail page using existing page (maintains session)
+      // Use 'load' instead of 'networkidle' - Dice.com has continuous network activity
+      await page.goto(link, { waitUntil: 'load', timeout: 30_000 });
+      const job = await scrapeJobDetail(page, link);
 
       // Validate URL before insert/upsert
       if (!isValidUrl(job.url)) {
-        console.log(`Skipped job with invalid URL: ${job.title} (${job.url})`);
+        console.log(`⚠️  Skipped job with invalid URL: ${job.title} (${job.url})`);
+        skippedCount++;
         continue;
       }
 
@@ -328,24 +336,42 @@ async function main() {
         // Handle unique constraint violations gracefully
         if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
           console.log(`⚠️  Skipped duplicate job (URL already exists): ${job.title}`);
+          skippedCount++;
         } else {
           console.error(`❌ Upsert FAILED for ${job.title}:`, error.message);
-          console.error(`   Error code: ${error.code}`);
-          console.error(`   Error details:`, error.details);
-          console.error(`   Job data:`, JSON.stringify(job, null, 2));
+          errorCount++;
         }
       } else {
+        savedCount++;
         console.log(`✅ Saved job: ${job.title} at ${job.company} (${job.url})`);
         if (data && data.length > 0) {
           console.log(`   Job ID: ${data[0].id}`);
         }
       }
     } catch (err) {
-      console.error(`Error scraping ${link}:`, (err as Error).message);
+      errorCount++;
+      const errorMsg = (err as Error).message;
+      console.error(`❌ Error scraping ${link}:`, errorMsg);
+      
+      // If timeout, suggest retry
+      if (errorMsg.includes('timeout') || errorMsg.includes('Timeout')) {
+        console.log(`   💡 Tip: This might be a network issue. The page may still be loading.`);
+      }
+    }
+    
+    // Small delay between jobs to avoid rate limiting
+    if (processed < jobLinks.length) {
+      await sleep(1000);
     }
   }
 
-  console.log('Scraping finished.');
+  console.log('\n========================================');
+  console.log('Scraping Summary:');
+  console.log(`  Total found: ${jobLinks.length}`);
+  console.log(`  ✅ Saved: ${savedCount}`);
+  console.log(`  ⚠️  Skipped: ${skippedCount}`);
+  console.log(`  ❌ Errors: ${errorCount}`);
+  console.log('========================================\n');
   await browser.close();
 }
 
