@@ -18,6 +18,7 @@ import { chromium } from 'playwright';
 import crypto from 'crypto';
 import { inferJobTypeFromDescription, DEFAULT_JOB_TYPE, type JobType } from '@/lib/job-types';
 import { uniqueStringArray } from '@/lib/utils/typeGuards';
+import { extractPlatformFromJob, extractSecondaryPlatforms } from '@/lib/matching/extractPlatform';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -61,6 +62,40 @@ const buildSearchUrl = (jobTitle: string, location: string) => {
 const getSourceJobId = (url: string) => {
   const match = url.match(/job-detail\/([^/?#]+)/i);
   return match ? match[1] : null;
+};
+
+/**
+ * Guarded primary platform fallback
+ * If primary_platform is missing, use first skill from must_have_skills
+ */
+const applyPrimaryPlatformFallback = (
+  primaryPlatform: string | null,
+  mustHaveSkills: string
+): string | null => {
+  // If primary_platform exists, do nothing
+  if (primaryPlatform) {
+    return primaryPlatform;
+  }
+
+  // If must_have_skills is empty, skip fallback
+  if (!mustHaveSkills || mustHaveSkills.trim() === '') {
+    return null;
+  }
+
+  // Split on commas / pipes / semicolons
+  const skills = mustHaveSkills
+    .split(/[,|;]/)
+    .map(skill => skill.trim())
+    .filter(skill => skill.length > 0);
+
+  // Use FIRST skill as primary_platform
+  if (skills.length > 0) {
+    const fallbackPlatform = skills[0];
+    console.log(`[Primary Platform Fallback] Using first skill as platform: ${fallbackPlatform}`);
+    return fallbackPlatform;
+  }
+
+  return null;
 };
 
 function isValidUrl(url: string): boolean {
@@ -120,6 +155,15 @@ async function scrapeJobDetail(browserPage: any, jobUrl: string) {
   const mustHaveSkills = skills.length > 0 ? skills.join(', ') : '';
   const goodToHaveSkills = ''; // Dice doesn't separate, so we put all in must_have
 
+  // Extract platform from title and skills
+  const allSkills = skills;
+  let primaryPlatform = extractPlatformFromJob(title, allSkills) || null;
+  
+  // Apply guarded fallback if primary_platform is missing
+  primaryPlatform = applyPrimaryPlatformFallback(primaryPlatform, mustHaveSkills);
+  
+  const secondaryPlatforms = extractSecondaryPlatforms(title, allSkills) || [];
+
   return {
     source: 'Dice',
     source_job_id: source_job_id || dedupHash,
@@ -134,6 +178,9 @@ async function scrapeJobDetail(browserPage: any, jobUrl: string) {
     job_type,
     must_have_skills: mustHaveSkills,
     good_to_have_skills: goodToHaveSkills,
+    // Platform identity
+    primary_platform: primaryPlatform,
+    secondary_platforms: secondaryPlatforms.length > 0 ? secondaryPlatforms : null,
     skills: skills, // Keep for backward compatibility during migration
     scraped_at: new Date().toISOString(),
     posted_date: new Date().toISOString().split('T')[0], // Today's date as default

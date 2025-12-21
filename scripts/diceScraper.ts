@@ -83,6 +83,40 @@ const getSourceJobId = (url: string) => {
   return match ? match[1] : null;
 };
 
+/**
+ * Guarded primary platform fallback
+ * If primary_platform is missing, use first skill from must_have_skills
+ */
+const applyPrimaryPlatformFallback = (
+  primaryPlatform: string | null,
+  mustHaveSkills: string
+): string | null => {
+  // If primary_platform exists, do nothing
+  if (primaryPlatform) {
+    return primaryPlatform;
+  }
+
+  // If must_have_skills is empty, skip fallback
+  if (!mustHaveSkills || mustHaveSkills.trim() === '') {
+    return null;
+  }
+
+  // Split on commas / pipes / semicolons
+  const skills = mustHaveSkills
+    .split(/[,|;]/)
+    .map(skill => skill.trim())
+    .filter(skill => skill.length > 0);
+
+  // Use FIRST skill as primary_platform
+  if (skills.length > 0) {
+    const fallbackPlatform = skills[0];
+    console.log(`[Primary Platform Fallback] Using first skill as platform: ${fallbackPlatform}`);
+    return fallbackPlatform;
+  }
+
+  return null;
+};
+
 // =========================
 // URL Validation
 // =========================
@@ -157,7 +191,11 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
 
   // Extract platform from title and skills
   const allSkills = skills; // Combined skills for platform extraction
-  const primaryPlatform = extractPlatformFromJob(title, allSkills) || '';
+  let primaryPlatform = extractPlatformFromJob(title, allSkills) || '';
+  
+  // Apply guarded fallback if primary_platform is missing
+  primaryPlatform = applyPrimaryPlatformFallback(primaryPlatform, mustHaveSkills) || '';
+  
   const secondaryPlatforms = extractSecondaryPlatforms(title, allSkills) || [];
 
   // Extract experience years from description (look for patterns like "5+ years", "10 years experience")
