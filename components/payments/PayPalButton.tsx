@@ -37,7 +37,7 @@ export default function PayPalButton() {
             ],
           });
         }}
-        onApprove={(data, actions) => {
+        onApprove={(data, actions): Promise<void> => {
           if (!actions.order) {
             return Promise.resolve();
           }
@@ -81,7 +81,8 @@ export default function PayPalButton() {
             
             // Do not modify candidate state yet (intentional for MVP safety)
             // Do not grant access automatically
-          });
+            return;
+          }) as Promise<void>;
         }}
         onError={(err) => {
           console.error('PayPal payment error:', err);
