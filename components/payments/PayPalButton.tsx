@@ -38,7 +38,11 @@ export default function PayPalButton() {
           });
         }}
         onApprove={(data, actions) => {
-          return actions.order?.capture().then(async (details) => {
+          if (!actions.order) {
+            return Promise.resolve();
+          }
+          
+          return actions.order.capture().then(async (details) => {
             // Log payment confirmation to console
             console.log('Payment successful:', {
               orderId: details.id,
