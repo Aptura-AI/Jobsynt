@@ -141,7 +141,10 @@ export async function rankJobsWithAI(
           pay_rate_max,
           url,
           posted_date,
-          is_active
+          is_active,
+          uploaded_by,
+          manually_curated,
+          fallback_primary_platform_used
         )
       `)
       .eq('candidate_id', candidateId)
@@ -149,7 +152,88 @@ export async function rankJobsWithAI(
       .is('dismissed_at', null)    // Not dismissed
       .order('match_score', { ascending: false })
       .limit(30); // Fetch extra to allow for filtering
+
+    // LEARNING SIGNAL: Fetch previously recommended/applied/dismissed jobs for context
+    const { data: historicalMatches } = await supabase
+      .from('candidate_job_matches')
+      .select(`
+        job_id,
+        match_score,
+        match_source,
+        ai_priority,
+        applied_at,
+        dismissed_at,
+        qualified_at,
+        scraped_jobs!inner (
+          id,
+          title,
+          company,
+          primary_platform
+        )
+      `)
+      .eq('candidate_id', candidateId)
+      .order('qualified_at', { ascending: false })
+      .limit(50); // Get recent history for context
+
+    // Separate into categories for AI context
+    const previouslyRecommended = (historicalMatches || [])
+      .filter(m => !m.applied_at && !m.dismissed_at)
+      .slice(0, 10)
+      .map(m => ({
+        id: m.job_id,
+        title: m.scraped_jobs?.title || 'Unknown',
+        company: m.scraped_jobs?.company || 'Unknown',
+        platform: m.scraped_jobs?.primary_platform || null,
+        matchScore: m.match_score,
+        aiPriority: m.ai_priority,
+      }));
+
+    const appliedJobs = (historicalMatches || [])
+      .filter(m => m.applied_at)
+      .slice(0, 10)
+      .map(m => ({
+        id: m.job_id,
+        title: m.scraped_jobs?.title || 'Unknown',
+        company: m.scraped_jobs?.company || 'Unknown',
+        platform: m.scraped_jobs?.primary_platform || null,
+        matchScore: m.match_score,
+        appliedAt: m.applied_at,
+      }));
+
+    const dismissedJobs = (historicalMatches || [])
+      .filter(m => m.dismissed_at)
+      .slice(0, 10)
+      .map(m => ({
+        id: m.job_id,
+        title: m.scraped_jobs?.title || 'Unknown',
+        company: m.scraped_jobs?.company || 'Unknown',
+        platform: m.scraped_jobs?.primary_platform || null,
+        matchScore: m.match_score,
+        dismissedAt: m.dismissed_at,
+      }));
     
+    // LEARNING SIGNAL: Fetch previously recommended/applied/dismissed jobs for context
+    const { data: historicalMatches } = await supabase
+      .from('candidate_job_matches')
+      .select(`
+        job_id,
+        match_score,
+        match_source,
+        ai_priority,
+        applied_at,
+        dismissed_at,
+        qualified_at,
+        scraped_jobs!inner (
+          id,
+          title,
+          company,
+          primary_platform
+        )
+      `)
+      .eq('candidate_id', candidateId)
+      .order('qualified_at', { ascending: false })
+      .limit(50); // Get recent history for context
+
     // Filter by date CLIENT-SIDE to handle NULL posted_date properly
     // NULL posted_date = treat as recent (job was just uploaded without date)
     const filteredMatches = (matches || []).filter((match: any) => {
@@ -176,6 +260,43 @@ export async function rankJobsWithAI(
         },
       };
     }
+
+    // Separate historical matches into categories for AI context
+    const previouslyRecommended = (historicalMatches || [])
+      .filter(m => !m.applied_at && !m.dismissed_at)
+      .slice(0, 10)
+      .map(m => ({
+        id: m.job_id,
+        title: m.scraped_jobs?.title || 'Unknown',
+        company: m.scraped_jobs?.company || 'Unknown',
+        platform: m.scraped_jobs?.primary_platform || null,
+        matchScore: m.match_score,
+        aiPriority: m.ai_priority,
+      }));
+
+    const appliedJobs = (historicalMatches || [])
+      .filter(m => m.applied_at)
+      .slice(0, 10)
+      .map(m => ({
+        id: m.job_id,
+        title: m.scraped_jobs?.title || 'Unknown',
+        company: m.scraped_jobs?.company || 'Unknown',
+        platform: m.scraped_jobs?.primary_platform || null,
+        matchScore: m.match_score,
+        appliedAt: m.applied_at,
+      }));
+
+    const dismissedJobs = (historicalMatches || [])
+      .filter(m => m.dismissed_at)
+      .slice(0, 10)
+      .map(m => ({
+        id: m.job_id,
+        title: m.scraped_jobs?.title || 'Unknown',
+        company: m.scraped_jobs?.company || 'Unknown',
+        platform: m.scraped_jobs?.primary_platform || null,
+        matchScore: m.match_score,
+        dismissedAt: m.dismissed_at,
+      }));
 
     // Transform to MatchedJob format
     // NO additional filtering - trust the ledger query
@@ -213,6 +334,7 @@ export async function rankJobsWithAI(
     }
 
     // Prepare candidate data for AI with structured skills
+    // LEARNING SIGNAL: Include candidate summary and resume text for context
     const candidateData = {
       name: candidate.name,
       title: candidate.title,
@@ -231,34 +353,49 @@ export async function rankJobsWithAI(
       rateExpectation: candidate.rate_expectation,
       expectedPayMin: candidate.expected_pay_min,
       availability: candidate.availability,
-      summary: candidate.summary,
-      resumeText: candidate.resume_text ? candidate.resume_text.substring(0, 3000) : undefined,
+      summary: candidate.summary, // LEARNING SIGNAL: Include summary
+      resumeText: candidate.resume_text ? candidate.resume_text.substring(0, 3000) : undefined, // LEARNING SIGNAL: Include resume text
       degrees: candidate.degrees || [],
       certifications: candidate.certifications || [],
+      // LEARNING SIGNAL: Include historical job interactions for context
+      previouslyRecommended: previouslyRecommended,
+      appliedJobs: appliedJobs,
+      dismissedJobs: dismissedJobs,
     };
 
     // Prepare jobs data for AI
     // Include match_source so AI knows which jobs are recruiter-targeted
-    const jobsData = matchedJobs.map(job => ({
-      id: job.id,
-      title: job.title,
-      company: job.company,
-      location: job.location,
-      jobType: job.job_type,
-      workLocationType: job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite'),
-      locationType: job.location_type, // Legacy
-      isRemote: job.is_remote, // Legacy
-      description: job.description ? job.description.substring(0, 1000) : undefined,
-      salary: job.salary,
-      payRateMin: job.pay_rate_min,
-      payRateMax: job.pay_rate_max,
-      url: job.url,
-      postedDate: job.posted_date,
-      matchScore: job.match_score,
-      systemReasons: job.reasons || [],
-      matchSource: job.match_source, // 'explicit_target' or 'global_match'
-      isRecruiterTargeted: job.match_source === 'explicit_target',
-    }));
+    // LEARNING SIGNAL: Add metadata (job_source, manually_curated, fallback_primary_platform_used)
+    const jobsData = matchedJobs.map((job, index) => {
+      // Find job metadata from filteredMatches
+      const match = filteredMatches[index];
+      const jobMetadata = match?.scraped_jobs;
+      
+      return {
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        jobType: job.job_type,
+        workLocationType: job.work_location_type || job.location_type || (job.is_remote ? 'Remote' : 'Onsite'),
+        locationType: job.location_type, // Legacy
+        isRemote: job.is_remote, // Legacy
+        description: job.description ? job.description.substring(0, 1000) : undefined,
+        salary: job.salary,
+        payRateMin: job.pay_rate_min,
+        payRateMax: job.pay_rate_max,
+        url: job.url,
+        postedDate: job.posted_date,
+        matchScore: job.match_score,
+        systemReasons: job.reasons || [],
+        matchSource: job.match_source, // 'explicit_target' or 'global_match'
+        isRecruiterTargeted: job.match_source === 'explicit_target',
+        // LEARNING SIGNAL: Metadata for learning
+        job_source: jobMetadata?.uploaded_by || 'scraper', // 'recruiter' or 'scraper'
+        manually_curated: jobMetadata?.manually_curated || false,
+        fallback_primary_platform_used: jobMetadata?.fallback_primary_platform_used || false,
+      };
+    });
 
     // Count explicit targets for AI context
     const explicitTargetCount = jobsData.filter(j => j.isRecruiterTargeted).length;

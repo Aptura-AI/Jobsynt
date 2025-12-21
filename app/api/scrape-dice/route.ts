@@ -159,8 +159,13 @@ async function scrapeJobDetail(browserPage: any, jobUrl: string) {
   const allSkills = skills;
   let primaryPlatform = extractPlatformFromJob(title, allSkills) || null;
   
+  // Track if fallback was used (for learning signals)
+  const originalPlatform = primaryPlatform;
+  
   // Apply guarded fallback if primary_platform is missing
   primaryPlatform = applyPrimaryPlatformFallback(primaryPlatform, mustHaveSkills);
+  
+  const fallbackUsed = !originalPlatform && !!primaryPlatform;
   
   const secondaryPlatforms = extractSecondaryPlatforms(title, allSkills) || [];
 
@@ -186,7 +191,8 @@ async function scrapeJobDetail(browserPage: any, jobUrl: string) {
     posted_date: new Date().toISOString().split('T')[0], // Today's date as default
     is_active: true,
     is_real: true,
-    uploaded_by: 'scraper', // Job source tracking
+    uploaded_by: 'scraper',
+    fallback_primary_platform_used: fallbackUsed, // Learning signal: track fallback usage // Job source tracking
   };
 }
 

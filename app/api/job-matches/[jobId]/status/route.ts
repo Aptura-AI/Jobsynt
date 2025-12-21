@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getServerSession } from '@/lib/auth';
 import { logJobApplied, logJobDismissed } from '@/lib/matching/jobQualificationLog';
+import { logLearningSignal } from '@/lib/matching/learningSignals';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -104,6 +105,7 @@ export async function PATCH(
         job_id,
         match_score,
         match_source,
+        ai_priority,
         applied_at,
         dismissed_at,
         qualified_at
@@ -126,6 +128,30 @@ export async function PATCH(
     // Log the action
     if (logFn) {
       await logFn();
+    }
+
+    // Log learning signal (metadata collection only - no behavior changes)
+    if (action === 'apply' || action === 'dismiss') {
+      // Fetch job metadata for learning signal
+      const { data: jobData } = await supabase
+        .from('scraped_jobs')
+        .select('uploaded_by, manually_curated, fallback_primary_platform_used')
+        .eq('id', jobId)
+        .single();
+
+      await logLearningSignal(
+        profile.id,
+        jobId,
+        action,
+        {
+          match_score: updatedMatch.match_score,
+          ai_priority: updatedMatch.ai_priority || undefined,
+          match_source: updatedMatch.match_source || undefined,
+          job_source: jobData?.uploaded_by || undefined,
+          manually_curated: jobData?.manually_curated || false,
+          fallback_primary_platform_used: jobData?.fallback_primary_platform_used || false,
+        }
+      );
     }
 
     console.log(`[Job Status Update] ${action.toUpperCase()}: candidate=${profile.id.substring(0, 8)}... job=${jobId.substring(0, 8)}...`);
