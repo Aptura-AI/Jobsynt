@@ -36,6 +36,7 @@ export type ScrapedJob = {
   pay_rate_max: number | null;
   description: string | null;
   posted_date: string | null;
+  uploaded_by?: 'recruiter' | 'scraper'; // Job source tracking
 };
 
 export type DashboardJob = {

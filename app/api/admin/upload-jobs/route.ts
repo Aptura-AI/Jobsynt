@@ -588,6 +588,9 @@ export async function POST(req: NextRequest) {
           is_real: true,
           is_constant_search: false,
           profile_id: null,
+          
+          // Job source tracking
+          uploaded_by: 'recruiter',
         };
 
         // Log payload for debugging

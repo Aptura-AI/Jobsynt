@@ -202,6 +202,7 @@ async function scrapeJobDetail(browserPage: Page, jobUrl: string) {
     posted_date: new Date().toISOString().split('T')[0], // Today's date as default
     is_active: true,
     is_real: true,
+    uploaded_by: 'scraper', // Job source tracking
   };
 }
 
