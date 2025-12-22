@@ -140,6 +140,8 @@ export async function POST(req: NextRequest) {
     // Guardrails: Never overwrite existing trial_ends_at, never overwrite is_paid = true
     if (shouldStartTrial && trialEndDate) {
       profileData.trial_ends_at = trialEndDate;
+      profileData.is_paid = false; // Explicitly set is_paid = false for new trials
+      profileData.paid_at = null; // Explicitly set paid_at = null for new trials
       console.log(`[Profile Creation] Starting 7-day free trial for ${session.user.email}, ends at ${trialEndDate}`);
     }
 

@@ -267,7 +267,11 @@ export async function ensureProfileExists(
       role,
       onboarding_complete: onboardingComplete,
       // Set trial_ends_at only for new candidate profiles
-      ...(trialEndDate && { trial_ends_at: trialEndDate }),
+      ...(trialEndDate && { 
+        trial_ends_at: trialEndDate,
+        is_paid: false, // Explicitly set is_paid = false for new trials
+        paid_at: null, // Explicitly set paid_at = null for new trials
+      }),
     };
 
     const { data: inserted, error: insertError } = await supabase
