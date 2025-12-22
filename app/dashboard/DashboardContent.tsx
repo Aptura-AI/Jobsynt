@@ -44,8 +44,6 @@ type DashboardContentProps = {
   userEmail: string;
 };
 
-import { hasCandidateAccess as checkAccess } from '@/lib/utils/accessCheck';
-
 /**
  * Check if candidate has access (active trial or paid)
  * Uses centralized hasCandidateAccess() - no duplicated logic

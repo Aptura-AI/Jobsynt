@@ -94,9 +94,8 @@ export default async function PricingPage() {
     );
   }
 
-  // Check if candidate has access
-      const supabase = createClient(supabaseUrl, supabaseServiceKey);
-      const hasAccess = await hasCandidateAccessServer(profile.id, supabase);
+  // Check if candidate has access (reuse existing supabase client)
+  const hasAccess = await hasCandidateAccessServer(profile.id, supabase);
   if (hasAccess) {
     redirect('/dashboard');
   }
