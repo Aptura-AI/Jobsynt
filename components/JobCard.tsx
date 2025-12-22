@@ -1,4 +1,8 @@
-import Link from 'next/link';
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useAccessCheck } from '@/lib/hooks/useAccessCheck';
+import { getPricingUrl } from '@/lib/utils/accessCheck';
 import { JOB_TYPE_LABELS, type JobType } from '@/lib/job-types';
 
 export type Job = {
@@ -15,10 +19,29 @@ export type Job = {
 };
 
 export default function JobCard({ job }: { job: Job }) {
+  const router = useRouter();
+  const { hasAccess, loading } = useAccessCheck();
+
   // Get job type label for display
   const jobTypeLabel = job.job_type && JOB_TYPE_LABELS[job.job_type as JobType] 
     ? JOB_TYPE_LABELS[job.job_type as JobType] 
     : null;
+
+  const handleJobClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    if (loading) {
+      return; // Wait for access check
+    }
+
+    if (hasAccess) {
+      // Open job normally
+      router.push(`/jobs/${job.id}`);
+    } else {
+      // Redirect to pricing with job_id in query
+      router.push(getPricingUrl(job.id));
+    }
+  };
 
   return (
     <div className="card p-5">
@@ -46,9 +69,13 @@ export default function JobCard({ job }: { job: Job }) {
       )}
       <div className="mt-4 flex items-center justify-between">
         {job.rate && <span className="text-sm font-semibold text-ink">{job.rate}</span>}
-        <Link href={`/jobs/${job.id}`} className="text-sm font-semibold text-primary hover:underline">
+        <a
+          href={`/jobs/${job.id}`}
+          onClick={handleJobClick}
+          className="text-sm font-semibold text-primary hover:underline cursor-pointer"
+        >
           View Job →
-        </Link>
+        </a>
       </div>
     </div>
   );

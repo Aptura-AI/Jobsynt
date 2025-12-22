@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import JobCard from '@/components/JobCard';
 import AIMentorUpload from '@/components/AIMentorUpload';
+import { getPricingUrl, hasCandidateAccess as checkAccess } from '@/lib/utils/accessCheck';
 
 type Profile = {
   id: string;
@@ -18,6 +19,9 @@ type Profile = {
   resume_url?: string;
   contract_type?: string[];
   work_mode?: string[];
+  trial_ends_at?: string | null;
+  is_paid?: boolean | null;
+  paid_at?: string | null;
 };
 
 type Job = {
@@ -40,11 +44,46 @@ type DashboardContentProps = {
   userEmail: string;
 };
 
+import { hasCandidateAccess as checkAccess } from '@/lib/utils/accessCheck';
+
+/**
+ * Check if candidate has access (active trial or paid)
+ * Uses centralized hasCandidateAccess() - no duplicated logic
+ */
+function hasCandidateAccess(profile: Profile, isAdmin: boolean): boolean {
+  // Admin always has access
+  if (isAdmin) {
+    return true;
+  }
+
+  // Use centralized access check
+  return checkAccess(profile);
+}
+
+/**
+ * Calculate days remaining in trial
+ */
+function getTrialDaysRemaining(trialEndsAt: string | null | undefined): number | null {
+  if (!trialEndsAt) return null;
+  
+  const trialEnd = new Date(trialEndsAt);
+  const now = new Date();
+  const diffTime = trialEnd.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  return diffDays > 0 ? diffDays : null;
+}
+
 export default function DashboardContent({ profile, isAdmin, userEmail }: DashboardContentProps) {
   const [recommendedJobs, setRecommendedJobs] = useState<Job[]>([]);
   const [allRecommendedJobs, setAllRecommendedJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAllJobs, setShowAllJobs] = useState(false);
+
+  // Check access status
+  const hasAccess = hasCandidateAccess(profile, isAdmin);
+  const trialDaysRemaining = getTrialDaysRemaining(profile.trial_ends_at);
+  const isTrialActive = profile.trial_ends_at && trialDaysRemaining !== null && trialDaysRemaining > 0;
 
   useEffect(() => {
     fetchRecommendedJobs();
@@ -221,26 +260,58 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
         <AIMentorUpload />
       </div>
 
+      {/* Trial Banner */}
+      {!isAdmin && isTrialActive && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-center">
+          <p className="text-blue-800 text-sm font-medium">
+            Free trial ends in {trialDaysRemaining} {trialDaysRemaining === 1 ? 'day' : 'days'}
+          </p>
+        </div>
+      )}
+
       {/* Recommended Jobs */}
-      <div className="space-y-4">
+      <div className="space-y-4 relative">
+        {!hasAccess && !isAdmin && (
+          <>
+            {/* Blur overlay */}
+            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 rounded-lg" />
+            {/* CTA overlay */}
+            <div className="absolute inset-0 flex items-center justify-center z-20">
+              <div className="text-center bg-white rounded-lg border border-gray-200 p-6 shadow-lg max-w-md mx-4">
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Unlock Full Access</h3>
+                <p className="text-gray-600 mb-4">Start your free trial or unlock full access to view job details</p>
+                <Link
+                  href="/pricing"
+                  className="inline-block bg-primary text-white font-semibold px-6 py-3 rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  Start your free trial or unlock full access
+                </Link>
+              </div>
+            </div>
+          </>
+        )}
+        
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <h2 className="text-lg sm:text-xl font-bold text-ink">Your Matched Jobs</h2>
           <div className="flex items-center gap-3">
             <button
               onClick={handleFindNewJobs}
-              disabled={loading}
-              className="text-sm font-semibold text-primary hover:underline disabled:opacity-50"
+              disabled={loading || (!hasAccess && !isAdmin)}
+              className="text-sm font-semibold text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
             >
               🔄 Find New Matching Jobs
             </button>
-            <Link href="/jobs" className="text-sm font-semibold text-primary hover:underline">
+            <Link 
+              href="/jobs" 
+              className={`text-sm font-semibold text-primary hover:underline ${!hasAccess && !isAdmin ? 'pointer-events-none opacity-50' : ''}`}
+            >
               View All Jobs →
             </Link>
           </div>
         </div>
         {allRecommendedJobs.length > 0 ? (
           <>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={`grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${!hasAccess && !isAdmin ? 'blur-sm pointer-events-none' : ''}`}>
               {(showAllJobs ? allRecommendedJobs : recommendedJobs).map((job: any) => (
               <div key={job.id} className="card p-4">
                 <div className="mb-2 flex items-start justify-between">
@@ -276,9 +347,15 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
                 <div className="mt-3 flex items-center justify-between gap-2">
                   {job.url && (
                     <a
-                      href={job.url}
-                      target="_blank"
+                      href={hasAccess || isAdmin ? job.url : getPricingUrl(job.id)}
+                      target={hasAccess || isAdmin ? '_blank' : '_self'}
                       rel="noopener noreferrer"
+                      onClick={(e) => {
+                        if (!hasAccess && !isAdmin) {
+                          e.preventDefault();
+                          window.location.href = getPricingUrl(job.id);
+                        }
+                      }}
                       className="text-sm font-semibold text-primary hover:underline flex-1"
                     >
                       View Job →

@@ -96,7 +96,27 @@ export async function POST(req: NextRequest) {
     // Determine if onboarding is complete (has required fields)
     const hasRequiredFields = name && title && location && skills.length > 0;
     
-    const profileData = {
+    // Check if profile already exists (to determine if this is first creation)
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('trial_ends_at, is_paid')
+      .eq('email', session.user.email)
+      .maybeSingle();
+
+    const isNewProfile = !existingProfile;
+    
+    // Auto-start 7-day free trial ONLY on FIRST profile creation
+    // Conditions: profile doesn't exist (first creation)
+    // Guardrails: Never overwrite existing trial_ends_at, never overwrite is_paid = true
+    // For new profiles: trial_ends_at is NULL and is_paid defaults to false
+    const shouldStartTrial = isNewProfile;
+
+    // Calculate trial end date (7 days from now)
+    const trialEndDate = shouldStartTrial 
+      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      : undefined;
+    
+    const profileData: any = {
       email: String(session.user.email).trim().toLowerCase(),
       name,
       phone: String(body.phone || '').trim() || null,
@@ -115,6 +135,13 @@ export async function POST(req: NextRequest) {
       image_url: session.user.image || null,
       onboarding_complete: hasRequiredFields, // Mark complete if required fields are present
     };
+
+    // Only set trial_ends_at on first creation (never overwrite existing trial_ends_at)
+    // Guardrails: Never overwrite existing trial_ends_at, never overwrite is_paid = true
+    if (shouldStartTrial && trialEndDate) {
+      profileData.trial_ends_at = trialEndDate;
+      console.log(`[Profile Creation] Starting 7-day free trial for ${session.user.email}, ends at ${trialEndDate}`);
+    }
 
     // Use upsert to handle both create and update
     const { data: profile, error } = await supabase

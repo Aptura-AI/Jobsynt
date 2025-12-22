@@ -40,10 +40,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Get candidate profile to get candidate_id
+    // Get candidate profile to get candidate_id and check trial status
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, trial_ends_at')
       .eq('email', session.user.email)
       .maybeSingle();
 
@@ -51,6 +51,9 @@ export async function POST(req: NextRequest) {
       console.error('[PayPal Success] Profile not found:', profileError);
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
+
+    // Check if user was on trial at payment time
+    const wasOnTrial = profile.trial_ends_at && new Date(profile.trial_ends_at) > new Date();
 
     // Extract status from raw payload (fallback to 'completed' if not present)
     const status = raw?.status || 'completed';
@@ -89,7 +92,29 @@ export async function POST(req: NextRequest) {
       candidateId: profile.id,
       amount,
       currency,
+      wasOnTrial,
     });
+
+    // Update profile payment status
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({
+        is_paid: true,
+        paid_at: new Date().toISOString(),
+        // DO NOT delete trial_ends_at - trial simply becomes irrelevant
+      })
+      .eq('id', profile.id);
+
+    if (updateError) {
+      console.error('[PayPal Success] Failed to update profile payment status:', updateError);
+      // Don't fail the request - payment is logged, profile update can be retried
+    } else {
+      console.log('[PayPal Success] Profile payment status updated:', {
+        candidateId: profile.id,
+        is_paid: true,
+        wasOnTrial,
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

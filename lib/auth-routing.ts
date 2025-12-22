@@ -251,6 +251,14 @@ export async function ensureProfileExists(
     
     const onboardingComplete = role === 'admin'; // Admin skips onboarding
 
+    // Auto-start 7-day free trial for new candidate profiles
+    // Only set trial_ends_at if: role is candidate AND trial_ends_at is NULL AND is_paid is false
+    // Guardrails: Never overwrite existing trial_ends_at, never overwrite is_paid = true
+    const isCandidate = role === 'candidate';
+    const trialEndDate = isCandidate 
+      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      : undefined;
+
     const newProfile: Partial<ProfileRow> = {
       user_id: userId,
       email: normalizedEmail,
@@ -258,6 +266,8 @@ export async function ensureProfileExists(
       image_url: image?.trim() || null,
       role,
       onboarding_complete: onboardingComplete,
+      // Set trial_ends_at only for new candidate profiles
+      ...(trialEndDate && { trial_ends_at: trialEndDate }),
     };
 
     const { data: inserted, error: insertError } = await supabase
@@ -273,6 +283,9 @@ export async function ensureProfileExists(
 
     if (process.env.NODE_ENV === 'development') {
       console.log(`✅ Created profile for ${normalizedEmail} with role=${role}`);
+      if (trialEndDate) {
+        console.log(`[Profile Creation] Starting 7-day free trial for ${normalizedEmail}, ends at ${trialEndDate}`);
+      }
     }
 
     return (inserted as ProfileRow | null);

@@ -67,10 +67,10 @@ export async function GET(req: NextRequest) {
 
     console.log('[Email Cron] Starting daily job email distribution...');
 
-    // Get all candidate profiles with email
+    // Get all candidate profiles with email and payment/trial status
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, email, name, preferred_job_types, daily_email_sent_at')
+      .select('id, email, name, preferred_job_types, daily_email_sent_at, trial_ends_at, is_paid')
       .eq('role', 'candidate')
       .not('email', 'is', null)
       .not('name', 'is', null);
@@ -115,6 +115,19 @@ export async function GET(req: NextRequest) {
 
     const thirtyDaysAgo = get30DaysAgoDate();
     const today = new Date().toISOString().split('T')[0];
+
+    // Import centralized access check - no duplicated logic
+    const { hasCandidateAccessServer } = await import('@/lib/utils/accessCheck');
+
+    /**
+     * Check if trial has expired
+     */
+    function isTrialExpired(trialEndsAt: string | null | undefined): boolean {
+      if (!trialEndsAt) return false;
+      const trialEnd = new Date(trialEndsAt);
+      const now = new Date();
+      return trialEnd <= now;
+    }
 
     for (const profile of profiles) {
       try {
@@ -223,6 +236,10 @@ export async function GET(req: NextRequest) {
           match_reasons: match.reasons || [],
         }));
 
+        // Check access status using centralized function
+        const hasAccess = await hasCandidateAccessServer(profile.id, supabase);
+        const trialExpired = isTrialExpired(profile.trial_ends_at);
+
         // Extract skills from description
         const extractSkills = (description: string | null): string[] => {
           if (!description) return [];
@@ -236,20 +253,37 @@ export async function GET(req: NextRequest) {
           ).slice(0, 5);
         };
 
+        // Determine email content based on access
+        let jobsToSend = jobs;
+        let isPreview = false;
+        let subjectSuffix = '';
+
+        if (!hasAccess) {
+          // Preview mode: only top 2 jobs, no links
+          jobsToSend = jobs.slice(0, 2);
+          isPreview = true;
+          
+          if (trialExpired) {
+            subjectSuffix = ' - Your free trial has ended';
+          }
+        }
+
         // Send email
         const result = await sendDailyJobDigest(
           profile.email,
           profile.name || 'Candidate',
-          jobs.map(job => ({
+          jobsToSend.map(job => ({
             title: job.title || 'Untitled',
             company: job.company || 'Company not specified',
             location: job.location || 'Location not specified',
             job_type: job.job_type,
             skills_required: extractSkills(job.description),
-            url: job.url || '',
+            url: hasAccess ? (job.url || '') : '', // No links in preview mode
           })),
           profile.id,
-          jobs.map(j => j.id).filter(Boolean)
+          jobsToSend.map(j => j.id).filter(Boolean),
+          isPreview, // Preview mode flag
+          subjectSuffix // Subject suffix for expired trials
         );
 
         if (result.success) {

@@ -25,6 +25,8 @@ type CandidateProfile = {
   resume_url: string | null;
   created_at: string;
   created_by_admin: boolean;
+  trial_ends_at: string | null;
+  is_paid: boolean | null;
 };
 
 export default function CandidateProfileClient({ candidateId }: { candidateId: string }) {
@@ -33,6 +35,10 @@ export default function CandidateProfileClient({ candidateId }: { candidateId: s
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingResume, setDownloadingResume] = useState(false);
+  const [extendDays, setExtendDays] = useState<number>(7);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [extendingTrial, setExtendingTrial] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProfile();
@@ -84,6 +90,63 @@ export default function CandidateProfileClient({ candidateId }: { candidateId: s
     }
   };
 
+  const handleExtendTrial = async () => {
+    if (!profile || extendDays <= 0) return;
+
+    try {
+      setExtendingTrial(true);
+      const res = await fetch(`/api/admin/candidates/${candidateId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: extendDays }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setToastMessage(`Trial extended by ${extendDays} days successfully!`);
+        setShowConfirmModal(false);
+        // Refetch profile data
+        await fetchProfile();
+        // Clear toast after 3 seconds
+        setTimeout(() => setToastMessage(null), 3000);
+      } else {
+        alert(data.error || 'Failed to extend trial');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error extending trial');
+    } finally {
+      setExtendingTrial(false);
+    }
+  };
+
+  // Calculate trial status and days remaining
+  const getTrialStatus = () => {
+    if (!profile) return { status: 'Unknown', daysRemaining: null };
+    
+    if (profile.is_paid === true) {
+      return { status: 'Paid', daysRemaining: null };
+    }
+
+    if (!profile.trial_ends_at) {
+      return { status: 'No Trial', daysRemaining: null };
+    }
+
+    const trialEnd = new Date(profile.trial_ends_at);
+    const now = new Date();
+    const diffTime = trialEnd.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 0) {
+      return { status: 'Expired', daysRemaining: 0 };
+    }
+
+    return { status: 'Active', daysRemaining: diffDays };
+  };
+
+  const trialInfo = getTrialStatus();
+  const canExtendTrial = profile && profile.is_paid !== true && profile.trial_ends_at !== null;
+
   if (loading) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-10">
@@ -110,6 +173,41 @@ export default function CandidateProfileClient({ candidateId }: { candidateId: s
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 space-y-6">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50">
+          {toastMessage}
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold mb-4">Extend Trial</h3>
+            <p className="mb-6">
+              Extend trial by {extendDays} days?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="px-4 py-2 bg-slate-200 text-ink rounded hover:bg-slate-300"
+                disabled={extendingTrial}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExtendTrial}
+                disabled={extendingTrial}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {extendingTrial ? 'Extending...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -260,6 +358,67 @@ export default function CandidateProfileClient({ candidateId }: { candidateId: s
 
         {/* Right Column - Preferences & Summary */}
         <div className="space-y-6">
+          {/* Trial Status Section */}
+          <div className="card p-6">
+            <h2 className="text-xl font-bold mb-4">Trial Status</h2>
+            <div className="space-y-3">
+              <div>
+                <span className="text-sm font-semibold text-muted">Status:</span>
+                <p className="text-ink">
+                  <span className={`px-2 py-1 rounded text-sm font-semibold ${
+                    trialInfo.status === 'Paid' ? 'bg-green-100 text-green-800' :
+                    trialInfo.status === 'Active' ? 'bg-blue-100 text-blue-800' :
+                    trialInfo.status === 'Expired' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {trialInfo.status}
+                  </span>
+                </p>
+              </div>
+              {profile.trial_ends_at && (
+                <div>
+                  <span className="text-sm font-semibold text-muted">Trial Ends At:</span>
+                  <p className="text-ink">{new Date(profile.trial_ends_at).toLocaleString()}</p>
+                </div>
+              )}
+              {trialInfo.daysRemaining !== null && trialInfo.status === 'Active' && (
+                <div>
+                  <span className="text-sm font-semibold text-muted">Days Remaining:</span>
+                  <p className="text-ink font-semibold">{trialInfo.daysRemaining} days</p>
+                </div>
+              )}
+            </div>
+
+            {/* Extend Trial Control */}
+            {canExtendTrial && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h3 className="text-lg font-semibold mb-4">Extend Trial</h3>
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <label className="block text-sm font-semibold text-muted mb-2">
+                      Days to Extend
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={extendDays}
+                      onChange={(e) => setExtendDays(Math.max(1, parseInt(e.target.value) || 7))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setShowConfirmModal(true)}
+                    disabled={extendDays <= 0}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Extend Trial
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {profile.summary && (
             <div className="card p-6">
               <h2 className="text-xl font-bold mb-4">Summary</h2>

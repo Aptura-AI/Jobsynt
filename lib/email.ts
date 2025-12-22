@@ -110,7 +110,9 @@ export async function sendDailyJobDigest(
     url: string;
   }>,
   candidateId?: string,
-  jobIds?: string[]
+  jobIds?: string[],
+  isPreview?: boolean,
+  subjectSuffix?: string
 ): Promise<{ success: boolean; messageId?: string }> {
   try {
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
@@ -151,11 +153,14 @@ export async function sendDailyJobDigest(
           ? `<p style="margin: 5px 0; color: #6b7280;"><strong>Skills Required:</strong> ${job.skills_required.join(', ')}</p>`
           : ''
         }
-        <p style="margin: 15px 0 0 0;">
-          <a href="${loginLink}" style="color: #4F46E5; text-decoration: none; font-weight: 600;">
-            Login to view detailed description →
-          </a>
-        </p>
+        ${!isPreview && job.url
+          ? `<p style="margin: 15px 0 0 0;">
+              <a href="${job.url}" style="color: #4F46E5; text-decoration: none; font-weight: 600;">
+                View Job Details →
+              </a>
+            </p>`
+          : ''
+        }
       </div>
     `).join('');
 
@@ -180,14 +185,23 @@ export async function sendDailyJobDigest(
           </div>
           <div class="content">
             <p>Hi ${name},</p>
-            <p>Here are ${jobs.length} job${jobs.length > 1 ? 's' : ''} that match your profile, shortlisted by our AI Agent:</p>
-            ${jobsHtml}
-            <p style="text-align: center; margin-top: 30px;">
-              <a href="${loginLink}" class="button">Login to View All Jobs</a>
-            </p>
-            <p style="text-align: center; color: #6b7280; font-size: 14px;">
-              Login to your Jobsynt profile to see detailed job descriptions, apply directly, and access more opportunities.
-            </p>
+            ${isPreview
+              ? `<p>Here's a preview of ${jobs.length} top job${jobs.length > 1 ? 's' : ''} that match your profile:</p>
+                 ${jobsHtml}
+                 <div style="background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center;">
+                   <h3 style="margin: 0 0 10px 0; color: #92400E;">Unlock Full Access</h3>
+                   <p style="margin: 0 0 20px 0; color: #78350F;">Start your free trial or unlock full access to view job details, apply directly, and access all opportunities.</p>
+                   <a href="${SITE_URL}/pricing" class="button" style="background: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Unlock Full Access</a>
+                 </div>`
+              : `<p>Here are ${jobs.length} job${jobs.length > 1 ? 's' : ''} that match your profile, shortlisted by our AI Agent:</p>
+                 ${jobsHtml}
+                 <p style="text-align: center; margin-top: 30px;">
+                   <a href="${loginLink}" class="button">Login to View All Jobs</a>
+                 </p>
+                 <p style="text-align: center; color: #6b7280; font-size: 14px;">
+                   Login to your Jobsynt profile to see detailed job descriptions, apply directly, and access more opportunities.
+                 </p>`
+            }
           </div>
           <div class="footer">
             <p>© ${new Date().getFullYear()} Jobsynt. All rights reserved.</p>
@@ -201,7 +215,7 @@ export async function sendDailyJobDigest(
       </html>
     `;
 
-    const subject = `Your Daily Job Matches - ${jobs.length} New Opportunity${jobs.length > 1 ? 'ies' : ''}`;
+    const subject = `Your Daily Job Matches - ${jobs.length} New Opportunity${jobs.length > 1 ? 'ies' : ''}${subjectSuffix || ''}`;
 
     await emailTransporter.sendMail({
       from: FROM_ADDRESS,

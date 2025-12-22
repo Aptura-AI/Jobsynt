@@ -1,6 +1,8 @@
 import { readJSON } from '@/utils/fs';
 import { getAuthTokenFromCookies, verifyToken } from '@/utils/auth';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
+import { getServerSession } from '@/lib/auth';
+import { createClient } from '@supabase/supabase-js';
 import ApplyButton from './ApplyButton';
 
 type Job = {
@@ -22,11 +24,43 @@ async function getJob(id: string): Promise<Job | undefined> {
   return jobs.find((j) => j.id === id);
 }
 
+import { hasCandidateAccessServer } from '@/lib/utils/accessCheck';
+
 export default async function JobDetails({ params }: { params: { id: string } }) {
   const job = await getJob(params.id);
   if (!job) return notFound();
+  
+  const session = await getServerSession();
+  
+  // If user is logged in, check access
+  if (session?.user?.email) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', session.user.email)
+        .maybeSingle();
+      
+      if (profile) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const hasAccess = await hasCandidateAccessServer(profile.id, supabase);
+        if (!hasAccess) {
+          // Redirect to pricing with job_id in query
+          redirect(`/pricing?source=job_click&job_id=${params.id}`);
+        }
+      }
+    }
+  } else {
+    // Not logged in - redirect to pricing
+    redirect(`/pricing?source=job_click&job_id=${params.id}`);
+  }
+  
   const token = getAuthTokenFromCookies();
-  const session = token ? verifyToken(token) : null;
+  const sessionToken = token ? verifyToken(token) : null;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
@@ -68,7 +102,7 @@ export default async function JobDetails({ params }: { params: { id: string } })
           </div>
         </div>
         <div className="mt-8">
-          <ApplyButton jobId={job.id} isLoggedIn={Boolean(session)} />
+          <ApplyButton jobId={job.id} isLoggedIn={Boolean(sessionToken)} />
         </div>
       </div>
     </div>
