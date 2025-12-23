@@ -197,7 +197,30 @@ export async function fetchAndMatchJobs(
   const limit = options.limit ?? 200; // Increased limit for more matches
   const thirtyDaysAgo = get30DaysAgoDate();
 
-  // Fetch jobs from last 30 days
+  // STEP 1: Delete expired jobs (>30 days old) before fetching
+  const cutoffDateStr = get30DaysAgoDate(); // YYYY-MM-DD format
+
+  try {
+    // Delete jobs where posted_date < cutoff (only jobs with posted_date set)
+    const { data: deletedJobs, error: deleteError } = await supabase
+      .from('scraped_jobs')
+      .delete()
+      .lt('posted_date', cutoffDateStr)
+      .not('posted_date', 'is', null) // Only delete jobs with posted_date set
+      .select('id'); // Return deleted IDs to count
+
+    if (deleteError) {
+      console.error('[Job Matching] Error deleting expired jobs:', deleteError);
+      // Continue anyway - don't block matching if deletion fails
+    } else if (deletedJobs && deletedJobs.length > 0) {
+      console.log(`[Job Matching] Deleted ${deletedJobs.length} expired jobs (posted_date < ${cutoffDateStr})`);
+    }
+  } catch (err) {
+    console.error('[Job Matching] Exception during job expiration cleanup:', err);
+    // Continue anyway - don't block matching if deletion fails
+  }
+
+  // STEP 2: Fetch jobs from last 30 days
   // Note: is_active can be NULL (not yet set) or true
   // Note: posted_date can be NULL (use created_at as fallback)
   
