@@ -31,7 +31,7 @@ export default async function PricingPage() {
   // Fetch profile
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('id, trial_ends_at, is_paid')
+    .select('id, trial_ends_at, is_paid, discount_code, discount_percent, discount_end_date')
     .eq('email', session.user.email)
     .maybeSingle();
 
@@ -121,6 +121,23 @@ export default async function PricingPage() {
 
   const daysRemaining = getTrialDaysRemaining();
 
+  // Calculate discounted price if discount is active
+  const BASE_PRICE = 29.00;
+  const getDiscountedPrice = () => {
+    if (!profile?.discount_percent || !profile?.discount_end_date) {
+      return BASE_PRICE;
+    }
+    const endDate = new Date(profile.discount_end_date);
+    const now = new Date();
+    if (endDate < now) {
+      return BASE_PRICE; // Discount expired
+    }
+    return BASE_PRICE * (1 - profile.discount_percent / 100);
+  };
+
+  const finalPrice = getDiscountedPrice();
+  const hasActiveDiscount = profile?.discount_percent && profile?.discount_end_date && new Date(profile.discount_end_date) > new Date();
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
       <div className="mb-8 text-center">
@@ -167,8 +184,22 @@ export default async function PricingPage() {
           <div className="mx-auto max-w-md rounded-lg border border-gray-200 bg-white p-8 shadow-lg">
             <div className="mb-6 text-center">
               <div className="mb-4">
-                <span className="text-5xl font-bold text-gray-900">$29</span>
-                <span className="text-xl text-gray-600">.00</span>
+                {hasActiveDiscount && profile.discount_percent ? (
+                  <>
+                    <div className="mb-2">
+                      <span className="text-2xl font-bold text-gray-400 line-through">$29.00</span>
+                      <span className="ml-2 text-5xl font-bold text-gray-900">${finalPrice.toFixed(2)}</span>
+                    </div>
+                    <p className="text-sm font-semibold text-green-600">
+                      {profile.discount_percent}% OFF - Code: {profile.discount_code}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-5xl font-bold text-gray-900">$29</span>
+                    <span className="text-xl text-gray-600">.00</span>
+                  </>
+                )}
               </div>
               <p className="text-sm text-gray-500">One-time early access fee</p>
               <p className="mt-2 text-xs text-gray-500">

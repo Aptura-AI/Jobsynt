@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     // Get request body
     const body = await req.json().catch(() => ({}));
-    const { orderId, payerEmail, amount, currency, raw } = body;
+    const { orderId, payerEmail, amount, currency, raw, couponCode } = body;
 
     // Validate required fields
     if (!orderId || !amount || !currency || !raw) {
@@ -93,16 +93,61 @@ export async function POST(req: NextRequest) {
       amount,
       currency,
       wasOnTrial,
+      couponCode: couponCode || null,
     });
 
-    // Update profile payment status
+    // Validate and apply discount code if provided
+    let discountCodeData = null;
+    if (couponCode && typeof couponCode === 'string' && couponCode.trim()) {
+      const { data: discountCode, error: discountError } = await supabase
+        .from('discount_codes')
+        .select('code, discount_percent, duration_months, used')
+        .eq('code', couponCode.toUpperCase().trim())
+        .maybeSingle();
+
+      if (!discountError && discountCode && !discountCode.used) {
+        discountCodeData = discountCode;
+
+        // Mark code as used
+        await supabase
+          .from('discount_codes')
+          .update({ used: true })
+          .eq('code', discountCode.code);
+
+        console.log('[PayPal Success] Discount code applied:', {
+          code: discountCode.code,
+          percent: discountCode.discount_percent,
+          durationMonths: discountCode.duration_months,
+        });
+      } else {
+        console.warn('[PayPal Success] Invalid or already used discount code:', couponCode);
+      }
+    }
+
+    // Calculate discount end date if discount code was applied
+    let discountEndDate = null;
+    if (discountCodeData) {
+      const endDate = new Date();
+      endDate.setMonth(endDate.getMonth() + discountCodeData.duration_months);
+      discountEndDate = endDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+    }
+
+    // Update profile payment status and discount info
+    const updateData: any = {
+      is_paid: true,
+      paid_at: new Date().toISOString(),
+      // DO NOT delete trial_ends_at - trial simply becomes irrelevant
+    };
+
+    if (discountCodeData) {
+      updateData.discount_code = discountCodeData.code;
+      updateData.discount_percent = discountCodeData.discount_percent;
+      updateData.discount_end_date = discountEndDate;
+    }
+
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({
-        is_paid: true,
-        paid_at: new Date().toISOString(),
-        // DO NOT delete trial_ends_at - trial simply becomes irrelevant
-      })
+      .update(updateData)
       .eq('id', profile.id);
 
     if (updateError) {
