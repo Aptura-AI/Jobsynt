@@ -102,10 +102,12 @@ export async function sendDailyJobDigest(
   email: string,
   name: string,
   jobs: Array<{
+    id?: string;
     title: string;
     company: string;
     location: string;
     job_type: string | null;
+    location_type?: string | null;
     skills_required: string[] | null;
     url: string;
   }>,
@@ -142,27 +144,37 @@ export async function sendDailyJobDigest(
       return types[type] || type;
     };
 
+    // Format location type for display
+    const formatLocationType = (locationType: string | null | undefined) => {
+      if (!locationType) return 'Not specified';
+      return locationType; // Already in format: Remote, Hybrid, or Onsite
+    };
+
     // Build jobs HTML
-    const jobsHtml = jobs.map((job, index) => `
+    const jobsHtml = jobs.map((job, index) => {
+      const jobLink = job.id ? `${SITE_URL}/jobs/${job.id}` : '';
+      return `
       <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
         <h3 style="margin: 0 0 10px 0; color: #1f2937;">${job.title}</h3>
         <p style="margin: 5px 0; color: #6b7280;"><strong>Company:</strong> ${job.company || 'Not specified'}</p>
         <p style="margin: 5px 0; color: #6b7280;"><strong>Location:</strong> ${job.location || 'Not specified'}</p>
         <p style="margin: 5px 0; color: #6b7280;"><strong>Job Type:</strong> ${formatJobType(job.job_type)}</p>
+        <p style="margin: 5px 0; color: #6b7280;"><strong>Location Type:</strong> ${formatLocationType(job.location_type)}</p>
         ${job.skills_required && Array.isArray(job.skills_required) && job.skills_required.length > 0
           ? `<p style="margin: 5px 0; color: #6b7280;"><strong>Skills Required:</strong> ${job.skills_required.join(', ')}</p>`
           : ''
         }
-        ${!isPreview && job.url
+        ${!isPreview && jobLink
           ? `<p style="margin: 15px 0 0 0;">
-              <a href="${job.url}" style="color: #4F46E5; text-decoration: none; font-weight: 600;">
-                View Job Details →
+              <a href="${jobLink}" style="color: #4F46E5; text-decoration: none; font-weight: 600;">
+                View Job →
               </a>
             </p>`
           : ''
         }
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     const html = `
       <!DOCTYPE html>

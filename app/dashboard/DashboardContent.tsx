@@ -343,22 +343,18 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
                   </div>
                 )}
                 <div className="mt-3 flex items-center justify-between gap-2">
-                  {job.url && (
-                    <a
-                      href={hasAccess || isAdmin ? job.url : getPricingUrl(job.id)}
-                      target={hasAccess || isAdmin ? '_blank' : '_self'}
-                      rel="noopener noreferrer"
-                      onClick={(e) => {
-                        if (!hasAccess && !isAdmin) {
-                          e.preventDefault();
-                          window.location.href = getPricingUrl(job.id);
-                        }
-                      }}
-                      className="text-sm font-semibold text-primary hover:underline flex-1"
-                    >
-                      View Job →
-                    </a>
-                  )}
+                  <Link
+                    href={hasAccess || isAdmin ? `/jobs/${job.id}` : getPricingUrl(job.id)}
+                    onClick={(e) => {
+                      if (!hasAccess && !isAdmin) {
+                        e.preventDefault();
+                        window.location.href = getPricingUrl(job.id);
+                      }
+                    }}
+                    className="text-sm font-semibold text-primary hover:underline flex-1"
+                  >
+                    View Job →
+                  </Link>
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"

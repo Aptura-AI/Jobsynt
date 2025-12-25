@@ -228,6 +228,7 @@ export async function GET(req: NextRequest) {
           company: match.scraped_jobs.company,
           location: match.scraped_jobs.location,
           job_type: match.scraped_jobs.job_type,
+          location_type: match.scraped_jobs.work_location_type || match.scraped_jobs.location_type || null,
           description: match.scraped_jobs.description,
           url: match.scraped_jobs.url,
           fit_score: match.match_score,
@@ -273,12 +274,14 @@ export async function GET(req: NextRequest) {
           profile.email,
           profile.name || 'Candidate',
           jobsToSend.map(job => ({
+            id: job.id,
             title: job.title || 'Untitled',
             company: job.company || 'Company not specified',
             location: job.location || 'Location not specified',
             job_type: job.job_type,
+            location_type: job.location_type,
             skills_required: extractSkills(job.description),
-            url: hasAccess ? (job.url || '') : '', // No links in preview mode
+            url: job.url || '', // Keep for reference, but email will use internal link
           })),
           profile.id,
           jobsToSend.map(j => j.id).filter(Boolean),

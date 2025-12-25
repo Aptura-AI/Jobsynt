@@ -20,10 +20,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   try {
     const { id } = params;
 
-    // Try Supabase first
+    // Try Supabase first - use scraped_jobs table
     if (isSupabaseConfigured()) {
       const { data, error } = await supabase
-        .from('jobs')
+        .from('scraped_jobs')
         .select('*')
         .eq('id', id)
         .single();
@@ -35,12 +35,14 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
           company: data.company,
           location: data.location,
           experience: data.experience || '',
-          skills: data.skills || [],
-          workMode: data.work_mode || 'remote',
-          rate: data.rate,
-          summary: data.summary,
-          responsibilities: data.responsibilities || [],
-          requirements: data.requirements || [],
+          skills: Array.isArray(data.skills) ? data.skills : (data.skills ? [data.skills] : []),
+          workMode: data.work_location_type || data.work_mode || 'Remote',
+          locationType: data.work_location_type || data.location_type || null,
+          jobType: data.job_type || null,
+          rate: data.salary || data.rate || null,
+          summary: data.description || data.summary || '',
+          requirements: data.description ? [data.description] : [],
+          url: data.url || null,
         };
         return NextResponse.json(job);
       }

@@ -175,7 +175,8 @@ export default function PayPalButton() {
           console.log('Payment cancelled:', data);
         }}
       />
-    </PayPalScriptProvider>
+      </PayPalScriptProvider>
+    </div>
   );
 }
 
