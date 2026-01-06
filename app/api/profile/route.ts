@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getServerSession } from '@/lib/auth';
-import { ALLOWED_JOB_TYPES, isValidJobType } from '@/lib/job-types';
-import { normalizeVisaStatus, isValidVisaStatus } from '@/lib/visa-types';
+import { isValidJobType } from '@/lib/job-types';
+import { normalizeVisaStatus } from '@/lib/visa-types';
 import type { ProfileUpdatePayload } from '@/types/profile-update';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -18,7 +18,7 @@ function getSupabase() {
 export const runtime = "nodejs";
 
 // GET - Fetch user profile
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
     const session = await getServerSession();
     if (!session?.user?.email) {
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ profile: profile || null });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Profile GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(body.preferred_job_types)) {
       // Filter and validate each job type
       preferred_job_types = body.preferred_job_types
-        .filter((type: any) => type && typeof type === 'string')
+        .filter((type: unknown): type is string => type && typeof type === 'string')
         .map((type: string) => type.trim().toLowerCase())
         .filter((type: string) => isValidJobType(type));
       
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
       ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       : undefined;
     
-    const profileData: any = {
+    const profileData: Record<string, unknown> = {
       email: String(session.user.email).trim().toLowerCase(),
       name,
       phone: String(body.phone || '').trim() || null,
@@ -184,9 +184,10 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ profile, message: 'Profile saved successfully' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Profile POST error:', error);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 
@@ -215,7 +216,7 @@ export async function PUT(req: NextRequest) {
     let preferred_job_types: string[] = [];
     if (Array.isArray(body.preferred_job_types)) {
       preferred_job_types = body.preferred_job_types
-        .filter((type: any) => type && typeof type === 'string')
+        .filter((type: unknown): type is string => type && typeof type === 'string')
         .map((type: string) => type.trim().toLowerCase())
         .filter((type: string) => isValidJobType(type));
       preferred_job_types = Array.from(new Set(preferred_job_types));
@@ -250,7 +251,7 @@ export async function PUT(req: NextRequest) {
       work_mode: body.work_mode,
       preferred_job_types,
       preferred_job_type: body.preferred_job_type,
-      visa_status: (body.visa_status || body.visa) ? normalizeVisaStatus(body.visa_status || body.visa) : null,
+      visa_status: normalizeVisaStatus(body.visa_status || body.visa) || null,
       rate_expectation: body.rate_expectation,
       availability: body.availability,
       summary: body.summary,
@@ -287,7 +288,7 @@ export async function PUT(req: NextRequest) {
     }
 
     return NextResponse.json({ profile, message: 'Profile updated successfully' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Profile PUT error:', error);
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
