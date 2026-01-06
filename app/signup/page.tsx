@@ -6,6 +6,43 @@ import Input from '@/components/Input';
 import Button from '@/components/Button';
 import OAuthButton from '@/components/OAuthButton';
 import Link from 'next/link';
+import { isInviteSignup } from '@/lib/auth-config';
+
+function InviteOnlyMessage() {
+  return (
+    <div className="mx-auto max-w-md px-4 py-12">
+      <div className="rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+        <h1 className="text-3xl font-bold text-ink">Registrations Temporarily Closed</h1>
+        <div className="mt-6 space-y-4 text-slate-700">
+          <p>
+            Jobsynt is currently operating in testing mode and we have received a strong response from candidates.
+          </p>
+          <p>
+            To ensure quality and stability during this phase, new candidate registrations are available by invitation only.
+          </p>
+          <p>
+            If you are interested in joining Jobsynt, please email us at{' '}
+            <a href="mailto:info@jobsynt.com" className="font-semibold text-primary hover:underline">
+              info@jobsynt.com
+            </a>{' '}
+            with a brief introduction, and we will reach out if a spot becomes available.
+          </p>
+          <p className="text-sm text-slate-500">
+            Existing invite links will continue to work as expected.
+          </p>
+        </div>
+        <div className="mt-8 pt-6 border-t border-slate-200">
+          <p className="text-sm text-slate-600">
+            Already have an account?{' '}
+            <Link href="/login" className="font-semibold text-primary hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -16,6 +53,9 @@ function SignupForm() {
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'error' | 'success'>('error');
   const [loading, setLoading] = useState(false);
+
+  // Check if this is an invite signup
+  const isInvite = isInviteSignup(searchParams);
 
   // Update email if URL parameter changes
   useEffect(() => {
@@ -49,6 +89,11 @@ function SignupForm() {
       setLoading(false);
     }
   };
+
+  // Show invite-only message if not an invite signup
+  if (!isInvite) {
+    return <InviteOnlyMessage />;
+  }
 
   return (
     <div className="mx-auto max-w-md px-4 py-12">

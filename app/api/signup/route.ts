@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { SIGNUP_DISABLED } from '@/lib/auth-config';
 
 // Support both NEXT_PUBLIC_ and non-prefixed versions
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
@@ -8,10 +9,40 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env
 export async function POST(req: Request) {
   try {
     const payload = await req.json();
-    const { email, password } = payload;
+    const { email, password, inviteToken } = payload;
 
     if (!email || !password) {
       return NextResponse.json({ message: 'Email and password are required' }, { status: 400 });
+    }
+
+    // TEMPORARY: Open candidate registration disabled (Invite-only mode)
+    // Reject open signups if signup is disabled
+    if (SIGNUP_DISABLED && !inviteToken) {
+      // Check if this is an admin-created candidate (has existing profile with pending_auth)
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (supabaseServiceKey) {
+        const { createClient } = await import('@supabase/supabase-js');
+        const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
+        const { data: profile } = await adminSupabase
+          .from('profiles')
+          .select('id, pending_auth')
+          .eq('email', email)
+          .maybeSingle();
+
+        // Allow if profile exists with pending_auth (admin-created candidate)
+        if (!profile || !profile.pending_auth) {
+          return NextResponse.json(
+            { message: 'Registrations are currently invite-only. Please contact info@jobsynt.com for access.' },
+            { status: 403 }
+          );
+        }
+      } else {
+        // If we can't check, reject to be safe
+        return NextResponse.json(
+          { message: 'Registrations are currently invite-only. Please contact info@jobsynt.com for access.' },
+          { status: 403 }
+        );
+      }
     }
 
     if (!supabaseUrl || !supabaseAnonKey) {
