@@ -250,7 +250,7 @@ export async function PUT(req: NextRequest) {
       work_mode: body.work_mode,
       preferred_job_types,
       preferred_job_type: body.preferred_job_type,
-      visa_status: normalizeVisaStatus(body.visa_status || body.visa) || null,
+      visa_status: (body.visa_status || body.visa) ? normalizeVisaStatus(body.visa_status || body.visa) : null,
       rate_expectation: body.rate_expectation,
       availability: body.availability,
       summary: body.summary,
