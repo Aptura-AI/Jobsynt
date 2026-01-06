@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getServerSession } from '@/lib/auth';
 import { ALLOWED_JOB_TYPES, isValidJobType } from '@/lib/job-types';
 import { normalizeVisaStatus, isValidVisaStatus } from '@/lib/visa-types';
+import type { ProfileUpdatePayload } from '@/types/profile-update';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -13,6 +14,8 @@ function getSupabase() {
   }
   return createClient(supabaseUrl, supabaseServiceKey);
 }
+
+export const runtime = "nodejs";
 
 // GET - Fetch user profile
 export async function GET(req: NextRequest) {
@@ -232,29 +235,30 @@ export async function PUT(req: NextRequest) {
       ? body.generic_skills.filter(Boolean) 
       : [];
 
+    const updatePayload: ProfileUpdatePayload = {
+      name: body.name,
+      phone: body.phone || null,
+      title: body.title,
+      location: body.location,
+      experience_years: body.experience_years,
+      skills: body.skills,
+      primary_skills,
+      secondary_skills,
+      adjacent_skills,
+      generic_skills,
+      contract_type: body.contract_type,
+      work_mode: body.work_mode,
+      preferred_job_types,
+      preferred_job_type: body.preferred_job_type,
+      visa_status: normalizeVisaStatus(body.visa_status || body.visa) || null,
+      rate_expectation: body.rate_expectation,
+      availability: body.availability,
+      summary: body.summary,
+    };
+
     const { data: profile, error } = await supabase
       .from('profiles')
-      .update({
-        name: body.name,
-        phone: body.phone || null,
-        title: body.title,
-        location: body.location,
-        experience_years: body.experience_years,
-        skills: body.skills,
-        // Structured skills
-        primary_skills,
-        secondary_skills,
-        adjacent_skills,
-        generic_skills,
-        contract_type: body.contract_type,
-        work_mode: body.work_mode,
-        preferred_job_types,
-        preferred_job_type: body.preferred_job_type,
-        visa_status: normalizeVisaStatus(body.visa_status || body.visa),
-        rate_expectation: body.rate_expectation,
-        availability: body.availability,
-        summary: body.summary,
-      })
+      .update(updatePayload)
       .eq('email', session.user.email)
       .select()
       .single();

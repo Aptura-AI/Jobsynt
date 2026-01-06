@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getServerSession } from '@/lib/auth';
 import pdfParse from 'pdf-parse';
+import { parseResumeToJSON } from '@/lib/resume/parseResume';
+import type { ProfileUpdatePayload } from '@/types/profile-update';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+export const runtime = "nodejs";
 
 /**
  * Extract text from PDF file
@@ -100,10 +104,10 @@ export async function POST(req: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user profile
+    // Get user profile (with full data for resume parsing)
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, name, email, phone, location, primary_skills, secondary_skills, adjacent_skills, visa_status, rate_expectation')
       .eq('email', session.user.email)
       .maybeSingle();
 
@@ -118,6 +122,39 @@ export async function POST(req: NextRequest) {
     // Warn user if confidence is low
     if (confidence === 'low') {
       console.warn(`[Resume Upload] Low confidence text extraction for ${file.name}. Extracted ${extractedText.length} characters.`);
+    }
+
+    // Step 1.5: Parse resume text to structured JSON (for Apply for Me feature)
+    let resumeJson = null;
+    try {
+      // Verify parseResumeToJSON function is available
+      if (typeof parseResumeToJSON !== 'function') {
+        throw new Error('parseResumeToJSON function is not available');
+      }
+
+      const allSkills = [
+        ...(profile.primary_skills || []),
+        ...(profile.secondary_skills || []),
+        ...(profile.adjacent_skills || []),
+      ];
+      
+      resumeJson = parseResumeToJSON(extractedText, {
+        name: profile.name || undefined,
+        email: profile.email || undefined,
+        phone: profile.phone || undefined,
+        location: profile.location || undefined,
+        skills: allSkills.length > 0 ? allSkills : undefined,
+        visa_status: profile.visa_status || undefined,
+        rate_expectation: profile.rate_expectation || undefined,
+      });
+      
+      console.log(`[Resume Upload] Parsed resume JSON for profile ${profile.id}`);
+    } catch (parseError: any) {
+      // Non-critical: log error but don't block upload
+      // This catches: function not found, parsing errors, or any other runtime errors
+      const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+      console.error('[Resume Upload] Resume JSON parsing failed:', errorMessage, parseError);
+      console.warn('[Resume Upload] Continuing without resume_json - PDF stored, parsing can be retried');
     }
 
     // Step 2: Upload to Supabase Storage bucket 'resumes' FIRST
@@ -208,13 +245,20 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
-    // Step 5: Update profile with resume_url and resume_text (PART 6 requirement)
+    // Step 5: Update profile with resume_url, resume_text, and resume_json
+    const updatePayload: ProfileUpdatePayload = {
+      resume_url: urlData.publicUrl,
+      resume_text: extractedText, // PART 6: Parsed text saved to profiles.resume_text
+    };
+    
+    // Add resume_json if parsing succeeded
+    if (resumeJson) {
+      updatePayload.resume_json = resumeJson;
+    }
+    
     const { error: profileUpdateError } = await supabase
       .from('profiles')
-      .update({ 
-        resume_url: urlData.publicUrl,
-        resume_text: extractedText, // PART 6: Parsed text saved to profiles.resume_text
-      })
+      .update(updatePayload)
       .eq('id', profile.id);
 
     if (profileUpdateError) {
