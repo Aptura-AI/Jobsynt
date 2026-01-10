@@ -16,6 +16,9 @@ import { extractPlatformFromJob, extractSecondaryPlatforms } from '@/lib/matchin
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 function verifyAdmin() {
   const cookieStore = cookies();
   const rawToken = cookieStore.get('jobsynth_token')?.value;
@@ -220,44 +223,38 @@ export async function PATCH(
       const mustHave = body.must_have_skills !== undefined ? body.must_have_skills : existingJob.must_have_skills;
       const goodToHave = body.good_to_have_skills !== undefined ? body.good_to_have_skills : existingJob.good_to_have_skills;
       
-      // Primary platform MUST be derived from must_have_skills (PART 3 requirement)
+      // Primary platform derived from must_have_skills (open-text approach)
       const mustHaveSkills: string[] = mustHave ? mustHave.split(/[,;|]/).map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [];
       const allSkills: string[] = [
         ...mustHaveSkills,
         ...(goodToHave ? goodToHave.split(/[,;|]/).map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [])
       ];
       
-      // Extract platform - must_have_skills is primary source
-      const primaryPlatform = extractPlatformFromJob(title, mustHaveSkills.length > 0 ? mustHaveSkills : allSkills);
-      const secondaryPlatforms = extractSecondaryPlatforms(title, allSkills);
+      // Extract platform - use first skill from must_have_skills
+      let primaryPlatform = extractPlatformFromJob(title, mustHaveSkills.length > 0 ? mustHaveSkills : allSkills);
       
-      // PART 3: Primary Platform must never remain NULL after ingestion
+      // If no platform extracted and we have skills, use first skill
       if (!primaryPlatform && mustHaveSkills.length > 0) {
-        // If we have skills but no platform detected, try AI inference (one-time)
-        // For now, we'll use a fallback based on common patterns
-        const skillsLower = mustHaveSkills.join(' ').toLowerCase();
-        if (skillsLower.includes('oracle') && (skillsLower.includes('fusion') || skillsLower.includes('cloud'))) {
-          updateData.primary_platform = 'Oracle Fusion';
-        } else if (skillsLower.includes('peoplesoft')) {
-          updateData.primary_platform = 'PeopleSoft';
-        } else if (skillsLower.includes('workday')) {
-          updateData.primary_platform = 'Workday';
-        } else if (skillsLower.includes('sap')) {
-          updateData.primary_platform = 'SAP';
-        } else {
-          // Default to first significant skill if no platform match
-          updateData.primary_platform = mustHaveSkills[0] || null;
+        const firstSkill = mustHaveSkills[0].trim();
+        if (firstSkill) {
+          // Normalize to title-case
+          primaryPlatform = firstSkill
+            .toLowerCase()
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
         }
-      } else {
-        updateData.primary_platform = primaryPlatform || null;
       }
       
-      updateData.secondary_platforms = secondaryPlatforms.length > 0 ? secondaryPlatforms : null;
-      
-      // Ensure primary_platform is never NULL if we have skills
-      if (!updateData.primary_platform && mustHaveSkills.length > 0) {
-        updateData.primary_platform = 'Unknown Platform'; // Fallback to prevent NULL
+      // If still no platform (no skills), default to "General"
+      if (!primaryPlatform) {
+        primaryPlatform = 'General';
       }
+      
+      updateData.primary_platform = primaryPlatform;
+      updateData.secondary_platforms = extractSecondaryPlatforms(title, allSkills).length > 0 
+        ? extractSecondaryPlatforms(title, allSkills) 
+        : null;
     } else if (body.primary_platform !== undefined) {
       // Allow manual override, but warn if must_have_skills suggests different platform
       updateData.primary_platform = body.primary_platform ? String(body.primary_platform).trim() : null;

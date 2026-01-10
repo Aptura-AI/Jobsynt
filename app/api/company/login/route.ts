@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { verifyPassword, signToken, setAuthCookie } from '@/utils/auth';
+import { signToken } from '@/utils/auth';
+import { verifyPassword, setAuthCookie } from '@/utils/auth.server';
 import type { UserRole } from '@/lib/auth-routing';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';

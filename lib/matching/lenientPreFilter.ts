@@ -26,6 +26,7 @@ export type Job = {
   title: string;
   company: string;
   location: string;
+  url: string;
   job_type?: string | null;
   work_location_type?: 'Onsite' | 'Hybrid' | 'Remote' | null; // PART C: Authoritative field
   is_remote?: boolean | null; // Legacy - read-only, deprecated

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { signToken, setAuthCookie } from '@/utils/auth';
+import { signToken } from '@/utils/auth';
+import { setAuthCookie } from '@/utils/auth.server';
 import { getPostAuthRedirect, ensureProfileExists, getUserOnboardingStatus, type UserRole } from '@/lib/auth-routing';
 
 // Support both NEXT_PUBLIC_ and non-prefixed versions

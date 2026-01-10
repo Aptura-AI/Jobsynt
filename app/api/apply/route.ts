@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getAuthTokenFromCookies, verifyToken } from '@/utils/auth';
+import { verifyToken } from '@/utils/auth';
+import { getAuthTokenFromCookies } from '@/utils/auth.server';
 import { readJSON, writeJSON } from '@/utils/fs';
 import { v4 as uuid } from 'uuid';
 

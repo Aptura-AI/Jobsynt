@@ -1,13 +1,4 @@
-type Job = {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  experience?: string;
-  skills?: string[];
-  workMode?: string;
-  summary?: string;
-};
+import type { Job } from '@/lib/types';
 
 type Candidate = {
   id: string;

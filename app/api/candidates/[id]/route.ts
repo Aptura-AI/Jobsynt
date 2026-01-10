@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { supabase, isSupabaseConfigured } from '@/utils/supabase';
 import { readJSON, writeJSON } from '@/utils/fs';
 import { getServerSession } from '@/lib/auth';
-import { getAuthTokenFromCookies, verifyToken } from '@/utils/auth';
+import { verifyToken } from '@/utils/auth';
+import { getAuthTokenFromCookies } from '@/utils/auth.server';
 
 type Candidate = {
   id: string;
