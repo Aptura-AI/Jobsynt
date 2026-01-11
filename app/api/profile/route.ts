@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(body.preferred_job_types)) {
       // Filter and validate each job type
       preferred_job_types = body.preferred_job_types
-        .filter((type: unknown): type is string => type && typeof type === 'string')
+        .filter((type: unknown): type is string => typeof type === 'string' && type.trim() !== '')
         .map((type: string) => type.trim().toLowerCase())
         .filter((type: string) => isValidJobType(type));
       
@@ -162,7 +162,8 @@ export async function POST(req: NextRequest) {
           error: 'Database table "profiles" not found. Please run the SQL schema in Supabase Dashboard.' 
         }, { status: 500 });
       }
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 
     // Trigger immediate job matching after profile save
@@ -216,7 +217,7 @@ export async function PUT(req: NextRequest) {
     let preferred_job_types: string[] = [];
     if (Array.isArray(body.preferred_job_types)) {
       preferred_job_types = body.preferred_job_types
-        .filter((type: unknown): type is string => type && typeof type === 'string')
+        .filter((type: unknown): type is string => typeof type === 'string' && type.trim() !== '')
         .map((type: string) => type.trim().toLowerCase())
         .filter((type: string) => isValidJobType(type));
       preferred_job_types = Array.from(new Set(preferred_job_types));
@@ -266,7 +267,8 @@ export async function PUT(req: NextRequest) {
 
     if (error) {
       console.error('Error updating profile:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 
     // Trigger immediate job matching after profile update
@@ -290,6 +292,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ profile, message: 'Profile updated successfully' });
   } catch (error: unknown) {
     console.error('Profile PUT error:', error);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

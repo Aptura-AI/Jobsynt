@@ -40,7 +40,7 @@ export default function ApplicationStatus() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [runs.length]);
+  }, [runs]);
 
   // Check for interventions on mount and when runs change
   useEffect(() => {

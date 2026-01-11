@@ -349,12 +349,6 @@ export default function DashboardContent({ profile, isAdmin, userEmail }: Dashbo
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <Link
                     href={hasAccess || isAdmin ? `/jobs/${job.id}` : getPricingUrl(job.id)}
-                    onClick={(e) => {
-                      if (!hasAccess && !isAdmin) {
-                        e.preventDefault();
-                        window.location.href = getPricingUrl(job.id);
-                      }
-                    }}
                     className="text-sm font-semibold text-primary hover:underline flex-1"
                   >
                     View Job →

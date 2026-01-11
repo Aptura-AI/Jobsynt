@@ -71,9 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify access (trial/payment check)
-    const hasAccess = await hasCandidateAccessServer(profile.id, {
-      source: 'api'
-    });
+    const hasAccess = await hasCandidateAccessServer(profile.id, supabase);
     if (!hasAccess) {
       return NextResponse.json({ 
         error: 'Access denied. Please complete your trial or payment.' 

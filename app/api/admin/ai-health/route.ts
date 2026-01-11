@@ -7,6 +7,9 @@ import { get30DaysAgoDate } from '@/lib/job-filters';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 /**
  * Admin AI Health API
  * Returns AI matching pipeline health metrics using candidate_job_matches

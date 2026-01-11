@@ -54,13 +54,6 @@ function SignupForm() {
   const [messageType, setMessageType] = useState<'error' | 'success'>('error');
   const [loading, setLoading] = useState(false);
 
-<<<<<<< HEAD:app/signup/page.tsx
-  // Check if this is an invite signup
-  const isInvite = isInviteSignup(searchParams);
-
-  // Update email if URL parameter changes
-=======
->>>>>>> 64a02cf8 (Fix server/client boundary violations and build errors):app/(public)/signup/page.tsx
   useEffect(() => {
     setMounted(true);
     const params = new URLSearchParams(window.location.search);

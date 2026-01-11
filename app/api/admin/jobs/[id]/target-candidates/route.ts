@@ -15,6 +15,9 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 function verifyAdmin() {
   const cookieStore = cookies();
   const rawToken = cookieStore.get('jobsynth_token')?.value;
