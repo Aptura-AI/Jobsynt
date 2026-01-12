@@ -1,7 +1,9 @@
+import ClientBoundary from './ClientBoundary';
+
 export default function PublicLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return <ClientBoundary>{children}</ClientBoundary>;
 }
