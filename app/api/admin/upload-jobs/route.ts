@@ -81,17 +81,22 @@ export async function POST(req: NextRequest) {
 
   let rows: Record<string, unknown>[] = [];
 
-  if (ext === 'csv') {
-    rows = Papa.parse(buffer.toString(), {
+if (ext === 'csv') {
+  const parsed = Papa.parse<Record<string, unknown>>(buffer.toString(), {
     header: true,
     skipEmptyLines: true,
-    }).data;
+  });
 
-  } else {
-    const wb = XLSX.read(buffer, { type: 'buffer' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-  }
+  rows = parsed.data as Record<string, unknown>[];
+
+} else {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+
+  rows = XLSX.utils.sheet_to_json(ws, {
+    defval: '',
+  }) as Record<string, unknown>[];
+}
 
   let uploaded = 0;
   let rejected = 0;
