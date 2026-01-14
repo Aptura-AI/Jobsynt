@@ -1,5 +1,3 @@
-// app/api/admin/upload-jobs/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
@@ -10,47 +8,74 @@ import * as XLSX from 'xlsx';
    SUPABASE
 ====================================================== */
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+/* ======================================================
+   AUTH
+====================================================== */
+
+function verifyAdmin(token: string): boolean {
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(token.split('.')[1], 'base64').toString()
+    );
+    return decoded?.role === 'admin';
+  } catch {
+    return false;
+  }
+}
 
 /* ======================================================
    HELPERS
 ====================================================== */
 
-function normalizeKey(key: string) {
-  return key.toLowerCase().replace(/[\s_-]/g, '');
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[\s_]+/g, '');
 }
 
-function normalizeRow(row: Record<string, unknown>) {
-  const out: Record<string, unknown> = {};
-  for (const k in row) out[normalizeKey(k)] = row[k];
-  return out;
+function normalizeRow(
+  row: Record<string, unknown>
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const key in row) {
+    normalized[normalizeKey(key)] = row[key];
+  }
+  return normalized;
 }
 
-function parseRelativeDate(value: unknown): string {
-  const today = new Date();
+function parsePostedDate(value: unknown): string {
+  if (!value) return new Date().toISOString().split('T')[0];
 
-  if (!value) return today.toISOString().split('T')[0];
+  const str = String(value).toLowerCase().trim();
+  const match = str.match(/(\d+)\s*days?\s*ago/);
 
-  const str = String(value).toLowerCase();
-
-  const match = str.match(/(\d+)\s*day/);
   if (match) {
-    today.setDate(today.getDate() - Number(match[1]));
-    return today.toISOString().split('T')[0];
+    const days = parseInt(match[1], 10);
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString().split('T')[0];
   }
 
-  const parsed = new Date(str);
-  if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString().split('T')[0];
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split('T')[0];
   }
 
-  return today.toISOString().split('T')[0];
+  return new Date().toISOString().split('T')[0];
 }
 
-function parseSkills(value: unknown) {
+function resolveWorkLocationType(
+  location: string,
+  explicit?: string
+): 'Remote' | 'Hybrid' | 'Onsite' {
+  const text = `${location} ${explicit ?? ''}`.toLowerCase();
+  if (text.includes('remote')) return 'Remote';
+  if (text.includes('hybrid')) return 'Hybrid';
+  return 'Onsite';
+}
+
+function parseSkills(value: unknown): string {
   if (!value) return '';
   return String(value)
     .split(/[,;|]/)
@@ -60,12 +85,12 @@ function parseSkills(value: unknown) {
 }
 
 /* ======================================================
-   MAIN HANDLER
+   ROUTE
 ====================================================== */
 
 export async function POST(req: NextRequest) {
   const token = cookies().get('jobsynth_token')?.value;
-  if (!token) {
+  if (!token || !verifyAdmin(token)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -81,75 +106,85 @@ export async function POST(req: NextRequest) {
 
   let rows: Record<string, unknown>[] = [];
 
-if (ext === 'csv') {
-  const parsed = Papa.parse<Record<string, unknown>>(buffer.toString(), {
-    header: true,
-    skipEmptyLines: true,
-  });
+  if (ext === 'csv') {
+    const parsed = Papa.parse<Record<string, unknown>>(buffer.toString(), {
+      header: true,
+      skipEmptyLines: true,
+    });
+    rows = parsed.data;
+  } else {
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, unknown>[];
+  }
 
-  rows = parsed.data as Record<string, unknown>[];
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-} else {
-  const wb = XLSX.read(buffer, { type: 'buffer' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-
-  rows = XLSX.utils.sheet_to_json(ws, {
-    defval: '',
-  }) as Record<string, unknown>[];
-}
-
-  let uploaded = 0;
-  let rejected = 0;
-  const rejected_rows: { row: number; reason: string }[] = [];
+  let total = 0;
+  let inserted = 0;
+  const rejected: { row: number; reason: string }[] = [];
 
   for (let i = 0; i < rows.length; i++) {
+    total++;
     const r = normalizeRow(rows[i]);
 
-    const title = String(r.title || '').trim();
-    const company = String(r.company || '').trim();
-    const url = String(r.url || '').trim();
+    const title = String(r.title ?? '').trim();
+    const company = String(r.company ?? '').trim();
+    const url = String(r.url ?? '').trim();
 
-    if (!title) {
-      rejected++;
-      rejected_rows.push({ row: i + 2, reason: 'Missing title' });
+    if (!title || !company || !url || !url.startsWith('http')) {
+      rejected.push({
+        row: i + 1,
+        reason: 'Missing title, company, or valid URL',
+      });
       continue;
     }
 
-    if (!company) {
-      rejected++;
-      rejected_rows.push({ row: i + 2, reason: 'Missing company' });
-      continue;
-    }
-
-    if (!url.startsWith('http')) {
-      rejected++;
-      rejected_rows.push({ row: i + 2, reason: 'Invalid or missing URL' });
-      continue;
-    }
-
-    await supabase.from('scraped_jobs').upsert(
-      {
-        title,
-        company,
-        url,
-        location: r.location ?? '',
-        description: r.description ?? '',
-        must_have_skills: parseSkills(r.musthaveskills),
-        good_to_have_skills: parseSkills(r.goodtohaveskills),
-        job_type: r.jobtype ?? 'contract',
-        posted_date: parseRelativeDate(r.posteddate),
-        uploaded_by: 'admin',
-        is_active: true,
-      },
-      { onConflict: 'url' }
+    const location = String(r.location ?? '');
+    const workLocationType = resolveWorkLocationType(
+      location,
+      String(r.locationtype ?? '')
     );
 
-    uploaded++;
+    const payload = {
+      title,
+      company,
+      url,
+      location,
+      description: String(r.description ?? ''),
+      posted_date: parsePostedDate(r.posteddate),
+      job_type: String(r.jobtype ?? '').toLowerCase() || null,
+      required_years_experience: Number(r.requiredyearsexperience ?? 0),
+      pay_rate_min: r.payratemin ? Number(r.payratemin) : null,
+      pay_rate_max: r.payratemax ? Number(r.payratemax) : null,
+      must_have_skills: parseSkills(r.musthaveskills),
+      good_to_have_skills: parseSkills(r.goodtohaveskills),
+      source: String(r.source ?? 'upload'),
+      uploaded_by: String(r.uploadedby ?? 'admin'),
+      is_active: true,
+      work_location_type: workLocationType,
+    };
+
+    const { error } = await supabase
+      .from('scraped_jobs')
+      .upsert(payload, { onConflict: 'url' });
+
+    if (error) {
+      rejected.push({
+        row: i + 1,
+        reason: error.message,
+      });
+      continue;
+    }
+
+    inserted++;
   }
 
   return NextResponse.json({
-    uploaded,
+    success: true,
+    total,
+    inserted,
+    rejected_count: rejected.length,
     rejected,
-    rejected_rows,
   });
 }
